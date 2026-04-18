@@ -1,0 +1,128 @@
+export type UserRole = "admin" | "user";
+
+export type LeadStatus = "new" | "reviewed" | "contacted" | "qualified" | "rejected";
+export type LeadSource = "google_places" | "csv_import" | "manual";
+
+export interface Lead {
+  id: string;
+  user_id: string;
+  company_name: string;
+  category: string;
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string;
+  city: string;
+  postal_code: string | null;
+  country: string;
+  latitude: number | null;
+  longitude: number | null;
+  place_id: string | null;
+  source: LeadSource;
+  business_score: number;
+  electricity_score: number;
+  outreach_score: number;
+  solar_score: number;
+  total_score: number;
+  status: LeadStatus;
+  notes: string | null;
+  linkedin_url: string | null;
+  employee_count?: number | null;
+  deal_value?: number | null;
+  next_contact_date?: string | null;
+  win_probability?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeadContact {
+  id: string;
+  lead_id: string;
+  user_id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  apollo_id: string | null;
+  seniority: string | null;
+  department: string | null;
+  source: string;
+  created_at: string;
+}
+
+export interface SolarAssessment {
+  id: string;
+  lead_id: string;
+  provider: string;
+  latitude: number;
+  longitude: number;
+  solar_quality: string | null;
+  max_array_panels_count: number | null;
+  max_array_area_m2: number | null;
+  annual_energy_kwh: number | null;
+  sunshine_hours: number | null;
+  carbon_offset: number | null;
+  segment_count: number | null;
+  panel_capacity_watts: number | null;
+  raw_response_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface LeadEnrichment {
+  id: string;
+  lead_id: string;
+  website_title: string | null;
+  meta_description: string | null;
+  detected_keywords: string[];
+  enrichment_score: number;
+  created_at: string;
+}
+
+export interface SearchRun {
+  id: string;
+  user_id: string;
+  query: string;
+  filters: Record<string, unknown>;
+  results_count: number;
+  created_at: string;
+}
+
+export interface UserSettings {
+  id: string;
+  user_id: string;
+  google_places_api_key: string | null;
+  google_solar_api_key: string | null;
+  provider_mode: "mock" | "live";
+  scoring_weights: ScoringWeights;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScoringWeights {
+  business: number;
+  electricity: number;
+  solar: number;
+  outreach: number;
+}
+
+export interface LeadActivity {
+  id: string;
+  lead_id: string;
+  user_id: string;
+  type: 'call' | 'email' | 'meeting' | 'note' | 'task';
+  subject: string | null;
+  description: string | null;
+  activity_date: string;
+  next_action: string | null;
+  next_action_date: string | null;
+  created_at: string;
+}
+
+// Type for lead with relations
+export interface LeadWithRelations extends Lead {
+  solar_assessments?: SolarAssessment[];
+  lead_enrichment?: LeadEnrichment[];
+  lead_contacts?: LeadContact[];
+  lead_activities?: LeadActivity[];
+}
