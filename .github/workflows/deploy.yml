@@ -16,16 +16,13 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Verify key fingerprint
-        run: ssh-keygen -l -f ~/.ssh/deploy_key
-
       - name: Deploy via SSH
         run: |
-          ssh -i ~/.ssh/deploy_key -v -o StrictHostKeyChecking=no solarlead@${{ secrets.SERVER_HOST }} "
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no solarlead@${{ secrets.SERVER_HOST }} "
             cd /opt/solarlead &&
             git pull origin master &&
             npm install --omit=dev 2>/dev/null || npm install &&
             npm run build &&
             pm2 restart solarlead --update-env &&
             echo 'Deploy erfolgreich'
-          " 2>&1 | tail -30
+          "
