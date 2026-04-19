@@ -287,6 +287,8 @@ export async function getLeadStats(): Promise<{
   byCategory: Record<string, number>;
   avgScore: number;
   highScoreCount: number;
+  newThisWeek: number;
+  overdueFollowups: number;
 }> {
   const defaultStats = {
     total: 0,
@@ -294,22 +296,33 @@ export async function getLeadStats(): Promise<{
     byCategory: {},
     avgScore: 0,
     highScoreCount: 0,
+    newThisWeek: 0,
+    overdueFollowups: 0,
   };
 
   try {
     const supabase = await createClient();
-    const { data: leads, error } = await supabase
-      .from("solar_lead_mass")
-      .select("status, category, total_score");
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const today = new Date().toISOString().slice(0, 10);
 
-    if (error) {
-      console.error("Error fetching lead stats:", error);
-      return defaultStats;
-    }
+    const [leadsRes, newThisWeekRes, overdueRes] = await Promise.all([
+      supabase.from("solar_lead_mass").select("status, category, total_score"),
+      supabase
+        .from("solar_lead_mass")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", oneWeekAgo.toISOString()),
+      supabase
+        .from("solar_lead_mass")
+        .select("id", { count: "exact", head: true })
+        .lte("next_contact_date", today)
+        .neq("status", "rejected")
+        .neq("status", "qualified")
+        .not("next_contact_date", "is", null),
+    ]);
 
-    if (!leads || leads.length === 0) {
-      return defaultStats;
-    }
+    const leads = leadsRes.data;
+    if (!leads || leads.length === 0) return defaultStats;
 
     const byStatus: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
@@ -320,9 +333,7 @@ export async function getLeadStats(): Promise<{
       byStatus[lead.status] = (byStatus[lead.status] || 0) + 1;
       byCategory[lead.category] = (byCategory[lead.category] || 0) + 1;
       totalScore += lead.total_score ?? 0;
-      if ((lead.total_score ?? 0) >= 70) {
-        highScoreCount++;
-      }
+      if ((lead.total_score ?? 0) >= 70) highScoreCount++;
     }
 
     return {
@@ -331,10 +342,60 @@ export async function getLeadStats(): Promise<{
       byCategory,
       avgScore: Math.round(totalScore / leads.length),
       highScoreCount,
+      newThisWeek: newThisWeekRes.count ?? 0,
+      overdueFollowups: overdueRes.count ?? 0,
     };
   } catch (error) {
     console.error("Error in getLeadStats:", error);
     return defaultStats;
+  }
+}
+
+export async function bulkUpdateStatus(
+  ids: string[],
+  status: string
+): Promise<number> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 0;
+
+    const { data, error } = await supabase
+      .from("solar_lead_mass")
+      .update({ status })
+      .in("id", ids)
+      .eq("user_id", user.id)
+      .select("id");
+
+    if (error) { console.error("Error in bulkUpdateStatus:", error); return 0; }
+    revalidatePath("/dashboard/leads");
+    revalidatePath("/dashboard");
+    return data?.length ?? 0;
+  } catch (error) {
+    console.error("Error in bulkUpdateStatus:", error);
+    return 0;
+  }
+}
+
+export async function bulkDeleteLeads(ids: string[]): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { error } = await supabase
+      .from("solar_lead_mass")
+      .delete()
+      .in("id", ids)
+      .eq("user_id", user.id);
+
+    if (error) { console.error("Error in bulkDeleteLeads:", error); return false; }
+    revalidatePath("/dashboard/leads");
+    revalidatePath("/dashboard");
+    return true;
+  } catch (error) {
+    console.error("Error in bulkDeleteLeads:", error);
+    return false;
   }
 }
 
