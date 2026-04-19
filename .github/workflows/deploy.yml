@@ -22,7 +22,7 @@ jobs:
           ssh solarlead@${{ secrets.SERVER_HOST }} "
             cd /opt/solarlead &&
             git pull origin master &&
-            npm install --omit=dev 2>/dev/null || npm install &&
+            npm install &&
             npm run build &&
             pm2 restart solarlead --update-env &&
             echo 'Deploy erfolgreich'
