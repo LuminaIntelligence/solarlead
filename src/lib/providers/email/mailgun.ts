@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 const MAILGUN_EU_BASE = "https://api.eu.mailgun.net/v3";
 
 export interface MailgunMessage {
@@ -5,6 +7,7 @@ export interface MailgunMessage {
   subject: string;
   html: string;
   text: string;
+  replyToJobId?: string;
   "o:tag"?: string[];
   "v:job-id"?: string;
 }
@@ -12,7 +15,7 @@ export interface MailgunMessage {
 export async function sendEmail(msg: MailgunMessage): Promise<{ id: string } | null> {
   const apiKey = process.env.MAILGUN_API_KEY;
   const domain = process.env.MAILGUN_DOMAIN;
-  const from = process.env.MAILGUN_FROM ?? `GreenScout e.V. <outreach@${domain}>`;
+  const fromAddr = process.env.MAILGUN_FROM ?? `outreach@${domain}`;
 
   if (!apiKey || !domain) {
     console.error("[Mailgun] Missing MAILGUN_API_KEY or MAILGUN_DOMAIN");
@@ -20,12 +23,17 @@ export async function sendEmail(msg: MailgunMessage): Promise<{ id: string } | n
   }
 
   const body = new URLSearchParams({
-    from: `GreenScout e.V. <${from}>`,
+    from: `GreenScout e.V. <${fromAddr}>`,
     to: msg.to,
     subject: msg.subject,
     html: msg.html,
     text: msg.text,
   });
+
+  // Reply-To mit Job-ID für automatisches Antwort-Tracking
+  if (msg.replyToJobId) {
+    body.set("h:Reply-To", `reply+${msg.replyToJobId}@${domain}`);
+  }
 
   if (msg["v:job-id"]) body.set("v:job-id", msg["v:job-id"]);
   if (msg["o:tag"]) msg["o:tag"].forEach((t) => body.append("o:tag", t));
@@ -49,4 +57,21 @@ export async function sendEmail(msg: MailgunMessage): Promise<{ id: string } | n
 
   const data = await res.json();
   return { id: data.id ?? "" };
+}
+
+// Mailgun Webhook-Signatur verifizieren
+export function verifyMailgunWebhook(
+  timestamp: string,
+  token: string,
+  signature: string
+): boolean {
+  const signingKey = process.env.MAILGUN_WEBHOOK_KEY;
+  if (!signingKey) return true; // Kein Key konfiguriert → nicht prüfen (dev mode)
+
+  const value = timestamp + token;
+  const expectedSig = crypto
+    .createHmac("sha256", signingKey)
+    .update(value)
+    .digest("hex");
+  return expectedSig === signature;
 }

@@ -55,6 +55,7 @@ export async function POST(
       subject,
       text,
       html,
+      replyToJobId: job.id,
       "o:tag": ["outreach", `batch-${id}`],
       "v:job-id": job.id,
     });
