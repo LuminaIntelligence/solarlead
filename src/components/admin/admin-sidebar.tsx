@@ -9,6 +9,7 @@ import {
   Settings,
   Shield,
   ArrowLeft,
+  SendHorizonal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const navItems = [
   { label: "Übersicht", href: "/admin", icon: LayoutDashboard },
   { label: "Nutzerverwaltung", href: "/admin/users", icon: Users },
   { label: "Alle Leads", href: "/admin/leads", icon: Database },
+  { label: "Massenversand", href: "/admin/outreach", icon: SendHorizonal },
   { label: "System-Einstellungen", href: "/admin/settings", icon: Settings },
 ];
 

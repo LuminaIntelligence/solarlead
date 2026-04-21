@@ -126,3 +126,46 @@ export interface LeadWithRelations extends Lead {
   lead_contacts?: LeadContact[];
   lead_activities?: LeadActivity[];
 }
+
+export type OutreachJobStatus = "pending" | "sent" | "opened" | "replied" | "bounced" | "opted_out";
+export type OutreachBatchStatus = "draft" | "active" | "paused" | "completed";
+
+export interface OutreachBatch {
+  id: string;
+  created_by: string;
+  name: string;
+  description: string | null;
+  status: OutreachBatchStatus;
+  daily_limit: number;
+  total_leads: number;
+  sent_count: number;
+  replied_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutreachJob {
+  id: string;
+  batch_id: string;
+  lead_id: string;
+  contact_id: string | null;
+  status: OutreachJobStatus;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_title: string | null;
+  company_name: string | null;
+  company_city: string | null;
+  company_category: string | null;
+  personalized_subject: string | null;
+  personalized_body: string | null;
+  sent_at: string | null;
+  opened_at: string | null;
+  replied_at: string | null;
+  reply_content: string | null;
+  assigned_to: string | null;
+  scheduled_for: string | null;
+  created_at: string;
+  updated_at: string;
+}
