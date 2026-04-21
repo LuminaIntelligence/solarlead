@@ -81,18 +81,16 @@ export async function POST(
   }
 
   // Batch-Zähler aktualisieren
-  await supabase.rpc("increment_batch_sent", { batch_id: id, increment: sent }).catch(() => {
-    // Fallback: manuell updaten
-    supabase.from("outreach_batches")
-      .select("sent_count")
-      .eq("id", id)
-      .single()
-      .then(({ data }) => {
-        supabase.from("outreach_batches")
-          .update({ sent_count: (data?.sent_count ?? 0) + sent, updated_at: new Date().toISOString() })
-          .eq("id", id);
-      });
-  });
+  const { data: batchData } = await supabase
+    .from("outreach_batches")
+    .select("sent_count")
+    .eq("id", id)
+    .single();
+
+  await supabase
+    .from("outreach_batches")
+    .update({ sent_count: (batchData?.sent_count ?? 0) + sent, updated_at: new Date().toISOString() })
+    .eq("id", id);
 
   return NextResponse.json({ sent, failed, errors, total: jobs.length });
 }
