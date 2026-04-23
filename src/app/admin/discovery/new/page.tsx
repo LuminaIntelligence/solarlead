@@ -745,7 +745,7 @@ export default function NewDiscoveryCampaignPage() {
                 />
               </div>
             </div>
-            <div className="rounded-lg border border-yellow-800/50 bg-yellow-900/10 p-3 text-xs text-yellow-300/80">
+            <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-xs text-yellow-900">
               Die Kampagne startet sofort und läuft im Hintergrund. Du kannst den
               Fortschritt auf der Detailseite verfolgen.
             </div>

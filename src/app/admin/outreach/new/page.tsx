@@ -385,9 +385,9 @@ export default function NewOutreachPage() {
               </CardHeader>
 
               {searchError && (
-                <div className="mx-4 mb-4 flex items-start gap-2 rounded-md bg-yellow-900/20 border border-yellow-600/30 p-3">
-                  <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5 shrink-0" />
-                  <p className="text-sm text-yellow-300">{searchError}</p>
+                <div className="mx-4 mb-4 flex items-start gap-2 rounded-md bg-yellow-50 border border-yellow-300 p-3">
+                  <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-yellow-900">{searchError}</p>
                 </div>
               )}
 

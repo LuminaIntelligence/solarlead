@@ -87,9 +87,9 @@ export default async function OutreachPage() {
 
       {/* DB missing warning */}
       {dbMissing && (
-        <Card className="border-yellow-600/40 bg-yellow-900/20">
+        <Card className="border-yellow-300 bg-yellow-50">
           <CardContent className="p-4">
-            <p className="text-sm text-yellow-300">
+            <p className="text-sm text-yellow-900">
               <strong>Hinweis:</strong> Die Datenbanktabellen{" "}
               <code className="font-mono">outreach_batches</code> und{" "}
               <code className="font-mono">outreach_jobs</code> wurden noch nicht
