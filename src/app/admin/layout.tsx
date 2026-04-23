@@ -22,22 +22,22 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-950">
       {/* Sidebar */}
       <AdminSidebar />
 
       {/* Main content area */}
       <div className="pl-64">
-        {/* Admin accent banner */}
-        <div className="h-1 bg-gradient-to-r from-red-600 to-orange-500" />
+        {/* GreenScout accent line */}
+        <div className="h-0.5" style={{ backgroundColor: "#B2D082" }} />
 
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-8">
-          <span className="text-sm font-medium text-red-600">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-800 bg-slate-950 px-8">
+          <span className="text-sm font-medium" style={{ color: "#B2D082" }}>
             Admin-Bereich
           </span>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-600">{user.email}</span>
+            <span className="text-sm text-slate-400">{user.email}</span>
             <AdminLogoutButton />
           </div>
         </header>
