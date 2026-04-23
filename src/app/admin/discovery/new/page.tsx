@@ -429,7 +429,7 @@ function AreaSelector({
                     {region.description}
                   </div>
                   <div className={cn("text-xs mt-0.5", active ? "text-[#1F3D2E]/60" : "text-slate-600")}>
-                    {region.circles.length} Suchkreise · bis zu 60 Treffer/Kreis
+                    {region.circles.length} Suchkreise · bis zu 240 Treffer/Kreis
                     {partial && !active && (
                       <span className="text-[#B2D082]/80 ml-1">
                         ({areas.filter((a) => regionAreaKeys(region).includes(areaKey(a))).length} aktiv)
