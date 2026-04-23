@@ -349,6 +349,7 @@ export default async function LeadDetailPage({
           {/* Tab: Overview */}
           <TabsContent value="overview" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
               {/* Company Info */}
               <Card>
                 <CardHeader>
@@ -495,6 +496,13 @@ export default async function LeadDetailPage({
 
           {/* Tab: Solar Assessment */}
           <TabsContent value="solar" className="space-y-4">
+            <RoofSatelliteCard
+              address={lead.address}
+              postalCode={lead.postal_code ?? ""}
+              city={lead.city}
+              country={lead.country}
+              companyName={lead.company_name}
+            />
             {solarData ? (
               <Card>
                 <CardHeader>
@@ -831,6 +839,67 @@ function StatCard({
       </div>
       <p className="text-lg font-semibold">{value}</p>
     </div>
+  );
+}
+
+function RoofSatelliteCard({
+  address,
+  postalCode,
+  city,
+  country,
+  companyName,
+}: {
+  address: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  companyName: string;
+}) {
+  const apiKey = process.env.GOOGLE_MAPS_STATIC_API_KEY;
+  const fullAddress = [address, postalCode, city, country].filter(Boolean).join(", ");
+  const encodedAddress = encodeURIComponent(fullAddress);
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+
+  if (!apiKey) return null;
+
+  const imageUrl =
+    `https://maps.googleapis.com/maps/api/staticmap` +
+    `?center=${encodedAddress}` +
+    `&zoom=19` +
+    `&size=800x400` +
+    `&maptype=satellite` +
+    `&key=${apiKey}`;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between text-lg">
+          <span className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            Dachfläche — Satellitenansicht
+          </span>
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-sm font-normal text-blue-500 hover:text-blue-600 transition-colors"
+          >
+            <Globe className="h-4 w-4" />
+            In Google Maps öffnen
+          </a>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">{fullAddress}</p>
+      </CardHeader>
+      <CardContent className="p-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={`Satellitenansicht Dach – ${companyName}`}
+          className="w-full h-72 object-cover"
+          loading="lazy"
+        />
+      </CardContent>
+    </Card>
   );
 }
 
