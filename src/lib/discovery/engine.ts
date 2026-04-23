@@ -50,10 +50,10 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
   }
 
   try {
-    // Collect all place_ids already in discovery_leads for this campaign (dedup within campaign)
+    // ── Dedup set 1: place_ids already in this campaign
     const { data: existingDL } = await supabase
       .from("discovery_leads")
-      .select("place_id")
+      .select("place_id, postal_code, category")
       .eq("campaign_id", campaignId)
       .not("place_id", "is", null);
 
@@ -61,7 +61,7 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
       (existingDL ?? []).map((r: { place_id: string }) => r.place_id).filter(Boolean)
     );
 
-    // Collect all place_ids already in solar_lead_mass (global dedup)
+    // ── Dedup set 2: place_ids already in solar_lead_mass (global, cross-campaign)
     const { data: existingLeads } = await supabase
       .from("solar_lead_mass")
       .select("place_id")
@@ -69,6 +69,16 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
 
     const globalPlaceIds = new Set<string>(
       (existingLeads ?? []).map((r: { place_id: string }) => r.place_id).filter(Boolean)
+    );
+
+    // ── Dedup set 3: PLZ + category combinations already processed in this campaign.
+    // Key format: "{postal_code}:{category}"
+    // When circles overlap, a PLZ that has already yielded results for a given
+    // category is skipped — avoiding redundant API processing of the same area.
+    const processedPlzCats = new Set<string>(
+      (existingDL ?? [])
+        .filter((r: { postal_code: string | null; category: string }) => r.postal_code && r.category)
+        .map((r: { postal_code: string; category: string }) => `${r.postal_code}:${r.category}`)
     );
 
     let totalDiscovered = 0;
@@ -112,12 +122,27 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
           for (const result of results) {
             const placeId = result.place_id ?? null;
 
-            // Dedup check
+            // ── Check 1: place_id dedup (exact same business)
             if (placeId) {
               if (globalPlaceIds.has(placeId) || campaignPlaceIds.has(placeId)) {
                 totalDuplicates++;
                 continue;
               }
+            }
+
+            // ── Check 2: PLZ + category dedup (overlapping circles)
+            // If this PLZ was already covered for this category by a previous circle,
+            // skip — we've already found the businesses there.
+            if (result.postal_code) {
+              const plzKey = `${result.postal_code}:${category}`;
+              if (processedPlzCats.has(plzKey)) {
+                totalDuplicates++;
+                continue;
+              }
+            }
+
+            // Mark place_id as seen
+            if (placeId) {
               campaignPlaceIds.add(placeId);
               globalPlaceIds.add(placeId);
             }
@@ -137,6 +162,13 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
               longitude: result.longitude,
               status: "pending_enrichment",
             });
+          }
+
+          // Register PLZs of accepted leads so overlapping circles skip them
+          for (const lead of newLeads) {
+            if (lead.postal_code) {
+              processedPlzCats.add(`${lead.postal_code}:${category}`);
+            }
           }
 
           // Batch insert new discovery leads
