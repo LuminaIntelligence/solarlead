@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Search,
@@ -11,7 +12,6 @@ import {
   Users,
   FileUp,
   Settings,
-  Sun,
   Shield,
   Kanban,
   Bell,
@@ -47,17 +47,21 @@ export function SidebarNav() {
   }, []);
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-slate-900 text-slate-300">
+    <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col text-white" style={{ backgroundColor: "#1F3D2E" }}>
       {/* Logo */}
-      <div className="flex h-16 items-center gap-2.5 border-b border-slate-800 px-6">
-        <Sun className="h-6 w-6 text-green-500" />
-        <span className="text-lg font-semibold tracking-tight text-white">
-          SolarLead AI
-        </span>
+      <div className="flex h-20 items-center border-b px-5" style={{ borderColor: "rgba(178,208,130,0.2)" }}>
+        <Image
+          src="/images/greenscout-logo-white.png"
+          alt="GreenScout e.V."
+          width={180}
+          height={40}
+          className="object-contain"
+          priority
+        />
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-0.5 px-3 py-4">
         {navItems.map((item) => {
           const isActive =
             item.href === "/dashboard"
@@ -71,9 +75,10 @@ export function SidebarNav() {
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-green-600/20 text-green-400"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  ? "text-[#1F3D2E] font-semibold"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
               )}
+              style={isActive ? { backgroundColor: "#B2D082" } : undefined}
             >
               <item.icon className="h-4 w-4 shrink-0" />
               {item.label}
@@ -84,15 +89,16 @@ export function SidebarNav() {
         {/* Admin link */}
         {isAdmin && (
           <>
-            <div className="my-2 border-t border-slate-800" />
+            <div className="my-3 border-t" style={{ borderColor: "rgba(178,208,130,0.2)" }} />
             <Link
               href="/admin"
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 pathname.startsWith("/admin")
-                  ? "bg-red-600/20 text-red-400"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  ? "text-[#1F3D2E] font-semibold"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
               )}
+              style={pathname.startsWith("/admin") ? { backgroundColor: "#B2D082" } : undefined}
             >
               <Shield className="h-4 w-4 shrink-0" />
               Admin-Bereich
@@ -102,9 +108,9 @@ export function SidebarNav() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-slate-800 px-6 py-4">
-        <p className="text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} SolarLead AI
+      <div className="border-t px-5 py-4" style={{ borderColor: "rgba(178,208,130,0.2)" }}>
+        <p className="text-xs" style={{ color: "rgba(178,208,130,0.6)" }}>
+          Powered by SolarLead AI &copy; {new Date().getFullYear()}
         </p>
       </div>
     </aside>

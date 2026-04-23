@@ -11,6 +11,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // GreenScout Brand Colors
+        gs: {
+          forest: "#1F3D2E",   // Forest Green – dunkler Hintergrund
+          plant: "#6B8F47",    // Plant Green – Hauptfarbe
+          lime: "#B2D082",     // Muted Lime – Akzent / aktive Elemente
+          "forest-light": "#2A5240", // etwas heller für hover
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
