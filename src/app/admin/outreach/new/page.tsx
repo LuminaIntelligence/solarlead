@@ -83,14 +83,14 @@ function StepIndicator({ current }: { current: number }) {
                 ? "bg-red-600 text-white"
                 : current > step.n
                 ? "bg-green-600/30 text-green-400"
-                : "bg-slate-800 text-slate-500"
+                : "bg-slate-100 text-slate-500"
             }`}
           >
             {current > step.n ? <CheckCircle2 className="h-4 w-4" /> : step.n}
           </div>
           <span
             className={`ml-2 text-sm font-medium ${
-              current === step.n ? "text-white" : "text-slate-500"
+              current === step.n ? "text-slate-900" : "text-slate-500"
             }`}
           >
             {step.label}
@@ -98,7 +98,7 @@ function StepIndicator({ current }: { current: number }) {
           {i < steps.length - 1 && (
             <div
               className={`mx-4 h-px w-12 ${
-                current > step.n + 0 ? "bg-green-600/40" : "bg-slate-800"
+                current > step.n + 0 ? "bg-green-600/40" : "bg-slate-200"
               }`}
             />
           )}
@@ -276,16 +276,16 @@ export default function NewOutreachPage() {
       {/* ── Step 1: Leads filtern ── */}
       {step === 1 && (
         <div className="space-y-5">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-white border-slate-200">
             <CardHeader>
-              <CardTitle className="text-white">Leads filtern</CardTitle>
+              <CardTitle className="text-slate-900">Leads filtern</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               {/* Min Score */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
+                <label className="text-sm font-medium text-slate-700">
                   Mindest-Score:{" "}
-                  <span className="text-red-400 font-bold">{minScore}</span>
+                  <span className="text-red-500 font-bold">{minScore}</span>
                 </label>
                 <input
                   type="range"
@@ -305,11 +305,11 @@ export default function NewOutreachPage() {
 
               {/* Status checkboxes */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
+                <label className="text-sm font-medium text-slate-700">
                   Status
                 </label>
                 <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={statusNew}
@@ -318,7 +318,7 @@ export default function NewOutreachPage() {
                     />
                     Neu
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={statusReviewed}
@@ -332,17 +332,17 @@ export default function NewOutreachPage() {
 
               {/* Category */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
+                <label className="text-sm font-medium text-slate-700">
                   Kategorie (optional)
                 </label>
                 <Select
                   value={category}
                   onValueChange={(v) => setCategory(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="w-[260px] bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectTrigger className="w-[260px] bg-white border-slate-300 text-slate-900">
                     <SelectValue placeholder="Alle Kategorien" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+                  <SelectContent className="bg-white border border-slate-300 text-slate-900">
                     <SelectItem value="all">Alle Kategorien</SelectItem>
                     {categoryOptions.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
@@ -370,15 +370,15 @@ export default function NewOutreachPage() {
 
           {/* Results */}
           {(searched || leads.length > 0) && (
-            <Card className="bg-slate-900 border-slate-800">
+            <Card className="bg-white border-slate-200">
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-white">
+                <CardTitle className="text-slate-900">
                   {leads.length > 0
                     ? `${leads.length} Lead${leads.length !== 1 ? "s" : ""} mit E-Mail-Kontakt gefunden`
                     : "Keine Leads gefunden"}
                 </CardTitle>
                 {leads.length > 0 && (
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-slate-500">
                     {selectedIds.size} ausgewählt
                   </span>
                 )}
@@ -396,7 +396,7 @@ export default function NewOutreachPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-slate-800 text-left">
+                        <tr className="border-b border-slate-200 bg-slate-50 text-left">
                           <th className="px-4 py-3">
                             <input
                               type="checkbox"
@@ -408,25 +408,25 @@ export default function NewOutreachPage() {
                               className="accent-red-500"
                             />
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             Unternehmen
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             Stadt
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             Kategorie
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             Score
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             Kontakt
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             E-Mail
                           </th>
-                          <th className="px-4 py-3 font-medium text-slate-400">
+                          <th className="px-4 py-3 font-medium text-slate-500">
                             Position
                           </th>
                         </tr>
@@ -435,10 +435,10 @@ export default function NewOutreachPage() {
                         {leads.map((lead) => (
                           <tr
                             key={lead.id}
-                            className={`border-b border-slate-800 last:border-0 cursor-pointer transition-colors ${
+                            className={`border-b border-slate-200 last:border-0 cursor-pointer transition-colors ${
                               selectedIds.has(lead.id)
-                                ? "bg-red-900/10"
-                                : "hover:bg-slate-800/50"
+                                ? "bg-red-50"
+                                : "hover:bg-slate-50"
                             }`}
                             onClick={() => toggleSelect(lead.id)}
                           >
@@ -451,25 +451,25 @@ export default function NewOutreachPage() {
                                 className="accent-red-500"
                               />
                             </td>
-                            <td className="px-4 py-3 font-medium text-white">
+                            <td className="px-4 py-3 font-medium text-slate-900">
                               {lead.company_name}
                             </td>
-                            <td className="px-4 py-3 text-slate-400">
+                            <td className="px-4 py-3 text-slate-500">
                               {lead.city}
                             </td>
-                            <td className="px-4 py-3 text-slate-400">
+                            <td className="px-4 py-3 text-slate-500">
                               {categoryLabels[lead.category] ?? lead.category}
                             </td>
                             <td className="px-4 py-3">
                               <ScoreColor score={lead.total_score} />
                             </td>
-                            <td className="px-4 py-3 text-slate-300">
+                            <td className="px-4 py-3 text-slate-700">
                               {lead.best_contact.name}
                             </td>
-                            <td className="px-4 py-3 text-slate-400 font-mono text-xs">
+                            <td className="px-4 py-3 text-slate-500 font-mono text-xs">
                               {lead.best_contact.email}
                             </td>
-                            <td className="px-4 py-3 text-slate-500 text-xs">
+                            <td className="px-4 py-3 text-slate-400 text-xs">
                               {lead.best_contact.title ?? "–"}
                             </td>
                           </tr>
@@ -498,34 +498,34 @@ export default function NewOutreachPage() {
       {/* ── Step 2: Batch konfigurieren ── */}
       {step === 2 && (
         <div className="space-y-5">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-white border-slate-200">
             <CardHeader>
-              <CardTitle className="text-white">Batch konfigurieren</CardTitle>
+              <CardTitle className="text-slate-900">Batch konfigurieren</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               {/* Batch name */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
-                  Batch-Name <span className="text-red-400">*</span>
+                <label className="text-sm font-medium text-slate-700">
+                  Batch-Name <span className="text-red-500">*</span>
                 </label>
                 <Input
                   value={batchName}
                   onChange={(e) => setBatchName(e.target.value)}
                   placeholder="z.B. Logistik Bayern April 2026"
-                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                  className="bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
                 />
               </div>
 
               {/* Template type */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
-                  E-Mail-Vorlage <span className="text-red-400">*</span>
+                <label className="text-sm font-medium text-slate-700">
+                  E-Mail-Vorlage <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { value: "erstkontakt", label: "1. Erstkontakt", desc: "Dachfläche pachten – keine Werbung!", color: "border-blue-500 bg-blue-900/20 text-blue-300" },
-                    { value: "followup", label: "2. Follow-up", desc: "Kurze Nachfrage zu Ihrer Dachfläche", color: "border-yellow-500 bg-yellow-900/20 text-yellow-300" },
-                    { value: "finale", label: "3. Finale", desc: "Wir haben uns bisher verpasst", color: "border-orange-500 bg-orange-900/20 text-orange-300" },
+                    { value: "erstkontakt", label: "1. Erstkontakt", desc: "Dachfläche pachten – keine Werbung!", color: "border-blue-500 bg-blue-50 text-blue-700" },
+                    { value: "followup", label: "2. Follow-up", desc: "Kurze Nachfrage zu Ihrer Dachfläche", color: "border-yellow-500 bg-yellow-50 text-yellow-700" },
+                    { value: "finale", label: "3. Finale", desc: "Wir haben uns bisher verpasst", color: "border-orange-500 bg-orange-50 text-orange-700" },
                   ].map((t) => (
                     <button
                       key={t.value}
@@ -534,7 +534,7 @@ export default function NewOutreachPage() {
                       className={`rounded-lg border-2 p-3 text-left transition-colors ${
                         templateType === t.value
                           ? t.color
-                          : "border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600"
+                          : "border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300"
                       }`}
                     >
                       <p className="text-sm font-semibold">{t.label}</p>
@@ -546,7 +546,7 @@ export default function NewOutreachPage() {
 
               {/* Description */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
+                <label className="text-sm font-medium text-slate-700">
                   Beschreibung (optional)
                 </label>
                 <textarea
@@ -554,15 +554,15 @@ export default function NewOutreachPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Interne Notiz zu diesem Batch..."
                   rows={3}
-                  className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/50"
                 />
               </div>
 
               {/* Daily limit */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
+                <label className="text-sm font-medium text-slate-700">
                   Tageslimit:{" "}
-                  <span className="text-red-400 font-bold">{dailyLimit}</span>{" "}
+                  <span className="text-red-500 font-bold">{dailyLimit}</span>{" "}
                   E-Mails/Tag
                 </label>
                 <input
@@ -582,23 +582,23 @@ export default function NewOutreachPage() {
               </div>
 
               {/* Preview */}
-              <div className="rounded-lg bg-slate-800 border border-slate-700 p-4 space-y-2">
-                <p className="text-sm font-medium text-slate-300">Vorschau</p>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 space-y-2">
+                <p className="text-sm font-medium text-slate-700">Vorschau</p>
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-2xl font-bold text-slate-900">
                       {selectedIds.size}
                     </div>
                     <div className="text-xs text-slate-500">Leads ausgewählt</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-2xl font-bold text-slate-900">
                       {dailyLimit}
                     </div>
                     <div className="text-xs text-slate-500">E-Mails/Tag</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-2xl font-bold text-slate-900">
                       {daysNeeded}
                     </div>
                     <div className="text-xs text-slate-500">
@@ -620,7 +620,7 @@ export default function NewOutreachPage() {
             <Button
               variant="ghost"
               onClick={() => setStep(1)}
-              className="text-slate-400 hover:text-white hover:bg-slate-800"
+              className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
             >
               <ChevronLeft className="mr-2 h-4 w-4" />
               Zurück
@@ -640,63 +640,63 @@ export default function NewOutreachPage() {
       {/* ── Step 3: Bestätigen & erstellen ── */}
       {step === 3 && (
         <div className="space-y-5">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-white border-slate-200">
             <CardHeader>
-              <CardTitle className="text-white">
+              <CardTitle className="text-slate-900">
                 Zusammenfassung & Bestätigung
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-lg bg-slate-800 border border-slate-700 divide-y divide-slate-700">
+              <div className="rounded-lg bg-slate-50 border border-slate-200 divide-y divide-slate-200">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-slate-400">Batch-Name</span>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm text-slate-500">Batch-Name</span>
+                  <span className="text-sm font-medium text-slate-900">
                     {batchName}
                   </span>
                 </div>
                 {description && (
                   <div className="flex items-start justify-between px-4 py-3 gap-4">
-                    <span className="text-sm text-slate-400 shrink-0">
+                    <span className="text-sm text-slate-500 shrink-0">
                       Beschreibung
                     </span>
-                    <span className="text-sm text-white text-right">
+                    <span className="text-sm text-slate-900 text-right">
                       {description}
                     </span>
                   </div>
                 )}
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-slate-400">E-Mail-Vorlage</span>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm text-slate-500">E-Mail-Vorlage</span>
+                  <span className="text-sm font-medium text-slate-900">
                     {templateType === "erstkontakt" ? "1. Erstkontakt" : templateType === "followup" ? "2. Follow-up" : "3. Finale E-Mail"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-slate-500">
                     Ausgewählte Leads
                   </span>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-slate-900">
                     {selectedIds.size}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-slate-400">Tageslimit</span>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm text-slate-500">Tageslimit</span>
+                  <span className="text-sm font-medium text-slate-900">
                     {dailyLimit} E-Mails/Tag
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-slate-500">
                     Voraussichtliche Dauer
                   </span>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-slate-900">
                     {daysNeeded === 1 ? "1 Tag" : `${daysNeeded} Tage`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-slate-500">
                     Mindest-Score Filter
                   </span>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-slate-900">
                     {minScore}+
                   </span>
                 </div>
@@ -713,7 +713,7 @@ export default function NewOutreachPage() {
                 Der Batch wird im Status{" "}
                 <Badge
                   variant="secondary"
-                  className="bg-slate-700 text-slate-200 text-xs"
+                  className="bg-slate-100 text-slate-700 text-xs"
                 >
                   Entwurf
                 </Badge>{" "}
@@ -727,7 +727,7 @@ export default function NewOutreachPage() {
               variant="ghost"
               onClick={() => setStep(2)}
               disabled={submitting}
-              className="text-slate-400 hover:text-white hover:bg-slate-800"
+              className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
             >
               <ChevronLeft className="mr-2 h-4 w-4" />
               Zurück

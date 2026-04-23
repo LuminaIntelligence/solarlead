@@ -386,9 +386,9 @@ export default function DiscoveryCampaignDetailPage() {
 
   if (!data) {
     return (
-      <div className="text-center text-slate-400 py-16">
+      <div className="text-center text-slate-500 py-16">
         <p>Kampagne nicht gefunden.</p>
-        <Link href="/admin/discovery" className="text-blue-400 hover:underline text-sm mt-2 inline-block">
+        <Link href="/admin/discovery" className="text-blue-600 hover:underline text-sm mt-2 inline-block">
           Zurück zur Übersicht
         </Link>
       </div>
@@ -407,7 +407,7 @@ export default function DiscoveryCampaignDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
-          <Link href="/admin/discovery" className="mt-0.5 text-slate-400 hover:text-white transition-colors">
+          <Link href="/admin/discovery" className="mt-0.5 text-slate-500 hover:text-slate-900 transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
@@ -417,11 +417,11 @@ export default function DiscoveryCampaignDetailPage() {
               <StatusBadge status={campaign.status} />
             </div>
             {campaign.description && (
-              <p className="text-slate-400 text-sm mt-0.5">{campaign.description}</p>
+              <p className="text-slate-500 text-sm mt-0.5">{campaign.description}</p>
             )}
             <div className="flex flex-wrap gap-2 mt-2">
               {areas.slice(0, 5).map((a) => (
-                <span key={a.value} className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
+                <span key={a.value} className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
                   {a.value}
                 </span>
               ))}
@@ -438,7 +438,7 @@ export default function DiscoveryCampaignDetailPage() {
             variant="outline"
             size="sm"
             onClick={() => fetchData()}
-            className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+            className="border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
@@ -446,7 +446,7 @@ export default function DiscoveryCampaignDetailPage() {
             variant="outline"
             size="sm"
             onClick={() => setShowTestModal(true)}
-            className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+            className="border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
           >
             <Mail className="h-3.5 w-3.5 mr-1.5" />
             Test-E-Mail
@@ -512,34 +512,34 @@ export default function DiscoveryCampaignDetailPage() {
           { label: "Genehmigt",          value: campaign.total_approved, highlight: true },
           { label: "Erstellt",           value: new Date(campaign.created_at).toLocaleDateString("de-DE"), small: true },
         ].map((s) => (
-          <Card key={s.label} className="bg-slate-900 border-slate-800">
+          <Card key={s.label} className="bg-white border-slate-200">
             <CardContent className="pt-4 pb-3">
               <div
-                className={`text-xl font-bold ${s.highlight ? "text-[#B2D082]" : "text-white"} ${s.small ? "text-base" : ""}`}
+                className={`text-xl font-bold ${s.highlight ? "text-[#B2D082]" : "text-slate-900"} ${s.small ? "text-base" : ""}`}
               >
                 {s.value}
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* Leads table */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="bg-white border-slate-200">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-base">
+            <CardTitle className="text-slate-900 text-base">
               Entdeckte Leads
               {total > 0 && (
-                <span className="text-slate-400 font-normal text-sm ml-2">({total})</span>
+                <span className="text-slate-500 font-normal text-sm ml-2">({total})</span>
               )}
             </CardTitle>
 
             {/* Bulk actions */}
             {selected.size > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-400">{selected.size} ausgewählt</span>
+                <span className="text-sm text-slate-500">{selected.size} ausgewählt</span>
                 <Button
                   size="sm"
                   onClick={() => handleBulkAction("approve")}
@@ -573,7 +573,7 @@ export default function DiscoveryCampaignDetailPage() {
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                   statusFilter === f.value
                     ? "text-[#1F3D2E]"
-                    : "bg-slate-800 text-slate-400 hover:text-white"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-900"
                 }`}
                 style={statusFilter === f.value ? { backgroundColor: "#B2D082" } : undefined}
               >
@@ -585,7 +585,7 @@ export default function DiscoveryCampaignDetailPage() {
 
         <CardContent className="p-0">
           {leads.length === 0 ? (
-            <div className="py-12 text-center text-slate-400">
+            <div className="py-12 text-center text-slate-500">
               {campaign.status === "running" || campaign.status === "pending" ? (
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
@@ -598,7 +598,7 @@ export default function DiscoveryCampaignDetailPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-800 text-left">
+                <tr className="border-b border-slate-200 bg-slate-50 text-left">
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
@@ -608,7 +608,7 @@ export default function DiscoveryCampaignDetailPage() {
                     />
                   </th>
                   {["Status", "Unternehmen", "Stadt", "Branche", "Dachfläche", "Score", "Kontakte", "Aktion"].map((h) => (
-                    <th key={h} className="px-4 py-3 font-medium text-slate-400">{h}</th>
+                    <th key={h} className="px-4 py-3 font-medium text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -620,8 +620,8 @@ export default function DiscoveryCampaignDetailPage() {
                   return (
                     <tr
                       key={lead.id}
-                      className={`border-b border-slate-800 last:border-0 transition-colors ${
-                        isSelected ? "bg-slate-800/70" : "hover:bg-slate-800/30"
+                      className={`border-b border-slate-200 last:border-0 transition-colors ${
+                        isSelected ? "bg-slate-100" : "hover:bg-slate-50/80"
                       }`}
                     >
                       <td className="px-4 py-3">
@@ -637,14 +637,14 @@ export default function DiscoveryCampaignDetailPage() {
                       <td className="px-4 py-3">
                         <LeadStatusBadge status={lead.status} />
                       </td>
-                      <td className="px-4 py-3 text-white font-medium max-w-[180px] truncate">
+                      <td className="px-4 py-3 text-slate-900 font-medium max-w-[180px] truncate">
                         {lead.company_name ?? lead.place_name ?? "–"}
                       </td>
-                      <td className="px-4 py-3 text-slate-400">{lead.city ?? "–"}</td>
-                      <td className="px-4 py-3 text-slate-400 capitalize">
+                      <td className="px-4 py-3 text-slate-500">{lead.city ?? "–"}</td>
+                      <td className="px-4 py-3 text-slate-500 capitalize">
                         {lead.category?.replace(/_/g, " ") ?? "–"}
                       </td>
-                      <td className="px-4 py-3 text-slate-300">
+                      <td className="px-4 py-3 text-slate-700">
                         {lead.roof_area_m2 ? `${Math.round(lead.roof_area_m2).toLocaleString("de-DE")} m²` : "–"}
                       </td>
                       <td className="px-4 py-3">
@@ -654,17 +654,17 @@ export default function DiscoveryCampaignDetailPage() {
                               lead.total_score >= 70
                                 ? "text-[#B2D082]"
                                 : lead.total_score >= 50
-                                ? "text-yellow-400"
-                                : "text-slate-400"
+                                ? "text-yellow-600"
+                                : "text-slate-500"
                             }`}
                           >
                             {lead.total_score}
                           </span>
                         ) : (
-                          <span className="text-slate-500">–</span>
+                          <span className="text-slate-400">–</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">
+                      <td className="px-4 py-3 text-slate-500 text-xs">
                         {contacts.length > 0
                           ? `${contacts.length} Kontakt${contacts.length !== 1 ? "e" : ""}`
                           : "–"}
@@ -705,7 +705,7 @@ export default function DiscoveryCampaignDetailPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
               <span className="text-xs text-slate-500">
                 Seite {page} von {totalPages} ({total} Leads)
               </span>
@@ -715,7 +715,7 @@ export default function DiscoveryCampaignDetailPage() {
                   size="sm"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="border-slate-700 text-slate-400 hover:text-white h-7 px-2"
+                  className="border-slate-300 text-slate-500 hover:text-slate-900 h-7 px-2"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
@@ -724,7 +724,7 @@ export default function DiscoveryCampaignDetailPage() {
                   size="sm"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="border-slate-700 text-slate-400 hover:text-white h-7 px-2"
+                  className="border-slate-300 text-slate-500 hover:text-slate-900 h-7 px-2"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>

@@ -282,18 +282,18 @@ function StepIndicator({ current }: { current: number }) {
             <div
               className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all",
-                step.n <= current ? "text-[#1F3D2E]" : "bg-slate-800 text-slate-500"
+                step.n <= current ? "text-[#1F3D2E]" : "bg-slate-100 text-slate-500"
               )}
               style={step.n <= current ? { backgroundColor: "#B2D082" } : undefined}
             >
               {step.n < current ? <CheckCircle2 className="h-4 w-4" /> : step.n}
             </div>
-            <span className={cn("text-xs whitespace-nowrap", step.n === current ? "text-white font-medium" : "text-slate-500")}>
+            <span className={cn("text-xs whitespace-nowrap", step.n === current ? "text-slate-900 font-medium" : "text-slate-500")}>
               {step.label}
             </span>
           </div>
           {i < steps.length - 1 && (
-            <div className={cn("h-0.5 w-12 mx-1 mb-5 transition-all", step.n < current ? "bg-[#B2D082]" : "bg-slate-700")} />
+            <div className={cn("h-0.5 w-12 mx-1 mb-5 transition-all", step.n < current ? "bg-[#B2D082]" : "bg-slate-200")} />
           )}
         </div>
       ))}
@@ -381,7 +381,7 @@ function AreaSelector({
   return (
     <div className="space-y-4">
       {/* Tab switcher */}
-      <div className="flex gap-1 bg-slate-800 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg w-fit">
         {(["regions", "custom"] as const).map((t) => (
           <button
             key={t}
@@ -389,7 +389,7 @@ function AreaSelector({
             onClick={() => setTab(t)}
             className={cn(
               "px-4 py-1.5 rounded-md text-xs font-medium transition-all",
-              tab === t ? "text-[#1F3D2E]" : "text-slate-400 hover:text-white"
+              tab === t ? "text-[#1F3D2E]" : "text-slate-500 hover:text-slate-900"
             )}
             style={tab === t ? { backgroundColor: "#B2D082" } : undefined}
           >
@@ -414,8 +414,8 @@ function AreaSelector({
                   active
                     ? "border-[#B2D082] text-[#1F3D2E] font-medium"
                     : partial
-                    ? "border-[#B2D082]/40 bg-slate-800/80 text-white"
-                    : "border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-500 hover:text-white"
+                    ? "border-[#B2D082]/40 bg-slate-50 text-slate-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                 )}
                 style={active ? { backgroundColor: "#B2D082" } : undefined}
               >
@@ -428,7 +428,7 @@ function AreaSelector({
                   <div className={cn("text-xs mt-0.5 truncate", active ? "text-[#1F3D2E]/70" : "text-slate-500")}>
                     {region.description}
                   </div>
-                  <div className={cn("text-xs mt-0.5", active ? "text-[#1F3D2E]/60" : "text-slate-600")}>
+                  <div className={cn("text-xs mt-0.5", active ? "text-[#1F3D2E]/60" : "text-slate-400")}>
                     {region.circles.length} Suchkreise · bis zu 240 Treffer/Kreis
                     {partial && !active && (
                       <span className="text-[#B2D082]/80 ml-1">
@@ -446,7 +446,7 @@ function AreaSelector({
       {/* Custom tab */}
       {tab === "custom" && (
         <div className="space-y-3">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Gib eine Stadt ein und wähle den Suchradius. Das System findet alle Betriebe
             im Umkreis — auch in kleinen Orten wie Herzogenaurach.
           </p>
@@ -459,15 +459,15 @@ function AreaSelector({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") { e.preventDefault(); addCustomCity(); }
                 }}
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                className="bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
               />
               {citySuggestions.length > 0 && (
-                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-lg overflow-hidden">
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg overflow-hidden">
                   {citySuggestions.map((s) => (
                     <button
                       key={s}
                       type="button"
-                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition-colors"
+                      className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-slate-50 transition-colors"
                       onClick={() => { setCityInput(s); setCitySuggestions([]); }}
                     >
                       {s}
@@ -482,7 +482,7 @@ function AreaSelector({
             <select
               value={cityRadius}
               onChange={(e) => setCityRadius(Number(e.target.value))}
-              className="bg-slate-800 border border-slate-700 text-white text-sm rounded-md px-3 py-2 focus:outline-none"
+              className="bg-white border border-slate-300 text-slate-900 text-sm rounded-md px-3 py-2 focus:outline-none"
             >
               {[10, 20, 30, 40, 50].map((r) => (
                 <option key={r} value={r}>{r} km</option>
@@ -515,7 +515,7 @@ function AreaSelector({
       {areas.length > 0 && (
         <div className="pt-1">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500">
               {totalSearches} Suchkreis{totalSearches !== 1 ? "e" : ""} ausgewählt
             </span>
             <button
@@ -614,47 +614,47 @@ export default function NewDiscoveryCampaignPage() {
 
       {/* Step 1 */}
       {step === 1 && (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader>
-            <CardTitle className="text-white text-base">Kampagne konfigurieren</CardTitle>
+            <CardTitle className="text-slate-900 text-base">Kampagne konfigurieren</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">Name <span className="text-red-400">*</span></label>
+              <label className="text-sm text-slate-600 mb-1.5 block">Name <span className="text-red-500">*</span></label>
               <Input
                 placeholder="z.B. Bayern Q3 2026 – Industrie"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                className="bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">Beschreibung (optional)</label>
+              <label className="text-sm text-slate-600 mb-1.5 block">Beschreibung (optional)</label>
               <Input
                 placeholder="Kurze interne Notiz…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                className="bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">Zusätzlicher Suchbegriff (optional)</label>
+              <label className="text-sm text-slate-600 mb-1.5 block">Zusätzlicher Suchbegriff (optional)</label>
               <Input
                 placeholder="z.B. Industrie, Gewerbe…"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                className="bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">Auto-Genehmigungsschwelle (optional)</label>
+              <label className="text-sm text-slate-600 mb-1.5 block">Auto-Genehmigungsschwelle (optional)</label>
               <Input
                 type="number"
                 placeholder="z.B. 70 (Score ≥ 70 → automatisch genehmigt)"
                 value={autoApproveThreshold}
                 onChange={(e) => setAutoApproveThreshold(e.target.value)}
                 min={0} max={100}
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                className="bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
               />
             </div>
           </CardContent>
@@ -663,12 +663,12 @@ export default function NewDiscoveryCampaignPage() {
 
       {/* Step 2 */}
       {step === 2 && (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader>
-            <CardTitle className="text-white text-base">Suchgebiete auswählen</CardTitle>
+            <CardTitle className="text-slate-900 text-base">Suchgebiete auswählen</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-400 mb-4">
+            <p className="text-sm text-slate-500 mb-4">
               Regionen suchen per Umkreis — deckt automatisch Kleinstädte und Gewerbegebiete ab.
             </p>
             <AreaSelector areas={areas} onChange={setAreas} />
@@ -678,12 +678,12 @@ export default function NewDiscoveryCampaignPage() {
 
       {/* Step 3 */}
       {step === 3 && (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader>
-            <CardTitle className="text-white text-base">Branchen auswählen</CardTitle>
+            <CardTitle className="text-slate-900 text-base">Branchen auswählen</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-400 mb-4">
+            <p className="text-sm text-slate-500 mb-4">
               Das System sucht jede Branche in jedem Suchkreis.
             </p>
             <div className="grid grid-cols-3 gap-2">
@@ -698,7 +698,7 @@ export default function NewDiscoveryCampaignPage() {
                       "flex flex-col items-center gap-1.5 rounded-lg p-3 text-sm font-medium border transition-all",
                       selected
                         ? "border-[#B2D082] text-[#1F3D2E]"
-                        : "border-slate-700 text-slate-300 hover:border-slate-500 bg-slate-800/50"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300 bg-slate-50"
                     )}
                     style={selected ? { backgroundColor: "#B2D082" } : undefined}
                   >
@@ -709,9 +709,9 @@ export default function NewDiscoveryCampaignPage() {
               })}
             </div>
             {categories.length > 0 && (
-              <p className="text-xs text-slate-400 mt-3">
+              <p className="text-xs text-slate-500 mt-3">
                 {categories.length} Branche{categories.length !== 1 ? "n" : ""} × {areas.length} Suchkreis{areas.length !== 1 ? "e" : ""} ={" "}
-                <span className="text-white font-medium">bis zu {estimatedResults.toLocaleString("de-DE")} Treffer</span>
+                <span className="text-slate-900 font-medium">bis zu {estimatedResults.toLocaleString("de-DE")} Treffer</span>
               </p>
             )}
           </CardContent>
@@ -720,12 +720,12 @@ export default function NewDiscoveryCampaignPage() {
 
       {/* Step 4 */}
       {step === 4 && (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader>
-            <CardTitle className="text-white text-base">Zusammenfassung &amp; Starten</CardTitle>
+            <CardTitle className="text-slate-900 text-base">Zusammenfassung &amp; Starten</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-lg bg-slate-800 p-4 space-y-3 text-sm">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 space-y-3 text-sm">
               <Row label="Kampagnenname" value={name} />
               {description && <Row label="Beschreibung" value={description} />}
               <Row label="Suchkreise" value={`${areas.length}`} />
@@ -737,7 +737,7 @@ export default function NewDiscoveryCampaignPage() {
               />
               {searchKeyword && <Row label="Suchbegriff" value={searchKeyword} />}
               {autoApproveThreshold && <Row label="Auto-Genehmigung" value={`Score ≥ ${autoApproveThreshold}`} />}
-              <div className="border-t border-slate-700 pt-3">
+              <div className="border-t border-slate-200 pt-3">
                 <Row
                   label="Geschätzte Treffer"
                   value={`bis zu ${estimatedResults.toLocaleString("de-DE")} Gebäude`}
@@ -761,7 +761,7 @@ export default function NewDiscoveryCampaignPage() {
         <Button
           variant="outline"
           onClick={() => (step === 1 ? router.push("/admin/discovery") : setStep(step - 1))}
-          className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+          className="border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           {step === 1 ? "Abbrechen" : "Zurück"}
@@ -802,8 +802,8 @@ export default function NewDiscoveryCampaignPage() {
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="text-slate-400 w-36 shrink-0">{label}</span>
-      <span className={highlight ? "text-[#B2D082] font-medium" : "text-white"}>{value}</span>
+      <span className="text-slate-500 w-36 shrink-0">{label}</span>
+      <span className={highlight ? "text-[#B2D082] font-medium" : "text-slate-900"}>{value}</span>
     </div>
   );
 }

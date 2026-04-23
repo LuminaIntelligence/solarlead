@@ -23,10 +23,10 @@ const statusLabels: Record<OutreachBatchStatus, string> = {
 };
 
 const statusColors: Record<OutreachBatchStatus, string> = {
-  draft: "bg-slate-700 text-slate-200",
-  active: "bg-green-700/30 text-green-300",
-  paused: "bg-yellow-700/30 text-yellow-300",
-  completed: "bg-blue-700/30 text-blue-300",
+  draft: "bg-slate-100 text-slate-700",
+  active: "bg-green-100 text-green-700",
+  paused: "bg-yellow-100 text-yellow-700",
+  completed: "bg-blue-100 text-blue-700",
 };
 
 export default async function OutreachPage() {
@@ -102,58 +102,58 @@ export default async function OutreachPage() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-slate-400">
+            <CardTitle className="text-xs font-medium text-slate-500">
               Batches gesamt
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalBatches}</div>
+            <div className="text-2xl font-bold text-slate-900">{totalBatches}</div>
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-slate-400">
+            <CardTitle className="text-xs font-medium text-slate-500">
               Jobs gesamt
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalJobs}</div>
+            <div className="text-2xl font-bold text-slate-900">{totalJobs}</div>
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-slate-400">
+            <CardTitle className="text-xs font-medium text-slate-500">
               Versendet
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalSent}</div>
+            <div className="text-2xl font-bold text-slate-900">{totalSent}</div>
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-slate-400">
+            <CardTitle className="text-xs font-medium text-slate-500">
               Antworten
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalReplied}</div>
+            <div className="text-2xl font-bold text-slate-900">{totalReplied}</div>
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-slate-400">
+            <CardTitle className="text-xs font-medium text-slate-500">
               Ø Reply-Rate
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-slate-900">
               {avgReplyRate}%
             </div>
           </CardContent>
@@ -161,15 +161,15 @@ export default async function OutreachPage() {
       </div>
 
       {/* Batch list */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="bg-white border-slate-200">
         <CardHeader>
-          <CardTitle className="text-white">Alle Batches</CardTitle>
+          <CardTitle className="text-slate-900">Alle Batches</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {allBatches.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Send className="mb-4 h-10 w-10 text-slate-600" />
-              <p className="text-sm font-medium text-slate-300">
+              <Send className="mb-4 h-10 w-10 text-slate-300" />
+              <p className="text-sm font-medium text-slate-700">
                 Noch keine Batches vorhanden
               </p>
               <p className="mt-1 text-sm text-slate-500">
@@ -189,29 +189,29 @@ export default async function OutreachPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-800 text-left">
-                    <th className="px-4 py-3 font-medium text-slate-400">
+                  <tr className="border-b border-slate-200 text-left">
+                    <th className="px-4 py-3 font-medium text-slate-500">
                       Name
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400">
+                    <th className="px-4 py-3 font-medium text-slate-500">
                       Status
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400 text-right">
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">
                       Leads
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400 text-right">
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">
                       Gesendet
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400 text-right">
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">
                       Antworten
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400 text-right">
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">
                       Reply-Rate
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400">
+                    <th className="px-4 py-3 font-medium text-slate-500">
                       Erstellt am
                     </th>
-                    <th className="px-4 py-3 font-medium text-slate-400">
+                    <th className="px-4 py-3 font-medium text-slate-500">
                       Aktionen
                     </th>
                   </tr>
@@ -228,10 +228,10 @@ export default async function OutreachPage() {
                     return (
                       <tr
                         key={batch.id}
-                        className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50"
+                        className="border-b border-slate-200 last:border-0 hover:bg-slate-50"
                       >
                         <td className="px-4 py-3">
-                          <span className="font-medium text-white">
+                          <span className="font-medium text-slate-900">
                             {batch.name}
                           </span>
                           {batch.description && (
@@ -245,35 +245,35 @@ export default async function OutreachPage() {
                             variant="secondary"
                             className={
                               statusColors[batch.status] ??
-                              "bg-slate-700 text-slate-200"
+                              "bg-slate-100 text-slate-700"
                             }
                           >
                             {statusLabels[batch.status] ?? batch.status}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-300">
+                        <td className="px-4 py-3 text-right text-slate-600">
                           {batch.total_leads}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-300">
+                        <td className="px-4 py-3 text-right text-slate-600">
                           {batch.sent_count}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-300">
+                        <td className="px-4 py-3 text-right text-slate-600">
                           {batch.replied_count}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span
                             className={
                               replyRate >= 10
-                                ? "text-green-400"
+                                ? "text-green-600"
                                 : replyRate >= 5
-                                ? "text-yellow-400"
-                                : "text-slate-400"
+                                ? "text-yellow-600"
+                                : "text-slate-500"
                             }
                           >
                             {replyRate}%
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-400">
+                        <td className="px-4 py-3 text-slate-500">
                           {formatDate(batch.created_at)}
                         </td>
                         <td className="px-4 py-3">
@@ -282,7 +282,7 @@ export default async function OutreachPage() {
                               asChild
                               variant="ghost"
                               size="sm"
-                              className="h-7 px-2 text-slate-400 hover:text-white hover:bg-slate-700"
+                              className="h-7 px-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                             >
                               <Link
                                 href={`/admin/outreach/${batch.id}`}
@@ -295,7 +295,7 @@ export default async function OutreachPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-yellow-400 hover:text-yellow-300 hover:bg-slate-700"
+                                className="h-7 px-2 text-yellow-600 hover:text-yellow-700 hover:bg-slate-100"
                               >
                                 <Pause className="h-3.5 w-3.5 mr-1" />
                                 Pause
@@ -306,7 +306,7 @@ export default async function OutreachPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-green-400 hover:text-green-300 hover:bg-slate-700"
+                                className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-slate-100"
                               >
                                 <Play className="h-3.5 w-3.5 mr-1" />
                                 Aktivieren

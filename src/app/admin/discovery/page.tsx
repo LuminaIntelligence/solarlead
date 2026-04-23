@@ -73,10 +73,10 @@ export default async function DiscoveryPage() {
           { label: "Bereit zur Prüfung", value: totalReady },
           { label: "Genehmigt", value: totalApproved },
         ].map((s) => (
-          <Card key={s.label} className="bg-slate-900 border-slate-800">
+          <Card key={s.label} className="bg-white border-slate-200">
             <CardContent className="pt-5">
-              <div className="text-2xl font-bold text-white">{s.value}</div>
-              <div className="text-xs text-slate-400 mt-1">{s.label}</div>
+              <div className="text-2xl font-bold text-slate-900">{s.value}</div>
+              <div className="text-xs text-slate-500 mt-1">{s.label}</div>
             </CardContent>
           </Card>
         ))}
@@ -84,26 +84,26 @@ export default async function DiscoveryPage() {
 
       {/* Campaign list */}
       {list.length === 0 ? (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardContent className="py-16 text-center">
-            <Radar className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400">Noch keine Kampagnen angelegt.</p>
-            <p className="text-slate-500 text-sm mt-1">
+            <Radar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">Noch keine Kampagnen angelegt.</p>
+            <p className="text-slate-400 text-sm mt-1">
               Erstelle eine Kampagne um automatisch Leads zu entdecken und anzureichern.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-white border-slate-200">
           <CardHeader>
-            <CardTitle className="text-white text-base">Alle Kampagnen</CardTitle>
+            <CardTitle className="text-slate-900 text-base">Alle Kampagnen</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-800 text-left">
+                <tr className="border-b border-slate-200 bg-slate-50 text-left">
                   {["Status", "Name", "Gebiete", "Branchen", "Entdeckt", "Bereit", "Genehmigt", "Erstellt", ""].map((h) => (
-                    <th key={h} className="px-4 py-3 font-medium text-slate-400">{h}</th>
+                    <th key={h} className="px-4 py-3 font-medium text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -112,27 +112,27 @@ export default async function DiscoveryPage() {
                   const areas = (c.areas as { value: string }[]) ?? [];
                   const cats  = (c.categories as string[]) ?? [];
                   return (
-                    <tr key={c.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50">
+                    <tr key={c.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <StatusIcon status={c.status} />
                           <StatusBadge status={c.status} />
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-white">{c.name}</td>
-                      <td className="px-4 py-3 text-slate-400">
+                      <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                      <td className="px-4 py-3 text-slate-500">
                         {areas.slice(0, 2).map((a) => a.value).join(", ")}
                         {areas.length > 2 && ` +${areas.length - 2}`}
                       </td>
-                      <td className="px-4 py-3 text-slate-400">
+                      <td className="px-4 py-3 text-slate-500">
                         {cats.length} Branche{cats.length !== 1 ? "n" : ""}
                       </td>
-                      <td className="px-4 py-3 text-white font-medium">{c.total_discovered}</td>
-                      <td className="px-4 py-3 text-white">{c.total_ready}</td>
+                      <td className="px-4 py-3 text-slate-900 font-medium">{c.total_discovered}</td>
+                      <td className="px-4 py-3 text-slate-900">{c.total_ready}</td>
                       <td className="px-4 py-3">
                         <span className="text-[#B2D082] font-medium">{c.total_approved}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">
+                      <td className="px-4 py-3 text-slate-400 text-xs">
                         {new Date(c.created_at).toLocaleDateString("de-DE")}
                       </td>
                       <td className="px-4 py-3">
