@@ -38,6 +38,7 @@ import { LeadStatusEditor } from "@/components/leads/lead-status-editor";
 import { LeadContacts } from "@/components/leads/lead-contacts";
 import { LeadActivities } from "@/components/leads/lead-activities";
 import { LeadCrmSidebar } from "@/components/leads/lead-crm-sidebar";
+import { GreenScoutEmailTemplates } from "@/components/leads/greenscout-email-templates";
 
 const CATEGORY_LABELS: Record<string, string> = {
   logistics: "Logistik",
@@ -723,8 +724,28 @@ export default async function LeadDetailPage({
           </TabsContent>
 
           {/* Tab: Outreach */}
-          <TabsContent value="outreach" className="space-y-4">
-            <OutreachNotesRenderer notes={outreachNotes} />
+          <TabsContent value="outreach" className="space-y-6">
+            {/* GreenScout E-Mail-Vorlagen */}
+            <Card>
+              <CardContent className="pt-5">
+                <GreenScoutEmailTemplates
+                  contactName={contactsData[0]?.name ?? null}
+                  contactEmail={contactsData[0]?.email ?? null}
+                  contactTitle={contactsData[0]?.title ?? null}
+                  roofAreaM2={solarData?.max_array_area_m2 ?? null}
+                  companyName={lead.company_name}
+                  city={lead.city}
+                />
+              </CardContent>
+            </Card>
+
+            {/* KI-Vertriebsanalyse */}
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 px-1">
+                KI-Vertriebsanalyse
+              </h3>
+              <OutreachNotesRenderer notes={outreachNotes} />
+            </div>
           </TabsContent>
         </Tabs>
 
