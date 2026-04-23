@@ -865,8 +865,9 @@ function RoofSatelliteCard({
   const imageUrl =
     `https://maps.googleapis.com/maps/api/staticmap` +
     `?center=${encodedAddress}` +
-    `&zoom=19` +
-    `&size=800x400` +
+    `&zoom=18` +
+    `&size=640x480` +
+    `&scale=2` +
     `&maptype=satellite` +
     `&key=${apiKey}`;
 
@@ -895,7 +896,7 @@ function RoofSatelliteCard({
         <img
           src={imageUrl}
           alt={`Satellitenansicht Dach – ${companyName}`}
-          className="w-full h-72 object-cover"
+          className="w-full h-auto"
           loading="lazy"
         />
       </CardContent>
