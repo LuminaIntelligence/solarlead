@@ -30,6 +30,104 @@ const GERMAN_CITIES = [
   "Stuttgart", "Düsseldorf", "Leipzig", "Dortmund", "Essen",
   "Bremen", "Dresden", "Hannover", "Nürnberg", "Duisburg",
   "Bochum", "Wuppertal", "Bielefeld", "Bonn", "Münster",
+  "Karlsruhe", "Mannheim", "Augsburg", "Wiesbaden", "Gelsenkirchen",
+  "Mönchengladbach", "Braunschweig", "Chemnitz", "Kiel", "Aachen",
+  "Magdeburg", "Halle an der Saale", "Freiburg im Breisgau", "Krefeld", "Lübeck",
+  "Oberhausen", "Erfurt", "Mainz", "Rostock", "Kassel",
+  "Hagen", "Hamm", "Saarbrücken", "Mülheim an der Ruhr", "Potsdam",
+  "Oldenburg", "Leverkusen", "Osnabrück", "Heidelberg", "Darmstadt",
+  "Regensburg", "Ingolstadt", "Würzburg", "Wolfsburg", "Heilbronn",
+  "Ulm", "Pforzheim", "Göttingen", "Offenbach am Main", "Fürth",
+  "Erlangen", "Bamberg", "Bayreuth", "Ansbach", "Coburg", "Schweinfurt",
+  "Kempten", "Memmingen", "Landshut", "Rosenheim", "Straubing",
+  "Passau", "Freising", "Neu-Ulm", "Weimar", "Jena",
+];
+
+// ─── Regionen ─────────────────────────────────────────────────────────────────
+
+interface Region {
+  label: string;
+  emoji: string;
+  cities: string[];
+}
+
+const REGIONS: Region[] = [
+  {
+    label: "Bayern",
+    emoji: "🦁",
+    cities: [
+      "München", "Nürnberg", "Augsburg", "Regensburg", "Ingolstadt",
+      "Würzburg", "Fürth", "Erlangen", "Bamberg", "Bayreuth",
+      "Landshut", "Rosenheim", "Passau", "Straubing",
+    ],
+  },
+  {
+    label: "Franken",
+    emoji: "🏰",
+    cities: ["Nürnberg", "Würzburg", "Erlangen", "Fürth", "Bamberg", "Bayreuth", "Ansbach", "Coburg", "Schweinfurt"],
+  },
+  {
+    label: "Schwaben",
+    emoji: "⚙️",
+    cities: ["Augsburg", "Kempten", "Memmingen", "Kaufbeuren", "Neu-Ulm"],
+  },
+  {
+    label: "NRW",
+    emoji: "🏭",
+    cities: [
+      "Köln", "Düsseldorf", "Dortmund", "Essen", "Duisburg",
+      "Bochum", "Wuppertal", "Bielefeld", "Bonn", "Münster",
+      "Gelsenkirchen", "Aachen", "Oberhausen", "Krefeld", "Hagen", "Hamm",
+    ],
+  },
+  {
+    label: "Ruhrgebiet",
+    emoji: "🔩",
+    cities: ["Dortmund", "Essen", "Duisburg", "Bochum", "Gelsenkirchen", "Oberhausen", "Hagen", "Hamm", "Mülheim an der Ruhr"],
+  },
+  {
+    label: "Baden-Württemberg",
+    emoji: "🌲",
+    cities: [
+      "Stuttgart", "Mannheim", "Karlsruhe", "Freiburg im Breisgau",
+      "Heidelberg", "Heilbronn", "Ulm", "Pforzheim",
+    ],
+  },
+  {
+    label: "Hessen",
+    emoji: "🏦",
+    cities: ["Frankfurt am Main", "Wiesbaden", "Kassel", "Darmstadt", "Offenbach am Main", "Hanau"],
+  },
+  {
+    label: "Niedersachsen",
+    emoji: "🐎",
+    cities: ["Hannover", "Braunschweig", "Osnabrück", "Oldenburg", "Wolfsburg", "Göttingen"],
+  },
+  {
+    label: "Sachsen",
+    emoji: "⛏️",
+    cities: ["Dresden", "Leipzig", "Chemnitz", "Zwickau"],
+  },
+  {
+    label: "Thüringen",
+    emoji: "🌳",
+    cities: ["Erfurt", "Jena", "Weimar"],
+  },
+  {
+    label: "Brandenburg & Berlin",
+    emoji: "🐻",
+    cities: ["Berlin", "Potsdam"],
+  },
+  {
+    label: "Rheinland-Pfalz",
+    emoji: "🍷",
+    cities: ["Mainz", "Ludwigshafen am Rhein", "Koblenz", "Trier", "Kaiserslautern"],
+  },
+  {
+    label: "Norddeutschland",
+    emoji: "⚓",
+    cities: ["Hamburg", "Bremen", "Kiel", "Lübeck", "Rostock"],
+  },
 ];
 
 // ─── Step Indicator ───────────────────────────────────────────────────────────
@@ -94,6 +192,7 @@ function CityChipInput({
 }) {
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [tab, setTab] = useState<"cities" | "regions">("regions");
 
   function handleInput(val: string) {
     setInput(val);
@@ -104,7 +203,7 @@ function CityChipInput({
           (c) =>
             c.toLowerCase().includes(lower) &&
             !areas.find((a) => a.value === c)
-        ).slice(0, 5)
+        ).slice(0, 6)
       );
     } else {
       setSuggestions([]);
@@ -120,76 +219,175 @@ function CityChipInput({
     setSuggestions([]);
   }
 
+  function addRegion(region: Region) {
+    const newCities = region.cities.filter((c) => !areas.find((a) => a.value === c));
+    if (newCities.length === 0) return;
+    onChange([...areas, ...newCities.map((c) => ({ value: c }))]);
+  }
+
+  function removeRegion(region: Region) {
+    onChange(areas.filter((a) => !region.cities.includes(a.value)));
+  }
+
+  function isRegionFullyAdded(region: Region) {
+    return region.cities.every((c) => areas.find((a) => a.value === c));
+  }
+
+  function isRegionPartiallyAdded(region: Region) {
+    return region.cities.some((c) => areas.find((a) => a.value === c));
+  }
+
   function removeCity(city: string) {
     onChange(areas.filter((a) => a.value !== city));
   }
 
   return (
-    <div className="space-y-3">
-      <div className="relative">
-        <Input
-          placeholder="Stadt eingeben (z.B. München)…"
-          value={input}
-          onChange={(e) => handleInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              if (suggestions.length > 0) addCity(suggestions[0]);
-              else if (input.trim()) addCity(input.trim());
-            }
-          }}
-          className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
-        />
-        {suggestions.length > 0 && (
-          <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-lg overflow-hidden">
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition-colors"
-                onClick={() => addCity(s)}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
+    <div className="space-y-4">
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-slate-800 p-1 rounded-lg w-fit">
+        {(["regions", "cities"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              "px-4 py-1.5 rounded-md text-xs font-medium transition-all",
+              tab === t
+                ? "text-[#1F3D2E]"
+                : "text-slate-400 hover:text-white"
+            )}
+            style={tab === t ? { backgroundColor: "#B2D082" } : undefined}
+          >
+            {t === "regions" ? "🗺 Regionen" : "🏙 Einzelne Städte"}
+          </button>
+        ))}
       </div>
-      {areas.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {areas.map((a) => (
-            <span
-              key={a.value}
-              className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium text-[#1F3D2E]"
-              style={{ backgroundColor: "#B2D082" }}
-            >
-              {a.value}
+
+      {/* Regions tab */}
+      {tab === "regions" && (
+        <div className="grid grid-cols-2 gap-2">
+          {REGIONS.map((region) => {
+            const full = isRegionFullyAdded(region);
+            const partial = !full && isRegionPartiallyAdded(region);
+            return (
               <button
+                key={region.label}
                 type="button"
-                onClick={() => removeCity(a.value)}
-                className="ml-1 hover:opacity-70 transition-opacity"
+                onClick={() => full ? removeRegion(region) : addRegion(region)}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium border text-left transition-all",
+                  full
+                    ? "border-[#B2D082] text-[#1F3D2E]"
+                    : partial
+                    ? "border-[#B2D082]/50 bg-slate-800/80 text-white"
+                    : "border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-500 hover:text-white"
+                )}
+                style={full ? { backgroundColor: "#B2D082" } : undefined}
               >
-                <X className="h-3 w-3" />
+                <span className="text-base shrink-0">{region.emoji}</span>
+                <div className="min-w-0">
+                  <div className="truncate">{region.label}</div>
+                  <div className={cn("text-xs mt-0.5", full ? "text-[#1F3D2E]/70" : "text-slate-500")}>
+                    {region.cities.length} Städte
+                    {partial && !full && (
+                      <span className="text-[#B2D082]/80 ml-1">
+                        ({areas.filter((a) => region.cities.includes(a.value)).length} aktiv)
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {full && <span className="ml-auto shrink-0 text-[#1F3D2E]">✓</span>}
               </button>
-            </span>
-          ))}
+            );
+          })}
         </div>
       )}
-      {/* Quick-add buttons */}
-      <div className="flex flex-wrap gap-2 mt-2">
-        {GERMAN_CITIES.filter((c) => !areas.find((a) => a.value === c))
-          .slice(0, 8)
-          .map((c) => (
+
+      {/* Cities tab */}
+      {tab === "cities" && (
+        <div className="space-y-3">
+          <div className="relative">
+            <Input
+              placeholder="Stadt eingeben (z.B. Regensburg)…"
+              value={input}
+              onChange={(e) => handleInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (suggestions.length > 0) addCity(suggestions[0]);
+                  else if (input.trim()) addCity(input.trim());
+                }
+              }}
+              className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+            />
+            {suggestions.length > 0 && (
+              <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-lg overflow-hidden">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition-colors"
+                    onClick={() => addCity(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Quick-add */}
+          <div className="flex flex-wrap gap-2">
+            {GERMAN_CITIES.filter((c) => !areas.find((a) => a.value === c))
+              .slice(0, 12)
+              .map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => addCity(c)}
+                  className="px-2 py-1 rounded text-xs bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
+                >
+                  + {c}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Selected chips */}
+      {areas.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-slate-400">
+              {areas.length} Stadt{areas.length !== 1 ? "e" : ""} ausgewählt
+            </span>
             <button
-              key={c}
               type="button"
-              onClick={() => addCity(c)}
-              className="px-2 py-1 rounded text-xs bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
+              onClick={() => onChange([])}
+              className="text-xs text-slate-500 hover:text-red-400 transition-colors"
             >
-              + {c}
+              Alle entfernen
             </button>
-          ))}
-      </div>
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+            {areas.map((a) => (
+              <span
+                key={a.value}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-[#1F3D2E]"
+                style={{ backgroundColor: "#B2D082" }}
+              >
+                {a.value}
+                <button
+                  type="button"
+                  onClick={() => removeCity(a.value)}
+                  className="ml-0.5 hover:opacity-70 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
