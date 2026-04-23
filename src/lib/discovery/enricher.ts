@@ -8,7 +8,7 @@ import { getSolarProvider } from "@/lib/providers/solar";
 import { getContactProvider } from "@/lib/providers/contacts";
 import { calculateScore } from "@/lib/scoring";
 
-const MIN_ROOF_AREA_M2 = 300;
+const MIN_ROOF_AREA_M2 = 500;
 
 export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void> {
   const supabase = createAdminClient();
