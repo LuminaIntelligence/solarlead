@@ -31,6 +31,72 @@ export interface Lead {
   deal_value?: number | null;
   next_contact_date?: string | null;
   win_probability?: number | null;
+  claimed_by?: string | null;
+  is_pool_lead?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Discovery ──────────────────────────────────────────────────────────────
+
+export type DiscoveryCampaignStatus = "pending" | "running" | "completed" | "failed" | "paused";
+export type DiscoveryLeadStatus = "pending_enrichment" | "enriching" | "ready" | "insufficient_data" | "approved" | "rejected";
+
+export interface DiscoveryCampaignArea {
+  type: "city" | "postal_code";
+  value: string;
+}
+
+export interface DiscoveryCampaign {
+  id: string;
+  created_by: string;
+  name: string;
+  description: string | null;
+  status: DiscoveryCampaignStatus;
+  areas: DiscoveryCampaignArea[];
+  categories: string[];
+  search_keyword: string | null;
+  auto_approve_threshold: number | null;
+  total_discovered: number;
+  total_enriched: number;
+  total_ready: number;
+  total_approved: number;
+  total_duplicates: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscoveryLead {
+  id: string;
+  campaign_id: string;
+  lead_id: string | null;
+  company_name: string;
+  address: string;
+  city: string;
+  postal_code: string | null;
+  country: string;
+  category: string;
+  website: string | null;
+  phone: string | null;
+  place_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  total_score: number | null;
+  has_contacts: boolean;
+  has_solar_data: boolean;
+  contact_count: number;
+  solar_quality: string | null;
+  max_array_area_m2: number | null;
+  roof_area_m2: number | null;
+  place_name: string | null;
+  contacts: { name?: string; email?: string; title?: string }[] | null;
+  status: DiscoveryLeadStatus;
+  rejection_reason: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
   created_at: string;
   updated_at: string;
 }

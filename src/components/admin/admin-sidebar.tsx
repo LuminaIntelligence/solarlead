@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   SendHorizonal,
   MessageSquare,
+  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ const navItems = [
   { label: "Übersicht", href: "/admin", icon: LayoutDashboard },
   { label: "Nutzerverwaltung", href: "/admin/users", icon: Users },
   { label: "Alle Leads", href: "/admin/leads", icon: Database },
+  { label: "Lead-Entdeckung", href: "/admin/discovery", icon: Radar },
   { label: "Massenversand", href: "/admin/outreach", icon: SendHorizonal },
   { label: "Antworten", href: "/admin/outreach/replies", icon: MessageSquare },
   { label: "System-Einstellungen", href: "/admin/settings", icon: Settings },

@@ -18,6 +18,7 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
 
 interface PlacesTextSearchResponse {
   places?: PlacesResult[];
+  nextPageToken?: string;
 }
 
 interface PlacesResult {
@@ -58,16 +59,52 @@ export class GooglePlacesProvider implements SearchProvider {
     return allResults;
   }
 
-  private async searchCategory(
-    query: SearchQuery,
-    category: string
+  /** Search a single city+category with pagination — up to maxPages×20 results */
+  async searchCategoryPaginated(
+    city: string,
+    country: string,
+    category: string,
+    keyword?: string,
+    maxPages = 3
   ): Promise<SearchResult[]> {
+    const query: SearchQuery = {
+      city,
+      country,
+      categories: [category],
+      radius_km: 30,
+      keywords: keyword,
+    };
+    const allResults: SearchResult[] = [];
+    let pageToken: string | undefined;
+
+    for (let page = 0; page < maxPages; page++) {
+      try {
+        const { results, nextPageToken } = await this.searchCategoryPage(query, category, pageToken);
+        allResults.push(...results);
+        if (!nextPageToken) break;
+        pageToken = nextPageToken;
+        // Brief pause to respect rate limits between pages
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        console.error(`[GooglePlaces] Page ${page + 1} failed for ${city}/${category}:`, err);
+        break;
+      }
+    }
+
+    return allResults;
+  }
+
+  private async searchCategoryPage(
+    query: SearchQuery,
+    category: string,
+    pageToken?: string
+  ): Promise<{ results: SearchResult[]; nextPageToken?: string }> {
     const searchTerm = CATEGORY_SEARCH_TERMS[category] ?? category;
     const textQuery = query.keywords
       ? `${searchTerm} ${query.keywords} in ${query.city}, ${query.country}`
       : `${searchTerm} in ${query.city}, ${query.country}`;
 
-    const requestBody = {
+    const requestBody: Record<string, unknown> = {
       textQuery,
       locationBias: {
         circle: {
@@ -79,6 +116,8 @@ export class GooglePlacesProvider implements SearchProvider {
       languageCode: "de",
     };
 
+    if (pageToken) requestBody.pageToken = pageToken;
+
     const fieldMask = [
       "places.displayName",
       "places.formattedAddress",
@@ -87,6 +126,7 @@ export class GooglePlacesProvider implements SearchProvider {
       "places.internationalPhoneNumber",
       "places.websiteUri",
       "places.rating",
+      "nextPageToken",
     ].join(",");
 
     const response = await fetch(this.baseUrl, {
@@ -101,23 +141,27 @@ export class GooglePlacesProvider implements SearchProvider {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new Error(
-        `Google Places API returned ${response.status}: ${errorText}`
-      );
+      throw new Error(`Google Places API returned ${response.status}: ${errorText}`);
     }
 
     const data = (await response.json()) as PlacesTextSearchResponse;
 
-    if (!data.places || !Array.isArray(data.places)) {
-      return [];
-    }
-
-    return data.places
+    const results = (data.places ?? [])
       .filter(
         (place): place is PlacesResult & { location: NonNullable<PlacesResult["location"]> } =>
           place.location?.latitude != null && place.location?.longitude != null
       )
       .map((place) => this.mapToSearchResult(place, category, query));
+
+    return { results, nextPageToken: data.nextPageToken };
+  }
+
+  private async searchCategory(
+    query: SearchQuery,
+    category: string
+  ): Promise<SearchResult[]> {
+    const { results } = await this.searchCategoryPage(query, category);
+    return results;
   }
 
   private mapToSearchResult(

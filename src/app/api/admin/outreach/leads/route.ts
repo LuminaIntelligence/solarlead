@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
     if (category) {
       leadsQuery = leadsQuery.eq("category", category);
     }
+    // Exclude leads claimed by any user — they belong to individual sales reps
+    leadsQuery = leadsQuery.is("claimed_by", null);
 
     const { data: leads, error: leadsError } = await leadsQuery;
 

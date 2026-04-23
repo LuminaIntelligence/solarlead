@@ -1,0 +1,99 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+function isAdmin(user: { user_metadata?: { role?: string } } | null) {
+  return user?.user_metadata?.role === "admin";
+}
+
+// POST /api/admin/discovery/[id]/leads — bulk approve or reject
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: campaignId } = await params;
+  const body = await req.json();
+  const { action, lead_ids, rejection_reason }: {
+    action: "approve" | "reject";
+    lead_ids: string[];
+    rejection_reason?: string;
+  } = body;
+
+  if (!action || !lead_ids?.length) {
+    return NextResponse.json({ error: "action und lead_ids sind erforderlich" }, { status: 400 });
+  }
+
+  const adminSupabase = createAdminClient();
+
+  if (action === "approve") {
+    // Set discovery_leads to approved
+    await adminSupabase
+      .from("discovery_leads")
+      .update({
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        approved_by: user!.id,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", lead_ids)
+      .eq("campaign_id", campaignId);
+
+    // Update campaign total_approved counter
+    const { data: camp } = await adminSupabase
+      .from("discovery_campaigns")
+      .select("total_approved")
+      .eq("id", campaignId)
+      .single();
+
+    await adminSupabase
+      .from("discovery_campaigns")
+      .update({
+        total_approved: (camp?.total_approved ?? 0) + lead_ids.length,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+
+    return NextResponse.json({ ok: true, action: "approved", count: lead_ids.length });
+  }
+
+  if (action === "reject") {
+    // Load discovery leads to get their lead_ids for cleanup
+    const { data: dls } = await adminSupabase
+      .from("discovery_leads")
+      .select("id, lead_id")
+      .in("id", lead_ids)
+      .eq("campaign_id", campaignId);
+
+    // Set discovery_leads to rejected
+    await adminSupabase
+      .from("discovery_leads")
+      .update({
+        status: "rejected",
+        rejection_reason: rejection_reason ?? "Manuell abgelehnt",
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", lead_ids)
+      .eq("campaign_id", campaignId);
+
+    // Delete the provisional solar_lead_mass rows
+    const provisionalLeadIds = (dls ?? [])
+      .map((dl: { lead_id: string | null }) => dl.lead_id)
+      .filter((id: string | null): id is string => !!id);
+
+    if (provisionalLeadIds.length > 0) {
+      await adminSupabase
+        .from("solar_lead_mass")
+        .delete()
+        .in("id", provisionalLeadIds)
+        .eq("is_pool_lead", true);
+    }
+
+    return NextResponse.json({ ok: true, action: "rejected", count: lead_ids.length });
+  }
+
+  return NextResponse.json({ error: "Ungültige Aktion" }, { status: 400 });
+}
