@@ -6,6 +6,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSolarProvider } from "@/lib/providers/solar";
 import { getContactProvider } from "@/lib/providers/contacts";
+import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
 import { calculateScore } from "@/lib/scoring";
 
 const MIN_ROOF_AREA_M2 = 500;
@@ -182,6 +183,46 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
         }
       } catch (e) {
         console.warn("[Enricher] Apollo contacts failed:", e);
+      }
+    }
+
+    // 5b. Impressum-Scraper as fallback if Apollo found nothing
+    if (!hasContacts && domain) {
+      try {
+        const scraper = new ImpressumScraperProvider();
+        const scraperResult = await scraper.findContacts({
+          domain,
+          company_name: dl.company_name,
+          city: dl.city ?? undefined,
+        });
+
+        const validContacts = scraperResult.contacts.filter((c) => c.email);
+        if (validContacts.length > 0) {
+          contactCount = validContacts.length;
+          hasContacts = true;
+
+          await supabase.from("lead_contacts").insert(
+            validContacts.map((c) => ({
+              lead_id: leadId,
+              user_id: campaign.created_by,
+              name: c.name,
+              title: c.title,
+              email: c.email,
+              phone: c.phone,
+              linkedin_url: null,
+              apollo_id: null,
+              seniority: c.seniority,
+              department: null,
+              source: "impressum",
+            }))
+          );
+
+          console.log(
+            `[Enricher] Impressum-Scraper hat ${validContacts.length} Kontakt(e) für ${domain} gefunden`
+          );
+        }
+      } catch (e) {
+        console.warn("[Enricher] Impressum-Scraper failed:", e);
       }
     }
 
