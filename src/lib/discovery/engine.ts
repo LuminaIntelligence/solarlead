@@ -77,18 +77,35 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
     // Iterate area × category
     for (const area of areas) {
       for (const category of categories) {
-        const city = area.value;
+        const label = area.type === "radius"
+          ? `${area.value} (${area.radius_km} km)`
+          : area.value;
 
-        console.log(`[Engine] Searching: ${city} / ${category}`);
+        console.log(`[Engine] Searching: ${label} / ${category}`);
 
         try {
-          const results = await placesProvider.searchCategoryPaginated(
-            city,
-            "DE",
-            category,
-            campaign.search_keyword ?? undefined,
-            3 // up to 3 pages = 60 results
-          );
+          let results;
+          if (area.type === "radius" && area.lat != null && area.lng != null && area.radius_km != null) {
+            // Coordinate-based search — covers all towns within radius incl. small ones
+            results = await placesProvider.searchByCoords(
+              area.lat,
+              area.lng,
+              area.radius_km,
+              "DE",
+              category,
+              campaign.search_keyword ?? undefined,
+              3
+            );
+          } else {
+            // Legacy city-name search
+            results = await placesProvider.searchCategoryPaginated(
+              area.value,
+              "DE",
+              category,
+              campaign.search_keyword ?? undefined,
+              3
+            );
+          }
 
           const newLeads = [];
 
@@ -157,7 +174,7 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
             }
           }
         } catch (searchErr) {
-          console.error(`[Engine] Search failed for ${city}/${category}:`, searchErr);
+          console.error(`[Engine] Search failed for ${label}/${category}:`, searchErr);
         }
 
         // Pause between searches

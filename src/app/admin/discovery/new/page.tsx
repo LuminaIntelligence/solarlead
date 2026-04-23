@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Radar, ChevronRight, ChevronLeft, Plus, X, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  Radar, ChevronRight, ChevronLeft, X, CheckCircle2, Loader2, MapPin,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { DiscoveryCampaignArea } from "@/types/database";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Category options ─────────────────────────────────────────────────────────
 
 const CATEGORY_OPTIONS = [
   { value: "logistics",         label: "Logistik",              emoji: "🚛" },
@@ -25,110 +28,242 @@ const CATEGORY_OPTIONS = [
   { value: "shopping_center",   label: "Einkaufszentrum",       emoji: "🏬" },
 ];
 
-const GERMAN_CITIES = [
-  "Berlin", "Hamburg", "München", "Köln", "Frankfurt am Main",
-  "Stuttgart", "Düsseldorf", "Leipzig", "Dortmund", "Essen",
-  "Bremen", "Dresden", "Hannover", "Nürnberg", "Duisburg",
-  "Bochum", "Wuppertal", "Bielefeld", "Bonn", "Münster",
-  "Karlsruhe", "Mannheim", "Augsburg", "Wiesbaden", "Gelsenkirchen",
-  "Mönchengladbach", "Braunschweig", "Chemnitz", "Kiel", "Aachen",
-  "Magdeburg", "Halle an der Saale", "Freiburg im Breisgau", "Krefeld", "Lübeck",
-  "Oberhausen", "Erfurt", "Mainz", "Rostock", "Kassel",
-  "Hagen", "Hamm", "Saarbrücken", "Mülheim an der Ruhr", "Potsdam",
-  "Oldenburg", "Leverkusen", "Osnabrück", "Heidelberg", "Darmstadt",
-  "Regensburg", "Ingolstadt", "Würzburg", "Wolfsburg", "Heilbronn",
-  "Ulm", "Pforzheim", "Göttingen", "Offenbach am Main", "Fürth",
-  "Erlangen", "Bamberg", "Bayreuth", "Ansbach", "Coburg", "Schweinfurt",
-  "Kempten", "Memmingen", "Landshut", "Rosenheim", "Straubing",
-  "Passau", "Freising", "Neu-Ulm", "Weimar", "Jena",
-];
+// ─── Coordinate lookup for custom radius search ───────────────────────────────
 
-// ─── Regionen ─────────────────────────────────────────────────────────────────
+const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
+  "München":             { lat: 48.137, lng: 11.576 },
+  "Berlin":              { lat: 52.520, lng: 13.405 },
+  "Hamburg":             { lat: 53.551, lng:  9.993 },
+  "Köln":                { lat: 50.938, lng:  6.960 },
+  "Frankfurt am Main":   { lat: 50.110, lng:  8.682 },
+  "Stuttgart":           { lat: 48.775, lng:  9.182 },
+  "Düsseldorf":          { lat: 51.226, lng:  6.773 },
+  "Leipzig":             { lat: 51.340, lng: 12.374 },
+  "Dortmund":            { lat: 51.514, lng:  7.465 },
+  "Essen":               { lat: 51.456, lng:  7.011 },
+  "Bremen":              { lat: 53.073, lng:  8.806 },
+  "Dresden":             { lat: 51.051, lng: 13.738 },
+  "Hannover":            { lat: 52.374, lng:  9.738 },
+  "Nürnberg":            { lat: 49.452, lng: 11.077 },
+  "Duisburg":            { lat: 51.434, lng:  6.762 },
+  "Bochum":              { lat: 51.481, lng:  7.219 },
+  "Wuppertal":           { lat: 51.257, lng:  7.151 },
+  "Bielefeld":           { lat: 52.021, lng:  8.532 },
+  "Bonn":                { lat: 50.735, lng:  7.100 },
+  "Münster":             { lat: 51.962, lng:  7.626 },
+  "Karlsruhe":           { lat: 49.008, lng:  8.404 },
+  "Mannheim":            { lat: 49.487, lng:  8.466 },
+  "Augsburg":            { lat: 48.370, lng: 10.898 },
+  "Wiesbaden":           { lat: 50.079, lng:  8.244 },
+  "Aachen":              { lat: 50.776, lng:  6.084 },
+  "Braunschweig":        { lat: 52.268, lng: 10.527 },
+  "Chemnitz":            { lat: 50.833, lng: 12.924 },
+  "Kiel":                { lat: 54.323, lng: 10.123 },
+  "Erfurt":              { lat: 50.984, lng: 11.029 },
+  "Mainz":               { lat: 49.999, lng:  8.273 },
+  "Rostock":             { lat: 54.092, lng: 12.099 },
+  "Kassel":              { lat: 51.312, lng:  9.481 },
+  "Regensburg":          { lat: 49.013, lng: 12.102 },
+  "Ingolstadt":          { lat: 48.763, lng: 11.424 },
+  "Würzburg":            { lat: 49.795, lng:  9.936 },
+  "Wolfsburg":           { lat: 52.422, lng: 10.787 },
+  "Heilbronn":           { lat: 49.142, lng:  9.218 },
+  "Ulm":                 { lat: 48.401, lng:  9.987 },
+  "Freiburg im Breisgau":{ lat: 47.999, lng:  7.842 },
+  "Heidelberg":          { lat: 49.399, lng:  8.673 },
+  "Osnabrück":           { lat: 52.279, lng:  8.047 },
+  "Oldenburg":           { lat: 53.143, lng:  8.214 },
+  "Göttingen":           { lat: 51.541, lng:  9.916 },
+  "Magdeburg":           { lat: 52.130, lng: 11.628 },
+  "Halle an der Saale":  { lat: 51.482, lng: 11.970 },
+  "Potsdam":             { lat: 52.396, lng: 13.060 },
+  "Saarbrücken":         { lat: 49.235, lng:  7.004 },
+  "Lübeck":              { lat: 53.869, lng: 10.686 },
+};
 
-interface Region {
-  label: string;
-  emoji: string;
-  cities: string[];
+const CITY_NAMES = Object.keys(CITY_COORDS);
+
+// ─── Region definitions (coordinate circles) ─────────────────────────────────
+// Each region = array of search circles. Together they cover the full area
+// including small towns like Herzogenaurach (20 km from Nürnberg).
+// API restriction: max 50 km radius per call. Large regions use multiple circles.
+
+interface SearchCircle {
+  label: string;   // city center name (internal)
+  lat: number;
+  lng: number;
+  km: number;      // radius in km (max 50 for API)
 }
 
-const REGIONS: Region[] = [
+interface RegionDef {
+  label: string;
+  emoji: string;
+  description: string;
+  circles: SearchCircle[];
+}
+
+const REGIONS: RegionDef[] = [
   {
     label: "Bayern",
     emoji: "🦁",
-    cities: [
-      "München", "Nürnberg", "Augsburg", "Regensburg", "Ingolstadt",
-      "Würzburg", "Fürth", "Erlangen", "Bamberg", "Bayreuth",
-      "Landshut", "Rosenheim", "Passau", "Straubing",
+    description: "Ganz Bayern inkl. kleiner Orte",
+    circles: [
+      { label: "München",     lat: 48.137, lng: 11.576, km: 50 },
+      { label: "Augsburg",    lat: 48.370, lng: 10.898, km: 35 },
+      { label: "Ingolstadt",  lat: 48.763, lng: 11.424, km: 35 },
+      { label: "Nürnberg",    lat: 49.452, lng: 11.077, km: 50 }, // deckt Herzogenaurach, Erlangen, Fürth
+      { label: "Würzburg",    lat: 49.795, lng:  9.936, km: 45 },
+      { label: "Regensburg",  lat: 49.013, lng: 12.102, km: 50 },
+      { label: "Passau",      lat: 48.574, lng: 13.458, km: 40 },
+      { label: "Rosenheim",   lat: 47.857, lng: 12.128, km: 35 },
     ],
   },
   {
     label: "Franken",
     emoji: "🏰",
-    cities: ["Nürnberg", "Würzburg", "Erlangen", "Fürth", "Bamberg", "Bayreuth", "Ansbach", "Coburg", "Schweinfurt"],
+    description: "Nürnberg, Würzburg & Umgebung",
+    circles: [
+      { label: "Nürnberg",   lat: 49.452, lng: 11.077, km: 50 }, // Herzogenaurach, Erlangen, Fürth, Schwabach, Roth
+      { label: "Würzburg",   lat: 49.795, lng:  9.936, km: 45 }, // Schweinfurt, Kitzingen, Bad Kissingen
+      { label: "Bamberg",    lat: 49.898, lng: 10.904, km: 35 },
+      { label: "Bayreuth",   lat: 49.945, lng: 11.578, km: 35 },
+      { label: "Ansbach",    lat: 49.301, lng: 10.572, km: 35 },
+    ],
   },
   {
-    label: "Schwaben",
+    label: "Schwaben (BY)",
     emoji: "⚙️",
-    cities: ["Augsburg", "Kempten", "Memmingen", "Kaufbeuren", "Neu-Ulm"],
+    description: "Augsburg, Kempten & Allgäu",
+    circles: [
+      { label: "Augsburg",   lat: 48.370, lng: 10.898, km: 45 },
+      { label: "Kempten",    lat: 47.726, lng: 10.317, km: 40 },
+      { label: "Neu-Ulm",    lat: 48.396, lng: 10.014, km: 35 },
+    ],
   },
   {
     label: "NRW",
     emoji: "🏭",
-    cities: [
-      "Köln", "Düsseldorf", "Dortmund", "Essen", "Duisburg",
-      "Bochum", "Wuppertal", "Bielefeld", "Bonn", "Münster",
-      "Gelsenkirchen", "Aachen", "Oberhausen", "Krefeld", "Hagen", "Hamm",
+    description: "Rheinland, Ruhrgebiet & Münsterland",
+    circles: [
+      { label: "Köln",       lat: 50.938, lng:  6.960, km: 50 },
+      { label: "Düsseldorf", lat: 51.226, lng:  6.773, km: 35 },
+      { label: "Dortmund",   lat: 51.514, lng:  7.465, km: 40 },
+      { label: "Essen",      lat: 51.456, lng:  7.011, km: 30 },
+      { label: "Bochum",     lat: 51.481, lng:  7.219, km: 25 },
+      { label: "Münster",    lat: 51.962, lng:  7.626, km: 40 },
+      { label: "Bielefeld",  lat: 52.021, lng:  8.532, km: 35 },
+      { label: "Aachen",     lat: 50.776, lng:  6.084, km: 35 },
     ],
   },
   {
     label: "Ruhrgebiet",
     emoji: "🔩",
-    cities: ["Dortmund", "Essen", "Duisburg", "Bochum", "Gelsenkirchen", "Oberhausen", "Hagen", "Hamm", "Mülheim an der Ruhr"],
+    description: "Industrieherz NRW",
+    circles: [
+      { label: "Dortmund",   lat: 51.514, lng:  7.465, km: 35 },
+      { label: "Essen",      lat: 51.456, lng:  7.011, km: 30 },
+      { label: "Duisburg",   lat: 51.434, lng:  6.762, km: 30 },
+      { label: "Bochum",     lat: 51.481, lng:  7.219, km: 25 },
+    ],
   },
   {
     label: "Baden-Württemberg",
     emoji: "🌲",
-    cities: [
-      "Stuttgart", "Mannheim", "Karlsruhe", "Freiburg im Breisgau",
-      "Heidelberg", "Heilbronn", "Ulm", "Pforzheim",
+    description: "Stuttgart, Karlsruhe, Freiburg",
+    circles: [
+      { label: "Stuttgart",  lat: 48.775, lng:  9.182, km: 50 },
+      { label: "Karlsruhe",  lat: 49.008, lng:  8.404, km: 40 },
+      { label: "Freiburg",   lat: 47.999, lng:  7.842, km: 40 },
+      { label: "Ulm",        lat: 48.401, lng:  9.987, km: 40 },
     ],
   },
   {
     label: "Hessen",
     emoji: "🏦",
-    cities: ["Frankfurt am Main", "Wiesbaden", "Kassel", "Darmstadt", "Offenbach am Main", "Hanau"],
+    description: "Frankfurt, Wiesbaden & Kassel",
+    circles: [
+      { label: "Frankfurt",  lat: 50.110, lng:  8.682, km: 50 },
+      { label: "Kassel",     lat: 51.312, lng:  9.481, km: 40 },
+    ],
   },
   {
     label: "Niedersachsen",
     emoji: "🐎",
-    cities: ["Hannover", "Braunschweig", "Osnabrück", "Oldenburg", "Wolfsburg", "Göttingen"],
+    description: "Hannover, Braunschweig & Osnabrück",
+    circles: [
+      { label: "Hannover",   lat: 52.374, lng:  9.738, km: 50 },
+      { label: "Braunschweig",lat:52.268, lng: 10.527, km: 40 },
+      { label: "Osnabrück",  lat: 52.279, lng:  8.047, km: 40 },
+    ],
   },
   {
     label: "Sachsen",
     emoji: "⛏️",
-    cities: ["Dresden", "Leipzig", "Chemnitz", "Zwickau"],
+    description: "Dresden, Leipzig & Chemnitz",
+    circles: [
+      { label: "Leipzig",    lat: 51.340, lng: 12.374, km: 40 },
+      { label: "Dresden",    lat: 51.051, lng: 13.738, km: 40 },
+      { label: "Chemnitz",   lat: 50.833, lng: 12.924, km: 35 },
+    ],
   },
   {
     label: "Thüringen",
     emoji: "🌳",
-    cities: ["Erfurt", "Jena", "Weimar"],
+    description: "Erfurt, Jena & Weimar",
+    circles: [
+      { label: "Erfurt",     lat: 50.984, lng: 11.029, km: 45 },
+    ],
   },
   {
     label: "Brandenburg & Berlin",
     emoji: "🐻",
-    cities: ["Berlin", "Potsdam"],
+    description: "Berlin und Umland",
+    circles: [
+      { label: "Berlin",     lat: 52.520, lng: 13.405, km: 50 },
+    ],
   },
   {
     label: "Rheinland-Pfalz",
     emoji: "🍷",
-    cities: ["Mainz", "Ludwigshafen am Rhein", "Koblenz", "Trier", "Kaiserslautern"],
+    description: "Mainz, Koblenz & Trier",
+    circles: [
+      { label: "Mainz",      lat: 49.999, lng:  8.273, km: 40 },
+      { label: "Koblenz",    lat: 50.361, lng:  7.590, km: 35 },
+      { label: "Trier",      lat: 49.749, lng:  6.637, km: 35 },
+    ],
   },
   {
     label: "Norddeutschland",
     emoji: "⚓",
-    cities: ["Hamburg", "Bremen", "Kiel", "Lübeck", "Rostock"],
+    description: "Hamburg, Bremen, Kiel, Rostock",
+    circles: [
+      { label: "Hamburg",    lat: 53.551, lng:  9.993, km: 50 },
+      { label: "Bremen",     lat: 53.073, lng:  8.806, km: 40 },
+      { label: "Kiel",       lat: 54.323, lng: 10.123, km: 40 },
+      { label: "Rostock",    lat: 54.092, lng: 12.099, km: 35 },
+    ],
   },
 ];
+
+/** Convert region circles to DiscoveryCampaignArea array */
+function regionToAreas(region: RegionDef): DiscoveryCampaignArea[] {
+  return region.circles.map((c) => ({
+    type: "radius" as const,
+    value: `${c.label} (${c.km} km)`,
+    lat: c.lat,
+    lng: c.lng,
+    radius_km: c.km,
+  }));
+}
+
+/** Check which area keys a region contributes */
+function regionAreaKeys(region: RegionDef): string[] {
+  return region.circles.map((c) => `${c.lat},${c.lng}`);
+}
+
+function areaKey(a: DiscoveryCampaignArea): string {
+  return a.type === "radius" ? `${a.lat},${a.lng}` : a.value;
+}
 
 // ─── Step Indicator ───────────────────────────────────────────────────────────
 
@@ -139,7 +274,6 @@ function StepIndicator({ current }: { current: number }) {
     { n: 3, label: "Branchen" },
     { n: 4, label: "Bestätigen" },
   ];
-
   return (
     <div className="flex items-center gap-0 mb-8">
       {steps.map((step, i) => (
@@ -148,32 +282,18 @@ function StepIndicator({ current }: { current: number }) {
             <div
               className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all",
-                step.n < current
-                  ? "text-[#1F3D2E]"
-                  : step.n === current
-                  ? "text-[#1F3D2E]"
-                  : "bg-slate-800 text-slate-500"
+                step.n <= current ? "text-[#1F3D2E]" : "bg-slate-800 text-slate-500"
               )}
               style={step.n <= current ? { backgroundColor: "#B2D082" } : undefined}
             >
               {step.n < current ? <CheckCircle2 className="h-4 w-4" /> : step.n}
             </div>
-            <span
-              className={cn(
-                "text-xs whitespace-nowrap",
-                step.n === current ? "text-white font-medium" : "text-slate-500"
-              )}
-            >
+            <span className={cn("text-xs whitespace-nowrap", step.n === current ? "text-white font-medium" : "text-slate-500")}>
               {step.label}
             </span>
           </div>
           {i < steps.length - 1 && (
-            <div
-              className={cn(
-                "h-0.5 w-12 mx-1 mb-5 transition-all",
-                step.n < current ? "bg-[#B2D082]" : "bg-slate-700"
-              )}
-            />
+            <div className={cn("h-0.5 w-12 mx-1 mb-5 transition-all", step.n < current ? "bg-[#B2D082]" : "bg-slate-700")} />
           )}
         </div>
       ))}
@@ -181,84 +301,99 @@ function StepIndicator({ current }: { current: number }) {
   );
 }
 
-// ─── City Chip Input ──────────────────────────────────────────────────────────
+// ─── Area selector (Step 2) ───────────────────────────────────────────────────
 
-function CityChipInput({
+function AreaSelector({
   areas,
   onChange,
 }: {
-  areas: { value: string }[];
-  onChange: (areas: { value: string }[]) => void;
+  areas: DiscoveryCampaignArea[];
+  onChange: (areas: DiscoveryCampaignArea[]) => void;
 }) {
-  const [input, setInput] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [tab, setTab] = useState<"cities" | "regions">("regions");
+  const [tab, setTab] = useState<"regions" | "custom">("regions");
+  const [cityInput, setCityInput] = useState("");
+  const [cityRadius, setCityRadius] = useState(30);
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
 
-  function handleInput(val: string) {
-    setInput(val);
-    if (val.length >= 2) {
-      const lower = val.toLowerCase();
-      setSuggestions(
-        GERMAN_CITIES.filter(
-          (c) =>
-            c.toLowerCase().includes(lower) &&
-            !areas.find((a) => a.value === c)
-        ).slice(0, 6)
-      );
+  const currentKeys = new Set(areas.map(areaKey));
+
+  function isRegionActive(region: RegionDef) {
+    return regionAreaKeys(region).every((k) => currentKeys.has(k));
+  }
+  function isRegionPartial(region: RegionDef) {
+    const keys = regionAreaKeys(region);
+    return keys.some((k) => currentKeys.has(k)) && !keys.every((k) => currentKeys.has(k));
+  }
+
+  function toggleRegion(region: RegionDef) {
+    if (isRegionActive(region)) {
+      // Remove all circles of this region
+      const keys = new Set(regionAreaKeys(region));
+      onChange(areas.filter((a) => !keys.has(areaKey(a))));
     } else {
-      setSuggestions([]);
+      // Add missing circles
+      const keys = new Set(regionAreaKeys(region));
+      const existing = areas.filter((a) => keys.has(areaKey(a)));
+      const existingKeys = new Set(existing.map(areaKey));
+      const toAdd = regionToAreas(region).filter((a) => !existingKeys.has(areaKey(a)));
+      onChange([...areas, ...toAdd]);
     }
   }
 
-  function addCity(city: string) {
-    const trimmed = city.trim();
-    if (!trimmed) return;
-    if (areas.find((a) => a.value === trimmed)) return;
-    onChange([...areas, { value: trimmed }]);
-    setInput("");
-    setSuggestions([]);
+  function addCustomCity() {
+    const name = cityInput.trim();
+    if (!name) return;
+    const coords = CITY_COORDS[name];
+    if (!coords) {
+      // Fallback: city-type search
+      const a: DiscoveryCampaignArea = { type: "city", value: name };
+      if (!currentKeys.has(areaKey(a))) onChange([...areas, a]);
+    } else {
+      const a: DiscoveryCampaignArea = {
+        type: "radius",
+        value: `${name} (${cityRadius} km)`,
+        lat: coords.lat,
+        lng: coords.lng,
+        radius_km: cityRadius,
+      };
+      if (!currentKeys.has(areaKey(a))) onChange([...areas, a]);
+    }
+    setCityInput("");
+    setCitySuggestions([]);
   }
 
-  function addRegion(region: Region) {
-    const newCities = region.cities.filter((c) => !areas.find((a) => a.value === c));
-    if (newCities.length === 0) return;
-    onChange([...areas, ...newCities.map((c) => ({ value: c }))]);
+  function handleCityInputChange(val: string) {
+    setCityInput(val);
+    if (val.length >= 2) {
+      const lower = val.toLowerCase();
+      setCitySuggestions(CITY_NAMES.filter((c) => c.toLowerCase().includes(lower)).slice(0, 6));
+    } else {
+      setCitySuggestions([]);
+    }
   }
 
-  function removeRegion(region: Region) {
-    onChange(areas.filter((a) => !region.cities.includes(a.value)));
+  function removeArea(a: DiscoveryCampaignArea) {
+    onChange(areas.filter((x) => areaKey(x) !== areaKey(a)));
   }
 
-  function isRegionFullyAdded(region: Region) {
-    return region.cities.every((c) => areas.find((a) => a.value === c));
-  }
-
-  function isRegionPartiallyAdded(region: Region) {
-    return region.cities.some((c) => areas.find((a) => a.value === c));
-  }
-
-  function removeCity(city: string) {
-    onChange(areas.filter((a) => a.value !== city));
-  }
+  const totalSearches = areas.length;
 
   return (
     <div className="space-y-4">
       {/* Tab switcher */}
       <div className="flex gap-1 bg-slate-800 p-1 rounded-lg w-fit">
-        {(["regions", "cities"] as const).map((t) => (
+        {(["regions", "custom"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={cn(
               "px-4 py-1.5 rounded-md text-xs font-medium transition-all",
-              tab === t
-                ? "text-[#1F3D2E]"
-                : "text-slate-400 hover:text-white"
+              tab === t ? "text-[#1F3D2E]" : "text-slate-400 hover:text-white"
             )}
             style={tab === t ? { backgroundColor: "#B2D082" } : undefined}
           >
-            {t === "regions" ? "🗺 Regionen" : "🏙 Einzelne Städte"}
+            {t === "regions" ? "🗺 Regionen" : "📍 Benutzerdefiniert"}
           </button>
         ))}
       </div>
@@ -267,98 +402,121 @@ function CityChipInput({
       {tab === "regions" && (
         <div className="grid grid-cols-2 gap-2">
           {REGIONS.map((region) => {
-            const full = isRegionFullyAdded(region);
-            const partial = !full && isRegionPartiallyAdded(region);
+            const active = isRegionActive(region);
+            const partial = isRegionPartial(region);
             return (
               <button
                 key={region.label}
                 type="button"
-                onClick={() => full ? removeRegion(region) : addRegion(region)}
+                onClick={() => toggleRegion(region)}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium border text-left transition-all",
-                  full
-                    ? "border-[#B2D082] text-[#1F3D2E]"
+                  "flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-sm border text-left transition-all",
+                  active
+                    ? "border-[#B2D082] text-[#1F3D2E] font-medium"
                     : partial
-                    ? "border-[#B2D082]/50 bg-slate-800/80 text-white"
+                    ? "border-[#B2D082]/40 bg-slate-800/80 text-white"
                     : "border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-500 hover:text-white"
                 )}
-                style={full ? { backgroundColor: "#B2D082" } : undefined}
+                style={active ? { backgroundColor: "#B2D082" } : undefined}
               >
-                <span className="text-base shrink-0">{region.emoji}</span>
-                <div className="min-w-0">
-                  <div className="truncate">{region.label}</div>
-                  <div className={cn("text-xs mt-0.5", full ? "text-[#1F3D2E]/70" : "text-slate-500")}>
-                    {region.cities.length} Städte
-                    {partial && !full && (
+                <span className="text-base shrink-0 mt-0.5">{region.emoji}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="truncate">{region.label}</span>
+                    {active && <span className="text-[#1F3D2E] text-xs shrink-0 ml-1">✓</span>}
+                  </div>
+                  <div className={cn("text-xs mt-0.5 truncate", active ? "text-[#1F3D2E]/70" : "text-slate-500")}>
+                    {region.description}
+                  </div>
+                  <div className={cn("text-xs mt-0.5", active ? "text-[#1F3D2E]/60" : "text-slate-600")}>
+                    {region.circles.length} Suchkreise · max {region.circles.length * 60} Treffer/Branche
+                    {partial && !active && (
                       <span className="text-[#B2D082]/80 ml-1">
-                        ({areas.filter((a) => region.cities.includes(a.value)).length} aktiv)
+                        ({areas.filter((a) => regionAreaKeys(region).includes(areaKey(a))).length} aktiv)
                       </span>
                     )}
                   </div>
                 </div>
-                {full && <span className="ml-auto shrink-0 text-[#1F3D2E]">✓</span>}
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Cities tab */}
-      {tab === "cities" && (
+      {/* Custom tab */}
+      {tab === "custom" && (
         <div className="space-y-3">
-          <div className="relative">
-            <Input
-              placeholder="Stadt eingeben (z.B. Regensburg)…"
-              value={input}
-              onChange={(e) => handleInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (suggestions.length > 0) addCity(suggestions[0]);
-                  else if (input.trim()) addCity(input.trim());
-                }
-              }}
-              className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
-            />
-            {suggestions.length > 0 && (
-              <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-lg overflow-hidden">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition-colors"
-                    onClick={() => addCity(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* Quick-add */}
-          <div className="flex flex-wrap gap-2">
-            {GERMAN_CITIES.filter((c) => !areas.find((a) => a.value === c))
-              .slice(0, 12)
-              .map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => addCity(c)}
-                  className="px-2 py-1 rounded text-xs bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
-                >
-                  + {c}
-                </button>
+          <p className="text-xs text-slate-400">
+            Gib eine Stadt ein und wähle den Suchradius. Das System findet alle Betriebe
+            im Umkreis — auch in kleinen Orten wie Herzogenaurach.
+          </p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                placeholder="Stadtname (z.B. Nürnberg)…"
+                value={cityInput}
+                onChange={(e) => handleCityInputChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); addCustomCity(); }
+                }}
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+              />
+              {citySuggestions.length > 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-lg overflow-hidden">
+                  {citySuggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition-colors"
+                      onClick={() => { setCityInput(s); setCitySuggestions([]); }}
+                    >
+                      {s}
+                      {CITY_COORDS[s] && (
+                        <span className="text-slate-500 text-xs ml-2">Koordinaten bekannt</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <select
+              value={cityRadius}
+              onChange={(e) => setCityRadius(Number(e.target.value))}
+              className="bg-slate-800 border border-slate-700 text-white text-sm rounded-md px-3 py-2 focus:outline-none"
+            >
+              {[10, 20, 30, 40, 50].map((r) => (
+                <option key={r} value={r}>{r} km</option>
               ))}
+            </select>
+            <Button
+              type="button"
+              onClick={addCustomCity}
+              disabled={!cityInput.trim()}
+              className="text-[#1F3D2E] font-semibold shrink-0"
+              style={{ backgroundColor: "#B2D082" }}
+            >
+              <MapPin className="h-4 w-4" />
+            </Button>
           </div>
+          {cityInput && CITY_COORDS[cityInput] && (
+            <p className="text-xs text-[#B2D082]/80">
+              ✓ Koordinaten bekannt — Umkreissuche aktiv (deckt auch Kleinstädte ab)
+            </p>
+          )}
+          {cityInput && !CITY_COORDS[cityInput] && cityInput.length > 2 && (
+            <p className="text-xs text-yellow-400/70">
+              Koordinaten unbekannt — Suche nach Stadtname (keine Umkreisabdeckung)
+            </p>
+          )}
         </div>
       )}
 
-      {/* Selected chips */}
+      {/* Selected areas */}
       {areas.length > 0 && (
-        <div>
+        <div className="pt-1">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400">
-              {areas.length} Stadt{areas.length !== 1 ? "e" : ""} ausgewählt
+              {totalSearches} Suchkreis{totalSearches !== 1 ? "e" : ""} ausgewählt
             </span>
             <button
               type="button"
@@ -368,17 +526,17 @@ function CityChipInput({
               Alle entfernen
             </button>
           </div>
-          <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto pr-1">
+          <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
             {areas.map((a) => (
               <span
-                key={a.value}
+                key={areaKey(a)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-[#1F3D2E]"
                 style={{ backgroundColor: "#B2D082" }}
               >
                 {a.value}
                 <button
                   type="button"
-                  onClick={() => removeCity(a.value)}
+                  onClick={() => removeArea(a)}
                   className="ml-0.5 hover:opacity-70 transition-opacity"
                 >
                   <X className="h-3 w-3" />
@@ -400,12 +558,11 @@ export default function NewDiscoveryCampaignPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
   const [autoApproveThreshold, setAutoApproveThreshold] = useState("");
-  const [areas, setAreas] = useState<{ value: string }[]>([]);
+  const [areas, setAreas] = useState<DiscoveryCampaignArea[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
 
   function toggleCategory(cat: string) {
@@ -427,9 +584,7 @@ export default function NewDiscoveryCampaignPage() {
           areas,
           categories,
           search_keyword: searchKeyword.trim() || undefined,
-          auto_approve_threshold: autoApproveThreshold
-            ? Number(autoApproveThreshold)
-            : undefined,
+          auto_approve_threshold: autoApproveThreshold ? Number(autoApproveThreshold) : undefined,
         }),
       });
       const data = await res.json();
@@ -441,36 +596,31 @@ export default function NewDiscoveryCampaignPage() {
     }
   }
 
-  const canNext1 = name.trim().length >= 3;
-  const canNext2 = areas.length >= 1;
-  const canNext3 = categories.length >= 1;
+  const estimatedResults = areas.length * categories.length * 60;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <Radar className="h-6 w-6 text-[#B2D082]" />
         <div>
           <h1 className="text-xl font-bold text-white">Neue Discovery-Kampagne</h1>
           <p className="text-slate-400 text-sm">
-            Gebiete &amp; Branchen auswählen — System sucht automatisch geeignete Leads
+            Gebiete &amp; Branchen auswählen — System sucht automatisch per Umkreis
           </p>
         </div>
       </div>
 
       <StepIndicator current={step} />
 
-      {/* ── Step 1: Campaign Name ─────────────────────────────────── */}
+      {/* Step 1 */}
       {step === 1 && (
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
-            <CardTitle className="text-white text-base">Kampagne benennen</CardTitle>
+            <CardTitle className="text-white text-base">Kampagne konfigurieren</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">
-                Name <span className="text-red-400">*</span>
-              </label>
+              <label className="text-sm text-slate-400 mb-1.5 block">Name <span className="text-red-400">*</span></label>
               <Input
                 placeholder="z.B. Bayern Q3 2026 – Industrie"
                 value={name}
@@ -488,41 +638,30 @@ export default function NewDiscoveryCampaignPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">
-                Zusätzlicher Suchbegriff (optional)
-              </label>
+              <label className="text-sm text-slate-400 mb-1.5 block">Zusätzlicher Suchbegriff (optional)</label>
               <Input
                 placeholder="z.B. Industrie, Gewerbe…"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
               />
-              <p className="text-xs text-slate-500 mt-1">
-                Wird an jeden Suchbegriff angehängt (z.B. „Logistik Gewerbe München")
-              </p>
             </div>
             <div>
-              <label className="text-sm text-slate-400 mb-1.5 block">
-                Auto-Genehmigungsschwelle (optional)
-              </label>
+              <label className="text-sm text-slate-400 mb-1.5 block">Auto-Genehmigungsschwelle (optional)</label>
               <Input
                 type="number"
                 placeholder="z.B. 70 (Score ≥ 70 → automatisch genehmigt)"
                 value={autoApproveThreshold}
                 onChange={(e) => setAutoApproveThreshold(e.target.value)}
-                min={0}
-                max={100}
+                min={0} max={100}
                 className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
               />
-              <p className="text-xs text-slate-500 mt-1">
-                Leads mit einem Score ≥ diesem Wert werden automatisch in den Outreach-Pool übernommen
-              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Step 2: Areas ─────────────────────────────────────────── */}
+      {/* Step 2 */}
       {step === 2 && (
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
@@ -530,14 +669,14 @@ export default function NewDiscoveryCampaignPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-400 mb-4">
-              Städte hinzufügen in denen nach passenden Gebäuden gesucht werden soll.
+              Regionen suchen per Umkreis — deckt automatisch Kleinstädte und Gewerbegebiete ab.
             </p>
-            <CityChipInput areas={areas} onChange={setAreas} />
+            <AreaSelector areas={areas} onChange={setAreas} />
           </CardContent>
         </Card>
       )}
 
-      {/* ── Step 3: Categories ────────────────────────────────────── */}
+      {/* Step 3 */}
       {step === 3 && (
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
@@ -545,7 +684,7 @@ export default function NewDiscoveryCampaignPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-400 mb-4">
-              Wähle eine oder mehrere Branchen. Das System sucht in jeder Branche × Gebiet.
+              Das System sucht jede Branche in jedem Suchkreis.
             </p>
             <div className="grid grid-cols-3 gap-2">
               {CATEGORY_OPTIONS.map((cat) => {
@@ -571,17 +710,15 @@ export default function NewDiscoveryCampaignPage() {
             </div>
             {categories.length > 0 && (
               <p className="text-xs text-slate-400 mt-3">
-                {categories.length} Branche{categories.length !== 1 ? "n" : ""} × {areas.length} Gebiet{areas.length !== 1 ? "e" : ""} ={" "}
-                <span className="text-white font-medium">
-                  bis zu {categories.length * areas.length * 60} Ergebnisse
-                </span>
+                {categories.length} Branche{categories.length !== 1 ? "n" : ""} × {areas.length} Suchkreis{areas.length !== 1 ? "e" : ""} ={" "}
+                <span className="text-white font-medium">bis zu {estimatedResults.toLocaleString("de-DE")} Treffer</span>
               </p>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* ── Step 4: Confirm ───────────────────────────────────────── */}
+      {/* Step 4 */}
       {step === 4 && (
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
@@ -591,38 +728,29 @@ export default function NewDiscoveryCampaignPage() {
             <div className="rounded-lg bg-slate-800 p-4 space-y-3 text-sm">
               <Row label="Kampagnenname" value={name} />
               {description && <Row label="Beschreibung" value={description} />}
-              <Row
-                label="Gebiete"
-                value={areas.map((a) => a.value).join(", ")}
-              />
+              <Row label="Suchkreise" value={`${areas.length}`} />
               <Row
                 label="Branchen"
-                value={
-                  categories
-                    .map((c) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label ?? c)
-                    .join(", ")
-                }
+                value={categories
+                  .map((c) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label ?? c)
+                  .join(", ")}
               />
               {searchKeyword && <Row label="Suchbegriff" value={searchKeyword} />}
-              {autoApproveThreshold && (
-                <Row label="Auto-Genehmigung" value={`Score ≥ ${autoApproveThreshold}`} />
-              )}
+              {autoApproveThreshold && <Row label="Auto-Genehmigung" value={`Score ≥ ${autoApproveThreshold}`} />}
               <div className="border-t border-slate-700 pt-3">
                 <Row
-                  label="Geschätzte Suchen"
-                  value={`${categories.length * areas.length} (bis zu ${categories.length * areas.length * 60} Gebäude)`}
+                  label="Geschätzte Treffer"
+                  value={`bis zu ${estimatedResults.toLocaleString("de-DE")} Gebäude`}
                   highlight
                 />
               </div>
             </div>
             <div className="rounded-lg border border-yellow-800/50 bg-yellow-900/10 p-3 text-xs text-yellow-300/80">
-              Die Kampagne startet sofort und läuft im Hintergrund. API-Abrufe dauern je nach
-              Umfang einige Minuten. Du kannst den Status auf der Übersichtsseite verfolgen.
+              Die Kampagne startet sofort und läuft im Hintergrund. Du kannst den
+              Fortschritt auf der Detailseite verfolgen.
             </div>
             {error && (
-              <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-xs text-red-300">
-                {error}
-              </div>
+              <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-xs text-red-300">{error}</div>
             )}
           </CardContent>
         </Card>
@@ -643,15 +771,14 @@ export default function NewDiscoveryCampaignPage() {
           <Button
             onClick={() => setStep(step + 1)}
             disabled={
-              (step === 1 && !canNext1) ||
-              (step === 2 && !canNext2) ||
-              (step === 3 && !canNext3)
+              (step === 1 && name.trim().length < 3) ||
+              (step === 2 && areas.length === 0) ||
+              (step === 3 && categories.length === 0)
             }
             className="text-[#1F3D2E] font-semibold"
             style={{ backgroundColor: "#B2D082" }}
           >
-            Weiter
-            <ChevronRight className="h-4 w-4 ml-1" />
+            Weiter <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         ) : (
           <Button
@@ -661,15 +788,9 @@ export default function NewDiscoveryCampaignPage() {
             style={{ backgroundColor: "#B2D082" }}
           >
             {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Wird gestartet…
-              </>
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Wird gestartet…</>
             ) : (
-              <>
-                <Radar className="h-4 w-4 mr-2" />
-                Kampagne starten
-              </>
+              <><Radar className="h-4 w-4 mr-2" />Kampagne starten</>
             )}
           </Button>
         )}
@@ -678,15 +799,7 @@ export default function NewDiscoveryCampaignPage() {
   );
 }
 
-function Row({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
+function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-start gap-3">
       <span className="text-slate-400 w-36 shrink-0">{label}</span>

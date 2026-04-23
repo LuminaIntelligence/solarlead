@@ -43,8 +43,12 @@ export type DiscoveryCampaignStatus = "pending" | "running" | "completed" | "fai
 export type DiscoveryLeadStatus = "pending_enrichment" | "enriching" | "ready" | "insufficient_data" | "approved" | "rejected";
 
 export interface DiscoveryCampaignArea {
-  type: "city" | "postal_code";
-  value: string;
+  /** "city" = text search by city name; "radius" = coordinate-based circle search */
+  type: "city" | "radius";
+  value: string;           // display label (e.g. "München", "Nürnberg 60 km")
+  lat?: number;            // center latitude  (required for type="radius")
+  lng?: number;            // center longitude (required for type="radius")
+  radius_km?: number;      // search radius in km (required for type="radius")
 }
 
 export interface DiscoveryCampaign {
