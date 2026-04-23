@@ -51,6 +51,10 @@ export function AdminSidebar() {
           const isActive =
             item.href === "/admin"
               ? pathname === "/admin"
+              : item.href === "/admin/outreach/replies"
+              ? pathname === "/admin/outreach/replies"
+              : item.href === "/admin/outreach"
+              ? pathname === "/admin/outreach" || (pathname.startsWith("/admin/outreach/") && !pathname.startsWith("/admin/outreach/replies"))
               : pathname.startsWith(item.href);
 
           return (
