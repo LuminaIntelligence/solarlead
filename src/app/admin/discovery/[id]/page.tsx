@@ -200,20 +200,20 @@ interface ApiResponse {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  pending:          { label: "Ausstehend",    className: "bg-slate-700 text-slate-300" },
-  running:          { label: "Läuft…",        className: "bg-blue-700/40 text-blue-300 animate-pulse" },
-  completed:        { label: "Abgeschlossen", className: "bg-green-700/40 text-green-300" },
-  failed:           { label: "Fehler",        className: "bg-red-700/40 text-red-300" },
-  paused:           { label: "Pausiert",      className: "bg-yellow-700/40 text-yellow-300" },
+  pending:          { label: "Ausstehend",    className: "bg-slate-100 text-slate-600" },
+  running:          { label: "Läuft…",        className: "bg-blue-100 text-blue-700 animate-pulse" },
+  completed:        { label: "Abgeschlossen", className: "bg-green-100 text-green-700" },
+  failed:           { label: "Fehler",        className: "bg-red-100 text-red-700" },
+  paused:           { label: "Pausiert",      className: "bg-yellow-100 text-yellow-700" },
 };
 
 const LEAD_STATUS_MAP: Record<string, { label: string; className: string }> = {
-  pending:          { label: "Ausstehend",     className: "bg-slate-700 text-slate-300" },
-  enriching:        { label: "Anreichern…",    className: "bg-blue-700/40 text-blue-300 animate-pulse" },
-  ready:            { label: "Bereit",         className: "bg-yellow-700/40 text-yellow-300" },
-  approved:         { label: "Genehmigt",      className: "bg-green-700/40 text-green-300" },
-  rejected:         { label: "Abgelehnt",      className: "bg-red-700/40 text-red-300" },
-  insufficient_data:{ label: "Zu klein",       className: "bg-slate-700/50 text-slate-400" },
+  pending:          { label: "Ausstehend",     className: "bg-slate-100 text-slate-600" },
+  enriching:        { label: "Anreichern…",    className: "bg-blue-100 text-blue-700 animate-pulse" },
+  ready:            { label: "Bereit",         className: "bg-yellow-100 text-yellow-700" },
+  approved:         { label: "Genehmigt",      className: "bg-green-100 text-green-700" },
+  rejected:         { label: "Abgelehnt",      className: "bg-red-100 text-red-700" },
+  insufficient_data:{ label: "Zu klein",       className: "bg-slate-100 text-slate-500" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -457,7 +457,7 @@ export default function DiscoveryCampaignDetailPage() {
               size="sm"
               onClick={handlePause}
               disabled={actionLoading}
-              className="border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/20"
+              className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
             >
               <Pause className="h-3.5 w-3.5 mr-1" />
               Pausieren
@@ -481,7 +481,7 @@ export default function DiscoveryCampaignDetailPage() {
               size="sm"
               onClick={handleDelete}
               disabled={actionLoading}
-              className="border-red-800/50 text-red-400 hover:bg-red-900/20"
+              className="border-red-300 text-red-600 hover:bg-red-50"
             >
               Löschen
             </Button>
@@ -491,14 +491,14 @@ export default function DiscoveryCampaignDetailPage() {
 
       {/* Error message from campaign */}
       {campaign.error_message && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-sm text-red-300">
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>{campaign.error_message}</span>
         </div>
       )}
 
       {actionError && (
-        <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-sm text-red-300">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {actionError}
         </div>
       )}
@@ -555,7 +555,7 @@ export default function DiscoveryCampaignDetailPage() {
                   variant="outline"
                   onClick={() => handleBulkAction("reject")}
                   disabled={actionLoading}
-                  className="border-red-800/50 text-red-400 hover:bg-red-900/20 text-xs"
+                  className="border-red-300 text-red-600 hover:bg-red-50 text-xs"
                 >
                   <XCircle className="h-3.5 w-3.5 mr-1" />
                   Ablehnen
@@ -689,7 +689,7 @@ export default function DiscoveryCampaignDetailPage() {
                                 handleBulkAction("reject");
                               }}
                               disabled={actionLoading}
-                              className="text-xs px-2 py-1 rounded bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors"
+                              className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
                             >
                               ✕
                             </button>
