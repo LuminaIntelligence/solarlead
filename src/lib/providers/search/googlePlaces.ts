@@ -149,7 +149,9 @@ export class GooglePlacesProvider implements SearchProvider {
 
     const requestBody: Record<string, unknown> = {
       textQuery,
-      locationRestriction: {
+      // locationRestriction only supports rectangles in Places API (New).
+      // locationBias with circle is the correct way to search within a radius.
+      locationBias: {
         circle: {
           center: { latitude: lat, longitude: lng },
           radius: Math.min(radiusKm * 1000, 50000), // API max 50 km
