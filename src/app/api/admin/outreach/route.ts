@@ -73,12 +73,14 @@ export async function POST(request: NextRequest) {
       daily_limit,
       lead_ids,
       contact_map,
+      template_type,
     }: {
       name: string;
       description?: string;
       daily_limit: number;
       lead_ids: string[];
       contact_map: Record<string, { name: string; email: string; title: string }>;
+      template_type?: string;
     } = body;
 
     if (!name || !lead_ids || lead_ids.length === 0) {
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
         total_leads: lead_ids.length,
         sent_count: 0,
         replied_count: 0,
+        template_type: template_type ?? "erstkontakt",
         started_at: null,
         completed_at: null,
       })
@@ -134,6 +137,20 @@ export async function POST(request: NextRequest) {
 
     if (leadsError) {
       console.error("Fehler beim Abrufen der Lead-Daten:", leadsError.message);
+    }
+
+    // Fetch solar assessments (roof area) for lease estimate personalization
+    const { data: solarAssessments } = await supabase
+      .from("solar_assessments")
+      .select("lead_id, max_array_area_m2")
+      .in("lead_id", lead_ids)
+      .order("created_at", { ascending: false });
+
+    const solarMap: Record<string, number | null> = {};
+    for (const sa of solarAssessments ?? []) {
+      if (!(sa.lead_id in solarMap)) {
+        solarMap[sa.lead_id] = sa.max_array_area_m2 ?? null;
+      }
     }
 
     const leadMap: Record<
@@ -171,6 +188,7 @@ export async function POST(request: NextRequest) {
         company_name: leadInfo?.company_name ?? null,
         company_city: leadInfo?.city ?? null,
         company_category: leadInfo?.category ?? null,
+        roof_area_m2: solarMap[leadId] ?? null,
         personalized_subject: null,
         personalized_body: null,
         sent_at: null,

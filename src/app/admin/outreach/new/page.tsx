@@ -149,6 +149,7 @@ export default function NewOutreachPage() {
   const [batchName, setBatchName] = useState("");
   const [description, setDescription] = useState("");
   const [dailyLimit, setDailyLimit] = useState(100);
+  const [templateType, setTemplateType] = useState<"erstkontakt" | "followup" | "finale">("erstkontakt");
 
   // Step 3: submit
   const [submitting, setSubmitting] = useState(false);
@@ -238,6 +239,7 @@ export default function NewOutreachPage() {
           daily_limit: dailyLimit,
           lead_ids: selectedLeads.map((l) => l.id),
           contact_map: contactMap,
+          template_type: templateType,
         }),
       });
 
@@ -514,6 +516,34 @@ export default function NewOutreachPage() {
                 />
               </div>
 
+              {/* Template type */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">
+                  E-Mail-Vorlage <span className="text-red-400">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { value: "erstkontakt", label: "1. Erstkontakt", desc: "Dachfläche pachten – keine Werbung!", color: "border-blue-500 bg-blue-900/20 text-blue-300" },
+                    { value: "followup", label: "2. Follow-up", desc: "Kurze Nachfrage zu Ihrer Dachfläche", color: "border-yellow-500 bg-yellow-900/20 text-yellow-300" },
+                    { value: "finale", label: "3. Finale", desc: "Wir haben uns bisher verpasst", color: "border-orange-500 bg-orange-900/20 text-orange-300" },
+                  ].map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setTemplateType(t.value as typeof templateType)}
+                      className={`rounded-lg border-2 p-3 text-left transition-colors ${
+                        templateType === t.value
+                          ? t.color
+                          : "border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold">{t.label}</p>
+                      <p className="text-xs mt-0.5 opacity-80">{t.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Description */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300">
@@ -634,6 +664,12 @@ export default function NewOutreachPage() {
                     </span>
                   </div>
                 )}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-slate-400">E-Mail-Vorlage</span>
+                  <span className="text-sm font-medium text-white">
+                    {templateType === "erstkontakt" ? "1. Erstkontakt" : templateType === "followup" ? "2. Follow-up" : "3. Finale E-Mail"}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-slate-400">
                     Ausgewählte Leads

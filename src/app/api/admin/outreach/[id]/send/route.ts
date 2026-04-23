@@ -19,6 +19,15 @@ export async function POST(
   const { id } = await params;
   const today = new Date().toISOString().slice(0, 10);
 
+  // Batch laden (für template_type)
+  const { data: batch } = await supabase
+    .from("outreach_batches")
+    .select("template_type")
+    .eq("id", id)
+    .single();
+
+  const templateType = (batch?.template_type ?? "erstkontakt") as "erstkontakt" | "followup" | "finale";
+
   // Heutige pending Jobs laden
   const { data: jobs, error: jobsError } = await supabase
     .from("outreach_jobs")
@@ -48,6 +57,8 @@ export async function POST(
       companyName: job.company_name ?? "Ihr Unternehmen",
       city: job.company_city ?? "",
       category: job.company_category ?? "",
+      roofAreaM2: job.roof_area_m2 ?? null,
+      templateType,
     });
 
     const result = await sendEmail({
