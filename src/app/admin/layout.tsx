@@ -22,7 +22,7 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-50">
       {/* Sidebar */}
       <AdminSidebar />
 
@@ -32,12 +32,12 @@ export default async function AdminLayout({
         <div className="h-0.5" style={{ backgroundColor: "#B2D082" }} />
 
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-800 bg-slate-950 px-8">
-          <span className="text-sm font-medium" style={{ color: "#B2D082" }}>
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-8">
+          <span className="text-sm font-semibold" style={{ color: "#1F3D2E" }}>
             Admin-Bereich
           </span>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400">{user.email}</span>
+            <span className="text-sm text-slate-500">{user.email}</span>
             <AdminLogoutButton />
           </div>
         </header>

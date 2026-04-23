@@ -603,8 +603,8 @@ export default function NewDiscoveryCampaignPage() {
       <div className="flex items-center gap-3">
         <Radar className="h-6 w-6 text-[#B2D082]" />
         <div>
-          <h1 className="text-xl font-bold text-white">Neue Discovery-Kampagne</h1>
-          <p className="text-slate-400 text-sm">
+          <h1 className="text-xl font-bold text-slate-900">Neue Discovery-Kampagne</h1>
+          <p className="text-slate-600 text-sm">
             Gebiete &amp; Branchen auswählen — System sucht automatisch per Umkreis
           </p>
         </div>

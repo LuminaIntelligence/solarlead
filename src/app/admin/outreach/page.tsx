@@ -66,14 +66,18 @@ export default async function OutreachPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
             Massenversand
           </h1>
-          <p className="text-slate-400">
+          <p className="text-slate-600">
             E-Mail-Kampagnen und Outreach-Batches verwalten
           </p>
         </div>
-        <Button asChild className="bg-red-600 hover:bg-red-700 text-white">
+        <Button
+          asChild
+          className="text-[#1F3D2E] font-semibold"
+          style={{ backgroundColor: "#B2D082" }}
+        >
           <Link href="/admin/outreach/new">
             <Plus className="mr-2 h-4 w-4" />
             Neuen Batch erstellen

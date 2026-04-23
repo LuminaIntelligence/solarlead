@@ -118,8 +118,8 @@ export default function BatchDetailPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">{batch.name}</h1>
-            <p className="text-slate-400 text-sm mt-0.5">{batch.description ?? "Kein Beschreibungstext"}</p>
+            <h1 className="text-2xl font-bold text-slate-900">{batch.name}</h1>
+            <p className="text-slate-600 text-sm mt-0.5">{batch.description ?? "Kein Beschreibungstext"}</p>
           </div>
           <Badge className={BATCH_STATUS_COLORS[batch.status]}>
             {batch.status === "draft" ? "Entwurf" : batch.status === "active" ? "Aktiv" : batch.status === "paused" ? "Pausiert" : "Abgeschlossen"}

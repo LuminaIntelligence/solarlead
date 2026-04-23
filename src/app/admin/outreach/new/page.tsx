@@ -263,10 +263,10 @@ export default function NewOutreachPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
           Neuen Batch erstellen
         </h1>
-        <p className="text-slate-400">
+        <p className="text-slate-600">
           Leads filtern, Batch konfigurieren und Massenversand starten
         </p>
       </div>

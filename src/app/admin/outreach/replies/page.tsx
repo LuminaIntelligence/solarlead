@@ -26,11 +26,11 @@ export default async function RepliesPage() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <MessageSquare className="h-6 w-6 text-green-400" />
             Antworten — Closing Queue
           </h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-600 text-sm mt-0.5">
             {jobs.length} Unternehmen haben geantwortet — jetzt anrufen und closen
           </p>
         </div>

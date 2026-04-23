@@ -412,7 +412,7 @@ export default function DiscoveryCampaignDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-white">{campaign.name}</h1>
+              <h1 className="text-xl font-bold text-slate-900">{campaign.name}</h1>
               <StatusIcon status={campaign.status} />
               <StatusBadge status={campaign.status} />
             </div>
