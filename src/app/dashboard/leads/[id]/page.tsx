@@ -865,7 +865,7 @@ function RoofSatelliteCard({
   const imageUrl =
     `https://maps.googleapis.com/maps/api/staticmap` +
     `?center=${encodedAddress}` +
-    `&zoom=18` +
+    `&zoom=17` +
     `&size=640x480` +
     `&scale=2` +
     `&maptype=satellite` +
