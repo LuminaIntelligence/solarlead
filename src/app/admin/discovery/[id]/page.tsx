@@ -6,11 +6,186 @@ import Link from "next/link";
 import {
   Radar, ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, PauseCircle,
   RefreshCw, Play, Pause, ChevronLeft, ChevronRight, AlertTriangle,
+  Mail, X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { DiscoveryCampaign, DiscoveryLead } from "@/types/database";
+import type { TemplateType } from "@/lib/providers/email/templates";
+
+// ─── Test Email Modal ─────────────────────────────────────────────────────────
+
+const TEMPLATE_OPTIONS: { value: TemplateType; label: string; color: string }[] = [
+  { value: "erstkontakt", label: "Erstkontakt",  color: "bg-blue-700/40 text-blue-300 border-blue-700/50" },
+  { value: "followup",    label: "Follow-up",    color: "bg-yellow-700/40 text-yellow-300 border-yellow-700/50" },
+  { value: "finale",      label: "Finale",       color: "bg-orange-700/40 text-orange-300 border-orange-700/50" },
+];
+
+function TestEmailModal({
+  campaignId,
+  leads,
+  onClose,
+}: {
+  campaignId: string;
+  leads: DiscoveryLead[];
+  onClose: () => void;
+}) {
+  const [toEmail, setToEmail] = useState("");
+  const [templateType, setTemplateType] = useState<TemplateType>("erstkontakt");
+  const [leadId, setLeadId] = useState<string>("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Only show approved/ready leads for realistic preview
+  const previewLeads = leads.filter((l) => l.status === "ready" || l.status === "approved");
+
+  async function handleSend() {
+    if (!toEmail.trim()) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/admin/discovery/${campaignId}/test-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: toEmail.trim(),
+          template_type: templateType,
+          lead_id: leadId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Fehler");
+      setResult({ ok: true, message: data.message });
+    } catch (e: unknown) {
+      setResult({ ok: false, message: e instanceof Error ? e.message : "Unbekannter Fehler" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md mx-4 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-[#B2D082]" />
+            <h2 className="text-white font-semibold text-sm">Test-E-Mail senden</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Template selector */}
+          <div>
+            <label className="text-xs text-slate-400 mb-2 block">Template</label>
+            <div className="flex gap-2">
+              {TEMPLATE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTemplateType(opt.value)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-all ${
+                    templateType === opt.value
+                      ? opt.color
+                      : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Lead selector */}
+          <div>
+            <label className="text-xs text-slate-400 mb-2 block">
+              Lead-Daten für Vorschau{" "}
+              <span className="text-slate-500">(optional — sonst Beispieldaten)</span>
+            </label>
+            <select
+              value={leadId}
+              onChange={(e) => setLeadId(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#B2D082]/50"
+            >
+              <option value="">— Beispieldaten verwenden —</option>
+              {previewLeads.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.company_name ?? l.place_name ?? l.id} ({l.city ?? "?"})
+                </option>
+              ))}
+            </select>
+            {previewLeads.length === 0 && (
+              <p className="text-xs text-slate-500 mt-1">
+                Noch keine genehmigten / bereiten Leads — es werden Beispieldaten verwendet.
+              </p>
+            )}
+          </div>
+
+          {/* Email input */}
+          <div>
+            <label className="text-xs text-slate-400 mb-2 block">
+              Empfänger-E-Mail <span className="text-red-400">*</span>
+            </label>
+            <Input
+              type="email"
+              placeholder="deine@email.de"
+              value={toEmail}
+              onChange={(e) => setToEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
+              className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+            />
+          </div>
+
+          {/* Result */}
+          {result && (
+            <div
+              className={`rounded-lg p-3 text-xs ${
+                result.ok
+                  ? "bg-green-900/20 border border-green-800/40 text-green-300"
+                  : "bg-red-900/20 border border-red-800/40 text-red-300"
+              }`}
+            >
+              {result.ok ? "✓ " : "✕ "}{result.message}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="flex-1 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+            >
+              Schließen
+            </Button>
+            <Button
+              onClick={handleSend}
+              disabled={sending || !toEmail.trim()}
+              className="flex-1 text-[#1F3D2E] font-semibold"
+              style={{ backgroundColor: "#B2D082" }}
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Senden…
+                </>
+              ) : (
+                <>
+                  <Mail className="h-3.5 w-3.5 mr-1.5" />
+                  Test senden
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +256,7 @@ export default function DiscoveryCampaignDetailPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showTestModal, setShowTestModal] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async (p = page, sf = statusFilter) => {
@@ -265,6 +441,15 @@ export default function DiscoveryCampaignDetailPage() {
             className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
           >
             <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTestModal(true)}
+            className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+          >
+            <Mail className="h-3.5 w-3.5 mr-1.5" />
+            Test-E-Mail
           </Button>
           {campaign.status === "running" && (
             <Button
@@ -548,6 +733,15 @@ export default function DiscoveryCampaignDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Test Email Modal */}
+      {showTestModal && (
+        <TestEmailModal
+          campaignId={id}
+          leads={data.leads}
+          onClose={() => setShowTestModal(false)}
+        />
+      )}
     </div>
   );
 }
