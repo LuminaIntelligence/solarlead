@@ -151,6 +151,11 @@ export default function NewOutreachPage() {
   const [dailyLimit, setDailyLimit] = useState(100);
   const [templateType, setTemplateType] = useState<"erstkontakt" | "followup" | "finale">("erstkontakt");
 
+  // Follow-up settings
+  const [followupEnabled, setFollowupEnabled] = useState(true);
+  const [followupDays, setFollowupDays] = useState(7);
+  const [followupTemplate, setFollowupTemplate] = useState<"followup" | "finale">("followup");
+
   // Step 3: submit
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -240,6 +245,9 @@ export default function NewOutreachPage() {
           lead_ids: selectedLeads.map((l) => l.id),
           contact_map: contactMap,
           template_type: templateType,
+          followup_enabled: followupEnabled,
+          followup_days: followupDays,
+          followup_template: followupTemplate,
         }),
       });
 
@@ -581,6 +589,92 @@ export default function NewOutreachPage() {
                 </div>
               </div>
 
+              {/* Follow-up Automation */}
+              <div className={`rounded-lg border-2 p-4 space-y-4 transition-colors ${followupEnabled ? "border-green-300 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      🔁 Follow-up Automatisierung
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Wer nicht antwortet, bekommt automatisch eine Nachfass-Mail
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFollowupEnabled((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      followupEnabled ? "bg-green-500" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        followupEnabled ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {followupEnabled && (
+                  <div className="space-y-4 pt-1">
+                    {/* Days slider */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">
+                        Nachfassen nach:{" "}
+                        <span className="font-bold" style={{ color: "#1F3D2E" }}>{followupDays} Tagen</span>
+                      </label>
+                      <input
+                        type="range"
+                        min={3}
+                        max={21}
+                        step={1}
+                        value={followupDays}
+                        onChange={(e) => setFollowupDays(Number(e.target.value))}
+                        className="w-full"
+                        style={{ accentColor: "#1F3D2E" }}
+                      />
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>3 Tage</span>
+                        <span>7 Tage</span>
+                        <span>14 Tage</span>
+                        <span>21 Tage</span>
+                      </div>
+                    </div>
+
+                    {/* Follow-up template */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">
+                        Follow-up Vorlage
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { value: "followup", label: "2. Follow-up", desc: "Kurze freundliche Nachfrage", color: "border-yellow-400 bg-yellow-50 text-yellow-800" },
+                          { value: "finale",   label: "3. Finale",    desc: "Letzte Kontaktaufnahme",    color: "border-orange-400 bg-orange-50 text-orange-800" },
+                        ].map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => setFollowupTemplate(t.value as "followup" | "finale")}
+                            className={`rounded-lg border-2 p-2.5 text-left transition-colors ${
+                              followupTemplate === t.value
+                                ? t.color
+                                : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                            }`}
+                          >
+                            <p className="text-xs font-semibold">{t.label}</p>
+                            <p className="text-xs opacity-80 mt-0.5">{t.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-md bg-white border border-green-200 px-3 py-2 text-xs text-green-800">
+                      💡 Follow-up wird am <strong>{new Date(Date.now() + followupDays * 86400000).toLocaleDateString("de-DE")}</strong> für heutige Leads fällig — du sendest manuell per Klick wenn du bereit bist.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Preview */}
               <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 space-y-2">
                 <p className="text-sm font-medium text-slate-700">Vorschau</p>
@@ -698,6 +792,14 @@ export default function NewOutreachPage() {
                   </span>
                   <span className="text-sm font-medium text-slate-900">
                     {minScore}+
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm text-slate-500">Follow-up</span>
+                  <span className="text-sm font-medium text-slate-900">
+                    {followupEnabled
+                      ? `✓ Nach ${followupDays} Tagen · ${followupTemplate === "followup" ? "Follow-up" : "Finale"}-Vorlage`
+                      : "Deaktiviert"}
                   </span>
                 </div>
               </div>

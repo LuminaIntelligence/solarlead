@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Send, Pause, Play, RefreshCw,
-  Mail, MessageSquare, Eye, X, Loader2,
+  Mail, MessageSquare, Eye, X, Loader2, RotateCcw, Clock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -268,6 +268,8 @@ export default function BatchDetailPage() {
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number; message?: string } | null>(null);
   const [previewJob, setPreviewJob] = useState<OutreachJob | null>(null);
+  const [sendingFollowups, setSendingFollowups] = useState(false);
+  const [followupResult, setFollowupResult] = useState<{ sent: number; skipped: number; message: string } | null>(null);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -288,6 +290,31 @@ export default function BatchDetailPage() {
   const todayPending = todayJobs.filter((j) => j.status === "pending");
   const totalReplied = jobs.filter((j) => j.status === "replied").length;
   const totalSent = jobs.filter((j) => ["sent", "opened", "replied"].includes(j.status)).length;
+
+  // Follow-up stats
+  const followupDueToday = jobs.filter(
+    (j) =>
+      j.followup_scheduled_for != null &&
+      j.followup_scheduled_for <= today &&
+      j.followup_status === "pending" &&
+      j.status !== "pending" &&
+      j.status !== "replied" &&
+      j.status !== "bounced" &&
+      j.status !== "opted_out"
+  );
+  const followupSent = jobs.filter((j) => j.followup_status === "sent").length;
+  const followupSkipped = jobs.filter((j) => j.followup_status === "skipped").length;
+
+  const handleSendFollowups = async () => {
+    if (!confirm(`${followupDueToday.length} Follow-up-E-Mails jetzt senden?`)) return;
+    setSendingFollowups(true);
+    setFollowupResult(null);
+    const res = await fetch(`/api/admin/outreach/${id}/send-followups`, { method: "POST" });
+    const data = await res.json();
+    setFollowupResult(data);
+    setSendingFollowups(false);
+    load();
+  };
 
   const handleSend = async () => {
     if (!confirm(`${todayPending.length} E-Mails jetzt senden?`)) return;
@@ -463,6 +490,59 @@ export default function BatchDetailPage() {
         </Card>
       )}
 
+      {/* Follow-up Box */}
+      {batch.followup_enabled && (
+        <Card className={`bg-white border-2 ${followupDueToday.length > 0 ? "border-green-300" : "border-slate-200"}`}>
+          <CardHeader>
+            <CardTitle className="text-slate-900 flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-green-600" />
+              Follow-up Automatisierung
+              <span className="ml-auto text-xs font-normal text-slate-500 flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                Nach {batch.followup_days} Tagen · {batch.followup_template === "followup" ? "Follow-up" : "Finale"}-Vorlage
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-6 text-sm">
+              <span className="text-slate-600">
+                <span className={`font-bold text-xl ${followupDueToday.length > 0 ? "text-green-600" : "text-slate-900"}`}>
+                  {followupDueToday.length}
+                </span>
+                {" "}heute fällig
+              </span>
+              <span className="text-slate-600">
+                <span className="text-blue-600 font-bold text-xl">{followupSent}</span>
+                {" "}gesendet
+              </span>
+              <span className="text-slate-600">
+                <span className="text-slate-500 font-bold">{followupSkipped}</span>
+                {" "}übersprungen (bereits geantwortet)
+              </span>
+            </div>
+
+            {followupResult && (
+              <div className={`rounded-lg px-4 py-3 text-sm ${followupResult.sent > 0 ? "bg-green-50 border border-green-200 text-green-700" : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
+                {followupResult.message}
+              </div>
+            )}
+
+            <Button
+              onClick={handleSendFollowups}
+              disabled={sendingFollowups || followupDueToday.length === 0}
+              className="gap-2 disabled:opacity-50 text-[#1F3D2E] font-semibold"
+              style={{ backgroundColor: "#B2D082" }}
+            >
+              {sendingFollowups ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Sende Follow-ups...</>
+              ) : (
+                <><RotateCcw className="h-4 w-4" /> {followupDueToday.length} Follow-ups jetzt senden</>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Jobs by date */}
       <Card className="bg-white border-slate-200">
         <CardHeader>
@@ -498,6 +578,9 @@ export default function BatchDetailPage() {
                       <th className="px-4 py-2 text-slate-500 font-medium">E-Mail</th>
                       <th className="px-4 py-2 text-slate-500 font-medium">Status</th>
                       <th className="px-4 py-2 text-slate-500 font-medium">Gesendet</th>
+                      {batch.followup_enabled && (
+                        <th className="px-4 py-2 text-slate-500 font-medium">Follow-up</th>
+                      )}
                       <th className="px-4 py-2 text-slate-500 font-medium w-16"></th>
                     </tr>
                   </thead>
@@ -526,6 +609,23 @@ export default function BatchDetailPage() {
                             ? new Date(job.sent_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
                             : "—"}
                         </td>
+                        {batch.followup_enabled && (
+                          <td className="px-4 py-3 text-xs">
+                            {job.followup_status === "sent" ? (
+                              <span className="text-green-600 font-medium">✓ Gesendet</span>
+                            ) : job.followup_status === "skipped" ? (
+                              <span className="text-slate-400">Übersprungen</span>
+                            ) : job.followup_status === "cancelled" ? (
+                              <span className="text-slate-400">Abgebrochen</span>
+                            ) : job.followup_scheduled_for ? (
+                              <span className={job.followup_scheduled_for <= today ? "text-amber-600 font-medium" : "text-slate-400"}>
+                                {job.followup_scheduled_for <= today ? "⚡ Fällig" : job.followup_scheduled_for}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           <button
                             onClick={() => setPreviewJob(job)}

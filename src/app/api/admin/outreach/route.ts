@@ -74,6 +74,9 @@ export async function POST(request: NextRequest) {
       lead_ids,
       contact_map,
       template_type,
+      followup_enabled = false,
+      followup_days = 7,
+      followup_template = "followup",
     }: {
       name: string;
       description?: string;
@@ -81,6 +84,9 @@ export async function POST(request: NextRequest) {
       lead_ids: string[];
       contact_map: Record<string, { name: string; email: string; title: string }>;
       template_type?: string;
+      followup_enabled?: boolean;
+      followup_days?: number;
+      followup_template?: string;
     } = body;
 
     if (!name || !lead_ids || lead_ids.length === 0) {
@@ -103,6 +109,10 @@ export async function POST(request: NextRequest) {
         sent_count: 0,
         replied_count: 0,
         template_type: template_type ?? "erstkontakt",
+        followup_enabled,
+        followup_days,
+        followup_template,
+        followup_sent_count: 0,
         started_at: null,
         completed_at: null,
       })
@@ -174,6 +184,11 @@ export async function POST(request: NextRequest) {
       const scheduledDate = new Date(today);
       scheduledDate.setDate(scheduledDate.getDate() + dayOffset);
 
+      // Pre-schedule follow-up if enabled
+      const followupDate = followup_enabled
+        ? new Date(scheduledDate.getTime() + followup_days * 24 * 60 * 60 * 1000)
+        : null;
+
       const contact = contact_map[leadId] ?? null;
       const leadInfo = leadMap[leadId] ?? null;
 
@@ -196,7 +211,12 @@ export async function POST(request: NextRequest) {
         replied_at: null,
         reply_content: null,
         assigned_to: null,
-        scheduled_for: scheduledDate.toISOString(),
+        scheduled_for: scheduledDate.toISOString().slice(0, 10),
+        followup_scheduled_for: followupDate
+          ? followupDate.toISOString().slice(0, 10)
+          : null,
+        followup_sent_at: null,
+        followup_status: "pending" as const,
       };
     });
 

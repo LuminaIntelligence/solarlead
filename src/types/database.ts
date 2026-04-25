@@ -210,11 +210,19 @@ export interface OutreachBatch {
   total_leads: number;
   sent_count: number;
   replied_count: number;
+  template_type: string;
+  // Follow-up automation
+  followup_enabled: boolean;
+  followup_days: number;
+  followup_template: string;
+  followup_sent_count: number;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type FollowupStatus = "pending" | "sent" | "skipped" | "cancelled";
 
 export interface OutreachJob {
   id: string;
@@ -228,6 +236,7 @@ export interface OutreachJob {
   company_name: string | null;
   company_city: string | null;
   company_category: string | null;
+  roof_area_m2: number | null;
   personalized_subject: string | null;
   personalized_body: string | null;
   sent_at: string | null;
@@ -236,6 +245,10 @@ export interface OutreachJob {
   reply_content: string | null;
   assigned_to: string | null;
   scheduled_for: string | null;
+  // Follow-up
+  followup_scheduled_for: string | null;
+  followup_sent_at: string | null;
+  followup_status: FollowupStatus;
   created_at: string;
   updated_at: string;
 }
