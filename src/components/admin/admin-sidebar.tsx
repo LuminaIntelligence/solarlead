@@ -12,6 +12,7 @@ import {
   SendHorizonal,
   MessageSquare,
   Radar,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ const navItems = [
   { label: "Alle Leads", href: "/admin/leads", icon: Database },
   { label: "Lead-Entdeckung", href: "/admin/discovery", icon: Radar },
   { label: "Massenversand", href: "/admin/outreach", icon: SendHorizonal },
+  { label: "Follow-ups", href: "/admin/outreach/followups", icon: RotateCcw },
   { label: "Antworten", href: "/admin/outreach/replies", icon: MessageSquare },
   { label: "System-Einstellungen", href: "/admin/settings", icon: Settings },
 ];
@@ -53,8 +55,10 @@ export function AdminSidebar() {
               ? pathname === "/admin"
               : item.href === "/admin/outreach/replies"
               ? pathname === "/admin/outreach/replies"
+              : item.href === "/admin/outreach/followups"
+              ? pathname === "/admin/outreach/followups"
               : item.href === "/admin/outreach"
-              ? pathname === "/admin/outreach" || (pathname.startsWith("/admin/outreach/") && !pathname.startsWith("/admin/outreach/replies"))
+              ? pathname === "/admin/outreach" || (pathname.startsWith("/admin/outreach/") && !pathname.startsWith("/admin/outreach/replies") && !pathname.startsWith("/admin/outreach/followups"))
               : pathname.startsWith(item.href);
 
           return (
