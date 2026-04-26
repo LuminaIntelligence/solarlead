@@ -30,9 +30,9 @@ function buildGreeting(contactName: string | null, contactTitle: string | null):
   return `Guten Tag ${salutation} ${lastName},`;
 }
 
-/** Pacht = Dachfläche / 50 * 100, gerundet auf 100er */
+/** Pacht = Dachfläche / 5 * 100, gerundet auf 100er */
 function formatLease(roofAreaM2: number): string {
-  const value = Math.round((roofAreaM2 / 50) * 100 / 100) * 100;
+  const value = Math.round((roofAreaM2 / 5) * 100 / 100) * 100;
   return value.toLocaleString("de-DE");
 }
 
