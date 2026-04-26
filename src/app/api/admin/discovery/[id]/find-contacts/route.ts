@@ -56,7 +56,7 @@ export async function POST(
   }
 
   const campaign = dl.discovery_campaigns as { created_by: string };
-  const debugLog: ScraperDebugLog = { tried_urls: [], found_on_url: null, emails_raw: [] };
+  const debugLog: ScraperDebugLog = { tried_urls: [], found_on_url: null, emails_raw: [], phones_raw: [] };
 
   // ── Apollo first (if key exists) ──────────────────────────────────────────
   let contacts: Array<{

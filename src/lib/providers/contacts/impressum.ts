@@ -2,13 +2,12 @@
  * Impressum Scraper — kostenloser Fallback-Contact-Provider für deutsche Firmen.
  *
  * Strategie (in Reihenfolge):
- * 1. Homepage laden → Impressum/Kontakt-Link dynamisch entdecken
- * 2. Bekannte Pfade ausprobieren (/impressum, /kontakt, etc.)
- * 3. HTML nach mailto-Links, data-email, Klartext-E-Mails durchsuchen
+ * 1. Homepage laden → Sprach-Basispfad erkennen (/de/, /en/, etc.) + Impressum-Links entdecken
+ * 2. Bekannte Pfade ausprobieren inkl. Sprachpräfixe
+ * 3. HTML nach mailto-Links, tel:-Links, data-email, Klartext-E-Mails durchsuchen
  * 4. Obfuskierte E-Mails erkennen: info[at]firma.de, info (at) firma DOT de
- * 5. http:// Fallback wenn https:// scheitert
- *
- * Deutsche Firmen haben Impressumspflicht (§5 TMG) — dort steht meist die E-Mail.
+ * 5. Telefonnummern extrahieren (Tel:, +49, etc.)
+ * 6. http:// Fallback wenn https:// scheitert
  */
 
 import type { ContactProvider, ContactQuery, ContactResult } from "./types";
@@ -17,19 +16,19 @@ export interface ScraperDebugLog {
   tried_urls: string[];
   found_on_url: string | null;
   emails_raw: string[];
+  phones_raw: string[];
   error?: string;
 }
 
-// Pfade die wir ausprobieren (in Reihenfolge, nach Homepage-Scan)
-const IMPRESSUM_PATHS = [
+// Basis-Pfade (ohne Sprachpräfix) — werden auch mit erkanntem Präfix versucht
+const BASE_PATHS = [
   "/impressum",
   "/impressum/",
   "/impressum.html",
   "/impressum.php",
-  "/de/impressum",
+  "/rechtliches/impressum",
   "/ueber-uns/impressum",
   "/about/impressum",
-  "/rechtliches/impressum",
   "/legal-notice",
   "/legal",
   "/kontakt",
@@ -41,22 +40,24 @@ const IMPRESSUM_PATHS = [
   "/ueber-uns",
   "/ueber-uns/kontakt",
   "/about",
-  "/about-us",
 ];
 
-// E-Mail-Regex — erkennt typische deutsche Firmen-Mails
+// Sprachpräfixe die wir berücksichtigen
+const LANG_PREFIXES = ["/de", "/en", "/at", "/ch"];
+
+// E-Mail-Regex
 const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
 
-// Diese E-Mails ignorieren — generische/System-Adressen
+// Diese E-Mail-Prefixe ignorieren
 const IGNORE_PREFIXES = [
   "noreply", "no-reply", "donotreply", "do-not-reply",
   "mailer", "bounce", "postmaster", "webmaster",
   "support", "help", "abuse", "spam",
   "datenschutz", "privacy", "dsgvo",
-  "newsletter", "marketing", "sales@sales",
+  "newsletter", "marketing",
 ];
 
-// Domains die wir als fremde Domains ignorieren
+// Diese Domains ignorieren
 const IGNORE_DOMAINS = [
   "example.com", "sentry.io", "googleapis.com", "gstatic.com",
   "cloudflare.com", "facebook.com", "twitter.com", "instagram.com",
@@ -64,20 +65,20 @@ const IGNORE_DOMAINS = [
   "schema.org", "ogp.me", "apple.com", "microsoft.com",
 ];
 
-// Keywords die auf einen Impressum/Kontakt-Link hinweisen
+// Keywords die auf Impressum/Kontakt-Links hinweisen
 const IMPRESSUM_LINK_KEYWORDS = [
   "impressum", "legal-notice", "legal notice", "rechtliches",
-  "kontakt", "contact", "über uns", "ueber-uns",
+  "kontakt", "contact", "über uns", "ueber-uns", "about-us",
 ];
 
-// Titel-Keywords die auf Entscheider hinweisen
+// Entscheider-Keywords
 const DECISION_MAKER_KEYWORDS = [
   "geschäftsführer", "geschäftsführerin", "inhaber", "inhaberin",
   "ceo", "cto", "cfo", "coo",
   "managing director", "director",
   "leiter", "leiterin", "chef", "chefin",
   "vorstand", "vorständin", "gesellschafter",
-  "eigentümer", "eigentümerin", "prokurist", "prokuristen",
+  "eigentümer", "eigentümerin", "prokurist",
 ];
 
 function isIgnoredEmail(email: string): boolean {
@@ -87,6 +88,53 @@ function isIgnoredEmail(email: string): boolean {
   if (IGNORE_PREFIXES.some((p) => local.startsWith(p))) return true;
   if (IGNORE_DOMAINS.some((d) => domain === d || domain.endsWith("." + d))) return true;
   return false;
+}
+
+/** Deutsche und internationale Telefonnummern extrahieren */
+function extractPhonesFromHtml(html: string): string[] {
+  const found = new Set<string>();
+
+  // 1. tel: href Links (zuverlässigste Quelle)
+  for (const m of html.matchAll(/href=["']tel:([^"'\s]+)/gi)) {
+    const raw = m[1].replace(/[^\d+\-\s()]/g, "").trim();
+    if (raw.length >= 7) found.add(normalizePhone(raw));
+  }
+
+  // 2. Text nach Telefon-Keywords (Tel:, Telefon:, Fon:, Phone:, T:)
+  const stripped = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const keywordPattern = /(?:Tel(?:efon)?|Fon|Phone|Mobil|Fax)\s*[:.]?\s*([\+\d][\d\s\-\/\(\)\.]{6,20})/gi;
+  for (const m of stripped.matchAll(keywordPattern)) {
+    const raw = m[1].trim().replace(/\s+/g, " ");
+    if (raw.replace(/\D/g, "").length >= 7) {
+      found.add(normalizePhone(raw));
+    }
+  }
+
+  // 3. Bekannte deutsche Muster direkt: +49..., 0\d{3,5}[\s-]\d{3,}
+  const phonePattern = /(?:\+49|0049|0)[\s\-]?\(?[\d]{2,5}\)?[\s\-]?[\d]{2,6}[\s\-]?[\d]{0,6}/g;
+  for (const m of stripped.matchAll(phonePattern)) {
+    const raw = m[0].trim();
+    if (raw.replace(/\D/g, "").length >= 8) {
+      found.add(normalizePhone(raw));
+    }
+  }
+
+  // Fax-Nummern herausfiltern (stehen oft direkt nach Fax:)
+  const faxPattern = /Fax\s*[:.]?\s*([\+\d][\d\s\-\/\(\)\.]{6,20})/gi;
+  const faxNumbers = new Set<string>();
+  for (const m of stripped.matchAll(faxPattern)) {
+    faxNumbers.add(normalizePhone(m[1].trim()));
+  }
+
+  return Array.from(found)
+    .filter((p) => !faxNumbers.has(p))
+    .filter((p) => p.replace(/\D/g, "").length >= 7)
+    .slice(0, 3); // Max 3 Telefonnummern
+}
+
+function normalizePhone(raw: string): string {
+  // Leerzeichen normalisieren, führende/folgende Zeichen entfernen
+  return raw.replace(/\s+/g, " ").replace(/^[\s\-./]+|[\s\-./]+$/g, "").trim();
 }
 
 /** Deobfuskiert gängige deutsche E-Mail-Verschlüsselungen */
@@ -103,13 +151,12 @@ function deobfuscateEmails(text: string): string[] {
     results.push(`${m[1]}@${m[2]}.${m[3]}`.toLowerCase());
   }
 
-  // Leerzeichen statt @ (häufig in Bildalternativen): info @ firma.de
+  // Leerzeichen statt @: info @ firma.de
   for (const m of text.matchAll(/([a-zA-Z0-9._%+\-]+)\s+@\s+([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g)) {
     results.push(`${m[1]}@${m[2]}`.toLowerCase());
   }
 
-  // CF7-Obfuskierung: &#105;&#110;&#102;&#111; (HTML entities)
-  // Entitäten zuerst dekodieren und dann nochmal checken
+  // HTML-Entities dekodieren: &#105;&#110;&#102;&#111;...
   const decoded = text.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)));
   for (const m of decoded.matchAll(EMAIL_REGEX)) {
     if (!isIgnoredEmail(m[0])) results.push(m[0].toLowerCase());
@@ -138,7 +185,6 @@ function extractTitle(html: string, email: string): string | null {
 }
 
 function extractName(html: string, email: string): string | null {
-  // E-Mail-Prefix als Name: max.mustermann@firma.de → Max Mustermann
   const local = email.split("@")[0];
   if (local.includes(".")) {
     const parts = local.split(".");
@@ -147,7 +193,6 @@ function extractName(html: string, email: string): string | null {
     }
   }
 
-  // Suche nach Vorname Nachname vor der E-Mail
   const idx = html.indexOf(email);
   if (idx === -1) return null;
   const before = html
@@ -187,14 +232,47 @@ async function fetchPage(url: string, timeoutMs = 10000): Promise<string | null>
   }
 }
 
-/** Versucht https:// und http:// */
-async function fetchPageWithFallback(url: string): Promise<string | null> {
+async function fetchPageWithFallback(url: string): Promise<{ html: string; finalUrl: string } | null> {
+  // https:// Versuch
   const html = await fetchPage(url);
-  if (html) return html;
+  if (html) return { html, finalUrl: url };
   // http:// Fallback
   if (url.startsWith("https://")) {
-    return await fetchPage(url.replace("https://", "http://"));
+    const httpUrl = url.replace("https://", "http://");
+    const html2 = await fetchPage(httpUrl);
+    if (html2) return { html: html2, finalUrl: httpUrl };
   }
+  return null;
+}
+
+/**
+ * Erkennt den Sprach-Basispfad aus der Homepage-URL oder dem HTML.
+ * z.B. bkr-regus.de/de/ → basePath = "/de"
+ */
+function detectLangBasePath(html: string, finalUrl: string): string | null {
+  // Aus der finalen URL (nach Redirect)
+  const urlPath = new URL(finalUrl).pathname;
+  for (const lang of LANG_PREFIXES) {
+    if (urlPath.startsWith(lang + "/") || urlPath === lang) {
+      return lang;
+    }
+  }
+
+  // Aus canonical oder hreflang Links
+  for (const m of html.matchAll(/hreflang=["']de["'][^>]*href=["']([^"']+)["']/gi)) {
+    const href = m[1];
+    try {
+      const path = new URL(href).pathname;
+      for (const lang of LANG_PREFIXES) {
+        if (path.startsWith(lang + "/") || path === lang || path === lang + "/") return lang;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Aus <html lang="de"> + nav-Links die /de/ enthalten
+  const deLinks = html.match(/href=["'][^"']*\/de\/[^"']*["']/i);
+  if (deLinks) return "/de";
+
   return null;
 }
 
@@ -215,8 +293,8 @@ function findImpressumLinks(html: string, baseUrl: string): string[] {
     }
   }
 
-  // Link-Text mit Impressum-Keywords (href zuerst extrahieren)
-  for (const m of html.matchAll(/href=["']([^"'#][^"']*)["'][^>]*>([^<]{1,40})<\/a>/gi)) {
+  // Link-Text mit Impressum-Keywords
+  for (const m of html.matchAll(/href=["']([^"'#][^"']*)["'][^>]*>([^<]{1,50})<\/a>/gi)) {
     const href = m[1].trim();
     const text = m[2].toLowerCase().trim();
     if (IMPRESSUM_LINK_KEYWORDS.some((kw) => text.includes(kw))) {
@@ -234,26 +312,26 @@ function findImpressumLinks(html: string, baseUrl: string): string[] {
 function extractEmailsFromHtml(html: string): string[] {
   const found = new Set<string>();
 
-  // 1. mailto: Links (höchste Priorität)
+  // 1. mailto: Links
   for (const m of html.matchAll(/href=["']mailto:([^"'?&\s]+)/gi)) {
     const email = m[1].trim().toLowerCase();
     if (email.includes("@") && !isIgnoredEmail(email)) found.add(email);
   }
 
-  // 2. data-email / data-cfemail Attribute
+  // 2. data-email / data-cfemail
   for (const m of html.matchAll(/data-(?:email|cfemail|mail)=["']([^"']+)["']/gi)) {
     const val = m[1].trim().toLowerCase();
     if (val.includes("@") && !isIgnoredEmail(val)) found.add(val);
   }
 
-  // 3. Plaintext E-Mails
+  // 3. Plaintext
   const stripped = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   for (const m of stripped.matchAll(EMAIL_REGEX)) {
     const email = m[0].toLowerCase();
     if (!isIgnoredEmail(email)) found.add(email);
   }
 
-  // 4. Obfuskierte E-Mails
+  // 4. Obfuskiert
   for (const email of deobfuscateEmails(html)) {
     if (!isIgnoredEmail(email)) found.add(email);
   }
@@ -269,80 +347,86 @@ export class ImpressumScraperProvider implements ContactProvider {
     debug?: ScraperDebugLog
   ): Promise<ContactResult> {
     const rawDomain = query.domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
-    // Normalisierung: www. hinzufügen wenn kein Subdomain vorhanden
     const domain = rawDomain;
-    const baseUrl = `https://${domain}`;
+    const baseHttps = `https://${domain}`;
 
-    const log: ScraperDebugLog = debug ?? { tried_urls: [], found_on_url: null, emails_raw: [] };
-    const allEmails: { email: string; source_url: string; html: string }[] = [];
+    const log: ScraperDebugLog = debug ?? { tried_urls: [], found_on_url: null, emails_raw: [], phones_raw: [] };
 
-    // ── Schritt 1: Homepage laden und Impressum-Link suchen ──────────────────
-    const homepageHtml = await fetchPageWithFallback(baseUrl);
-    log.tried_urls.push(baseUrl);
+    type EmailEntry = { email: string; source_url: string; html: string };
+    const allEmails: EmailEntry[] = [];
+    const allPhones: string[] = [];
 
-    let discoveredUrls: string[] = [];
-    if (homepageHtml) {
-      discoveredUrls = findImpressumLinks(homepageHtml, baseUrl);
-      // Auch www-Variante versuchen
-      if (discoveredUrls.length === 0 && !domain.startsWith("www.")) {
-        const wwwHtml = await fetchPageWithFallback(`https://www.${domain}`);
-        log.tried_urls.push(`https://www.${domain}`);
-        if (wwwHtml) {
-          discoveredUrls = findImpressumLinks(wwwHtml, `https://www.${domain}`);
-        }
-      }
-    } else {
-      // https scheiterte — www Fallback versuchen
-      const wwwHtml = await fetchPageWithFallback(`https://www.${domain}`);
+    // ── Schritt 1: Homepage laden, Sprach-Basispfad + Links erkennen ─────────
+    let detectedBase = baseHttps;
+    let langPrefix: string | null = null;
+
+    const homepageResult = await fetchPageWithFallback(baseHttps);
+    log.tried_urls.push(baseHttps);
+
+    // www.-Variante falls direkte Domain nicht lädt
+    let homepageHtml: string | null = homepageResult?.html ?? null;
+    if (!homepageHtml && !domain.startsWith("www.")) {
+      const wwwResult = await fetchPageWithFallback(`https://www.${domain}`);
       log.tried_urls.push(`https://www.${domain}`);
-      if (wwwHtml) {
-        discoveredUrls = findImpressumLinks(wwwHtml, `https://www.${domain}`);
+      if (wwwResult) {
+        homepageHtml = wwwResult.html;
+        detectedBase = `https://www.${domain}`;
+        langPrefix = detectLangBasePath(wwwResult.html, wwwResult.finalUrl);
+      }
+    } else if (homepageResult) {
+      langPrefix = detectLangBasePath(homepageResult.html, homepageResult.finalUrl);
+      if (homepageResult.finalUrl !== baseHttps) {
+        detectedBase = new URL(homepageResult.finalUrl).origin;
       }
     }
 
-    // ── Schritt 2: Entdeckte Impressum-Links zuerst prüfen ───────────────────
-    const urlsToTry: string[] = [
-      ...discoveredUrls,
-      ...IMPRESSUM_PATHS.map((p) => `${baseUrl}${p}`),
+    // ── Schritt 2: Pfade zusammenbauen ───────────────────────────────────────
+    const discoveredLinks = homepageHtml ? findImpressumLinks(homepageHtml, detectedBase) : [];
+
+    // Pfade mit und ohne Sprachpräfix
+    const pathsToTry: string[] = [
+      ...discoveredLinks,
+      ...BASE_PATHS.map((p) => `${detectedBase}${p}`),
     ];
 
+    // Sprachpräfix-Varianten hinzufügen
+    if (langPrefix) {
+      for (const p of BASE_PATHS) {
+        pathsToTry.push(`${detectedBase}${langPrefix}${p}`);
+      }
+    } else {
+      // Alle Sprachpräfixe als Fallback versuchen (nur für Impressum/Kontakt)
+      for (const lp of LANG_PREFIXES) {
+        pathsToTry.push(`${detectedBase}${lp}/impressum`);
+        pathsToTry.push(`${detectedBase}${lp}/kontakt`);
+        pathsToTry.push(`${detectedBase}${lp}/contact`);
+      }
+    }
+
     // Deduplizieren
-    const seen = new Set<string>();
-    const uniqueUrls = urlsToTry.filter((u) => {
-      if (seen.has(u)) return false;
-      seen.add(u);
+    const seenUrls = new Set<string>(log.tried_urls);
+    const uniquePaths = pathsToTry.filter((u) => {
+      if (seenUrls.has(u)) return false;
+      seenUrls.add(u);
       return true;
     });
 
-    for (const url of uniqueUrls) {
-      if (log.tried_urls.includes(url)) {
-        // Bereits geladen (z.B. Homepage)
-      }
+    // ── Schritt 3: Jede URL abrufen und auswerten ─────────────────────────────
+    for (const url of uniquePaths) {
       log.tried_urls.push(url);
+      const result = await fetchPageWithFallback(url);
+      if (!result) continue;
 
-      const html = await fetchPageWithFallback(url);
-      if (!html) continue;
+      const emails = extractEmailsFromHtml(result.html);
+      const phones = extractPhonesFromHtml(result.html);
 
-      const emails = extractEmailsFromHtml(html);
-      if (emails.length > 0) {
+      if (emails.length > 0 || phones.length > 0) {
         for (const email of emails) {
-          const emailDomain = email.split("@")[1] ?? "";
-          const baseDomain = domain.replace(/^www\./, "");
-          const isOwnDomain =
-            emailDomain === baseDomain ||
-            emailDomain === `www.${baseDomain}` ||
-            baseDomain.endsWith(emailDomain) ||
-            emailDomain.endsWith(baseDomain);
-
-          // Eigene Domain priorisieren, fremde auch aufnehmen
-          if (isOwnDomain || allEmails.length === 0) {
-            allEmails.push({ email, source_url: url, html });
-          } else {
-            allEmails.push({ email, source_url: url, html });
-          }
+          allEmails.push({ email, source_url: url, html: result.html });
         }
+        allPhones.push(...phones);
 
-        // Auf Impressum/Kontakt-Seite gefunden → reicht
+        // Auf Impressum/Kontakt-Seite → fertig
         const urlLower = url.toLowerCase();
         if (
           urlLower.includes("impressum") ||
@@ -350,52 +434,72 @@ export class ImpressumScraperProvider implements ContactProvider {
           urlLower.includes("legal") ||
           urlLower.includes("contact")
         ) {
-          log.found_on_url = url;
-          break;
+          if (!log.found_on_url) log.found_on_url = url;
+          if (emails.length > 0) break; // Nur bei E-Mail-Fund stoppen
         }
       }
     }
 
     log.emails_raw = [...new Set(allEmails.map((e) => e.email))];
+    log.phones_raw = [...new Set(allPhones)];
 
-    if (allEmails.length === 0) {
-      console.log(`[ImpressumScraper] Keine E-Mails gefunden für ${domain} (${log.tried_urls.length} URLs versucht)`);
+    if (allEmails.length === 0 && allPhones.length === 0) {
+      console.log(`[ImpressumScraper] Nichts gefunden für ${domain} (${log.tried_urls.length} URLs, langPrefix=${langPrefix})`);
       return { contacts: [], company: null };
     }
 
-    // Deduplizieren und in Contacts umwandeln
-    const seenEmails = new Set<string>();
-    const contacts = [];
-
-    // Eigene-Domain-E-Mails zuerst
-    const sorted = [...allEmails].sort((a, b) => {
-      const baseDomain = domain.replace(/^www\./, "");
+    // ── Schritt 4: Kontakte zusammenbauen ─────────────────────────────────────
+    // Eigene Domain priorisieren
+    const baseDomain = domain.replace(/^www\./, "");
+    const sortedEmails = [...allEmails].sort((a, b) => {
       const aOwn = a.email.split("@")[1]?.endsWith(baseDomain) ? 0 : 1;
       const bOwn = b.email.split("@")[1]?.endsWith(baseDomain) ? 0 : 1;
       return aOwn - bOwn;
     });
 
-    for (const { email, html } of sorted) {
-      if (seenEmails.has(email)) continue;
-      seenEmails.add(email);
+    const seenEmailSet = new Set<string>();
+    const contacts = [];
+    const deduplicatedPhones = [...new Set(allPhones)];
+
+    for (let i = 0; i < sortedEmails.length; i++) {
+      const { email, html } = sortedEmails[i];
+      if (seenEmailSet.has(email)) continue;
+      seenEmailSet.add(email);
 
       const title = extractTitle(html, email);
       const name = extractName(html, email);
+
+      // Erste Telefonnummer dem ersten Kontakt zuweisen
+      const phone = i === 0 && deduplicatedPhones.length > 0 ? deduplicatedPhones[0] : null;
 
       contacts.push({
         apollo_id: null,
         name: name ?? query.company_name,
         title: title ?? "Kontakt",
         email,
-        phone: null,
+        phone,
         linkedin_url: null,
         seniority: title ? "senior" : null,
         department: null,
       });
     }
 
+    // Falls nur Telefon, kein E-Mail gefunden — trotzdem speichern
+    if (contacts.length === 0 && deduplicatedPhones.length > 0) {
+      contacts.push({
+        apollo_id: null,
+        name: query.company_name,
+        title: "Kontakt",
+        email: null,
+        phone: deduplicatedPhones[0],
+        linkedin_url: null,
+        seniority: null,
+        department: null,
+      });
+    }
+
     console.log(
-      `[ImpressumScraper] ${contacts.length} E-Mail(s) für ${domain} (gefunden auf: ${log.found_on_url ?? "unbekannt"}): ${contacts.map((c) => c.email).join(", ")}`
+      `[ImpressumScraper] ${contacts.length} Kontakt(e) für ${domain} | E-Mails: ${log.emails_raw.join(", ")} | Tel: ${log.phones_raw.join(", ")}`
     );
 
     return { contacts, company: null };
