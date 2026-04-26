@@ -645,7 +645,7 @@ export default function DiscoveryCampaignDetailPage() {
                         {lead.category?.replace(/_/g, " ") ?? "–"}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
-                        {lead.roof_area_m2 ? `${Math.round(lead.roof_area_m2).toLocaleString("de-DE")} m²` : "–"}
+                        {lead.max_array_area_m2 ? `${Math.round(lead.max_array_area_m2).toLocaleString("de-DE")} m²` : "–"}
                       </td>
                       <td className="px-4 py-3">
                         {lead.total_score != null ? (
