@@ -30,9 +30,10 @@ function buildGreeting(contactName: string | null, contactTitle: string | null):
   return `Guten Tag ${salutation} ${lastName},`;
 }
 
+/** Pacht = Dachfläche / 50 * 100, gerundet auf 100er */
 function formatLease(roofAreaM2: number): string {
-  const rounded = Math.round((roofAreaM2 * 4) / 500) * 500;
-  return rounded.toLocaleString("de-DE");
+  const value = Math.round((roofAreaM2 / 50) * 100 / 100) * 100;
+  return value.toLocaleString("de-DE");
 }
 
 function formatArea(m2: number): string {
@@ -88,10 +89,10 @@ function htmlWrap(greeting: string, bodyHtml: string): string {
 // ─── Template 1: Erstkontakt ────────────────────────────────────────────────
 
 function generateErstkontakt(data: OutreachTemplateData): { subject: string; text: string; html: string } {
-  const { contactName, contactTitle, companyName, roofAreaM2 } = data;
+  const { contactName, contactTitle, roofAreaM2 } = data;
   const greeting = buildGreeting(contactName, contactTitle);
-  const area = roofAreaM2 ? `${formatArea(roofAreaM2)} m²` : "Ihrer Dachfläche";
-  const lease = roofAreaM2 ? `rund ${formatLease(roofAreaM2)} €` : "einer attraktiven Summe";
+  const area = roofAreaM2 ? `ca. ${formatArea(roofAreaM2)} m²` : "Ihrer Dachfläche";
+  const lease = roofAreaM2 ? `${formatLease(roofAreaM2)} Euro` : "einer attraktiven Summe";
 
   const subject = `Wir möchten gerne Ihre Dachfläche pachten – keine Werbung!`;
 
@@ -100,9 +101,11 @@ function generateErstkontakt(data: OutreachTemplateData): { subject: string; tex
 mein Name ist Sebastian Trautschold, ich bin Vorstand der GreenScout e.V. und über einen unserer Mitglieder bin ich auf Ihre Dachfläche aufmerksam gemacht worden.
 
 Nach meiner Ersteinschätzung wäre Ihre Dachfläche zur Anpachtung geeignet.
-Gern würde ich mich hierzu einmal austauschen. Bei der Dachgröße von ${area} würde eine Pacht von ${lease} für Sie zu erzielen sein.
+
+Gern würde ich mich hierzu einmal austauschen. Bei der Dachgröße von ${area} würde Ihre Dachfläche eine Pacht von einer möglichen Summe von ${lease} für Sie zu erzielen sein.
 
 Wenn das für Sie grundsätzlich interessant ist, erläutere ich Ihnen das gerne in einem kurzen Termin von 15–20 Minuten telefonisch.
+
 Passt es Ihnen eher Anfang oder Ende der Woche?
 
 ${SIGNATURE_TEXT}
@@ -112,10 +115,10 @@ Wenn Sie keine weiteren E-Mails von uns erhalten möchten, antworten Sie bitte m
 
   const html = htmlWrap(greeting, `
     <p>mein Name ist Sebastian Trautschold, ich bin Vorstand der <strong>GreenScout e.V.</strong> und über einen unserer Mitglieder bin ich auf Ihre Dachfläche aufmerksam gemacht worden.</p>
-    <p>Nach meiner Ersteinschätzung wäre Ihre Dachfläche zur Anpachtung geeignet.<br>
-    Gern würde ich mich hierzu einmal austauschen. Bei der Dachgröße von <strong>${area}</strong> würde eine Pacht von <strong>${lease}</strong> für Sie zu erzielen sein.</p>
-    <p>Wenn das für Sie grundsätzlich interessant ist, erläutere ich Ihnen das gerne in einem kurzen Termin von 15–20 Minuten telefonisch.<br>
-    <strong>Passt es Ihnen eher Anfang oder Ende der Woche?</strong></p>
+    <p>Nach meiner Ersteinschätzung wäre Ihre Dachfläche zur Anpachtung geeignet.</p>
+    <p>Gern würde ich mich hierzu einmal austauschen. Bei der Dachgröße von <strong>${area}</strong> würde Ihre Dachfläche eine Pacht von einer möglichen Summe von <strong>${lease}</strong> für Sie zu erzielen sein.</p>
+    <p>Wenn das für Sie grundsätzlich interessant ist, erläutere ich Ihnen das gerne in einem kurzen Termin von 15–20 Minuten telefonisch.</p>
+    <p><strong>Passt es Ihnen eher Anfang oder Ende der Woche?</strong></p>
   `);
 
   return { subject, text, html };

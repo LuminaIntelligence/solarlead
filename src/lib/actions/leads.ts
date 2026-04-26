@@ -78,7 +78,40 @@ export async function getLead(
       return null;
     }
 
-    return data as LeadWithRelations;
+    const lead = data as LeadWithRelations;
+
+    // Fallback: if no solar assessment saved, try to show data from linked discovery_lead
+    if (!lead.solar_assessments?.length) {
+      const { data: dl } = await supabase
+        .from("discovery_leads")
+        .select("solar_quality, max_array_area_m2, roof_area_m2, latitude, longitude")
+        .eq("lead_id", id)
+        .maybeSingle();
+
+      if (dl?.max_array_area_m2) {
+        lead.solar_assessments = [
+          {
+            id: "discovery_fallback",
+            lead_id: id,
+            provider: "google_solar",
+            latitude: dl.latitude ?? null,
+            longitude: dl.longitude ?? null,
+            solar_quality: dl.solar_quality ?? null,
+            max_array_area_m2: dl.max_array_area_m2,
+            max_array_panels_count: null,
+            annual_energy_kwh: null,
+            sunshine_hours: null,
+            carbon_offset: null,
+            segment_count: null,
+            panel_capacity_watts: null,
+            raw_response_json: null,
+            created_at: new Date().toISOString(),
+          },
+        ];
+      }
+    }
+
+    return lead;
   } catch (error) {
     console.error("Error in getLead:", error);
     return null;

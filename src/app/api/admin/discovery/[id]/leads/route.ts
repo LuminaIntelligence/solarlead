@@ -30,6 +30,13 @@ export async function POST(
   const adminSupabase = createAdminClient();
 
   if (action === "approve") {
+    // Fetch full discovery lead data before approving (for solar backfill)
+    const { data: dlsToApprove } = await adminSupabase
+      .from("discovery_leads")
+      .select("id, lead_id, solar_quality, max_array_area_m2, roof_area_m2, latitude, longitude")
+      .in("id", lead_ids)
+      .eq("campaign_id", campaignId);
+
     // Set discovery_leads to approved
     await adminSupabase
       .from("discovery_leads")
@@ -41,6 +48,30 @@ export async function POST(
       })
       .in("id", lead_ids)
       .eq("campaign_id", campaignId);
+
+    // Backfill solar_assessments from discovery data for any lead missing one
+    for (const dl of dlsToApprove ?? []) {
+      if (!dl.lead_id || !dl.max_array_area_m2) continue;
+
+      const { data: existing } = await adminSupabase
+        .from("solar_assessments")
+        .select("id")
+        .eq("lead_id", dl.lead_id)
+        .limit(1)
+        .maybeSingle();
+
+      if (!existing) {
+        await adminSupabase.from("solar_assessments").insert({
+          lead_id: dl.lead_id,
+          provider: "google_solar",
+          latitude: dl.latitude,
+          longitude: dl.longitude,
+          solar_quality: dl.solar_quality,
+          max_array_area_m2: dl.max_array_area_m2,
+          // Other fields unknown at this stage — leave null
+        });
+      }
+    }
 
     // Update campaign total_approved counter
     const { data: camp } = await adminSupabase
