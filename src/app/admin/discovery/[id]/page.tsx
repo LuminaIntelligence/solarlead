@@ -614,7 +614,7 @@ export default function DiscoveryCampaignDetailPage() {
               </thead>
               <tbody>
                 {leads.map((lead) => {
-                  const contacts = (lead.contacts as { name?: string; email?: string }[] | null) ?? [];
+                  const contactCount = lead.contact_count ?? 0;
                   const isReady = lead.status === "ready";
                   const isSelected = selected.has(lead.id);
                   return (
@@ -665,8 +665,8 @@ export default function DiscoveryCampaignDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-500 text-xs">
-                        {contacts.length > 0
-                          ? `${contacts.length} Kontakt${contacts.length !== 1 ? "e" : ""}`
+                        {contactCount > 0
+                          ? `${contactCount} Kontakt${contactCount !== 1 ? "e" : ""}`
                           : "–"}
                       </td>
                       <td className="px-4 py-3">
