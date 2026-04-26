@@ -33,6 +33,7 @@ import {
   deleteUserLeads,
 } from "@/lib/actions/admin";
 import type { Lead, UserSettings, SearchRun, LeadStatus } from "@/types/database";
+import { getCategoryLabel } from "@/lib/constants/categories";
 
 interface AdminUser {
   id: string;
@@ -60,21 +61,6 @@ const statusColors: Record<string, string> = {
   rejected: "bg-red-100 text-red-800",
 };
 
-const categoryLabels: Record<string, string> = {
-  logistics: "Logistik",
-  warehouse: "Lager",
-  cold_storage: "Kühlhaus",
-  supermarket: "Supermarkt",
-  food_production: "Lebensmittelproduktion",
-  manufacturing: "Fertigung",
-  metalworking: "Metallverarbeitung",
-  car_dealership: "Autohaus",
-  hotel: "Hotel",
-  furniture_store: "Möbelhaus",
-  hardware_store: "Baumarkt",
-  shopping_center: "Einkaufszentrum",
-};
-
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Nie";
   return new Date(dateStr).toLocaleDateString("de-DE", {
@@ -87,7 +73,7 @@ function formatDate(dateStr: string | null): string {
 }
 
 function formatCategory(category: string): string {
-  return categoryLabels[category] ?? category;
+  return getCategoryLabel(category);
 }
 
 function formatStatus(status: string): string {

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Lead, LeadStatus } from "@/types/database";
+import { CATEGORY_OPTIONS, getCategoryLabel } from "@/lib/constants/categories";
 
 interface LeadWithOwner extends Lead {
   owner_email: string;
@@ -36,36 +37,6 @@ const statusColors: Record<string, string> = {
   rejected: "bg-red-100 text-red-800",
 };
 
-const categoryLabels: Record<string, string> = {
-  logistics: "Logistik",
-  warehouse: "Lager",
-  cold_storage: "Kühlhaus",
-  supermarket: "Supermarkt",
-  food_production: "Lebensmittelproduktion",
-  manufacturing: "Fertigung",
-  metalworking: "Metallverarbeitung",
-  car_dealership: "Autohaus",
-  hotel: "Hotel",
-  furniture_store: "Möbelhaus",
-  hardware_store: "Baumarkt",
-  shopping_center: "Einkaufszentrum",
-};
-
-const categoryOptions = [
-  { value: "logistics", label: "Logistik" },
-  { value: "warehouse", label: "Lager" },
-  { value: "cold_storage", label: "Kühlhaus" },
-  { value: "supermarket", label: "Supermarkt" },
-  { value: "food_production", label: "Lebensmittelproduktion" },
-  { value: "manufacturing", label: "Fertigung" },
-  { value: "metalworking", label: "Metallverarbeitung" },
-  { value: "car_dealership", label: "Autohaus" },
-  { value: "hotel", label: "Hotel" },
-  { value: "furniture_store", label: "Möbelhaus" },
-  { value: "hardware_store", label: "Baumarkt" },
-  { value: "shopping_center", label: "Einkaufszentrum" },
-];
-
 const statusOptions = [
   { value: "new", label: "Neu" },
   { value: "reviewed", label: "Geprüft" },
@@ -83,7 +54,7 @@ function formatDate(dateStr: string): string {
 }
 
 function formatCategory(category: string): string {
-  return categoryLabels[category] ?? category;
+  return getCategoryLabel(category);
 }
 
 function formatStatus(status: string): string {
@@ -178,7 +149,7 @@ export default function AdminLeadsPage() {
                 <SelectValue placeholder="Kategorie" />
               </SelectTrigger>
               <SelectContent>
-                {categoryOptions.map((opt) => (
+                {CATEGORY_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>

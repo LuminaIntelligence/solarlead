@@ -10,69 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { DiscoveryCampaignArea } from "@/types/database";
-
-// ─── Category options ─────────────────────────────────────────────────────────
-
-const CATEGORY_GROUPS = [
-  {
-    label: "Logistik & Handel",
-    items: [
-      { value: "logistics",        label: "Logistik",              emoji: "🚛" },
-      { value: "warehouse",        label: "Lager / Halle",         emoji: "🏭" },
-      { value: "cold_storage",     label: "Kühlhaus",              emoji: "❄️" },
-      { value: "wholesale",        label: "Großhandel",            emoji: "📦" },
-      { value: "supermarket",      label: "Supermarkt",            emoji: "🛒" },
-      { value: "shopping_center",  label: "Einkaufszentrum",       emoji: "🏬" },
-      { value: "hardware_store",   label: "Baumarkt",              emoji: "🔨" },
-      { value: "furniture_store",  label: "Möbelhaus",             emoji: "🛋️" },
-      { value: "car_dealership",   label: "Autohaus",              emoji: "🚗" },
-    ],
-  },
-  {
-    label: "Industrie & Produktion",
-    items: [
-      { value: "manufacturing",    label: "Fertigung",             emoji: "⚙️" },
-      { value: "metalworking",     label: "Metallverarbeitung",    emoji: "🔩" },
-      { value: "food_production",  label: "Lebensmittel",          emoji: "🍔" },
-      { value: "wood_processing",  label: "Holzverarbeitung",      emoji: "🪵" },
-      { value: "plastics",         label: "Kunststofftechnik",     emoji: "🔧" },
-      { value: "printing",         label: "Druckerei",             emoji: "🖨️" },
-      { value: "brewery",          label: "Brauerei / Getränke",   emoji: "🍺" },
-      { value: "recycling",        label: "Recycling / Entsorgung",emoji: "♻️" },
-    ],
-  },
-  {
-    label: "Agrar & Gewächshaus",
-    items: [
-      { value: "farm",             label: "Landwirtschaft",        emoji: "🌾" },
-      { value: "greenhouse",       label: "Gewächshaus",           emoji: "🌱" },
-    ],
-  },
-  {
-    label: "Öffentlich & Sozial",
-    items: [
-      { value: "hospital",         label: "Klinik / Krankenhaus",  emoji: "🏥" },
-      { value: "swimming_pool",    label: "Hallenbad / Freibad",   emoji: "🏊" },
-      { value: "sports_hall",      label: "Sporthalle",            emoji: "🏟️" },
-      { value: "school",           label: "Schule / Bildung",      emoji: "🏫" },
-      { value: "events_hall",      label: "Veranstaltungshalle",   emoji: "🎪" },
-      { value: "church",           label: "Kirche / Gemeinde",     emoji: "⛪" },
-    ],
-  },
-  {
-    label: "Dienstleistungen",
-    items: [
-      { value: "hotel",            label: "Hotel",                 emoji: "🏨" },
-      { value: "laundry",          label: "Wäscherei",             emoji: "👕" },
-      { value: "data_center",      label: "Rechenzentrum",         emoji: "🖥️" },
-      { value: "gas_station",      label: "Tankstelle",            emoji: "⛽" },
-      { value: "car_park",         label: "Parkhaus",              emoji: "🅿️" },
-    ],
-  },
-];
-
-// Flat list for lookups (summary display, etc.)
-const CATEGORY_OPTIONS = CATEGORY_GROUPS.flatMap((g) => g.items);
+import { CATEGORY_GROUPS, CATEGORY_OPTIONS } from "@/lib/constants/categories";
 
 // ─── Coordinate lookup for custom radius search ───────────────────────────────
 

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getLeadStats, getLeads } from "@/lib/actions/leads";
 import type { Lead, LeadStatus } from "@/types/database";
+import { getCategoryLabel } from "@/lib/constants/categories";
 
 const STATUS_ORDER: LeadStatus[] = ["new", "reviewed", "contacted", "qualified", "rejected"];
 
@@ -31,23 +32,8 @@ const statusLabels: Record<LeadStatus, string> = {
   rejected: "Abgelehnt",
 };
 
-const categoryLabels: Record<string, string> = {
-  logistics: "Logistik",
-  warehouse: "Lager",
-  cold_storage: "Kühlhaus",
-  supermarket: "Supermarkt",
-  food_production: "Lebensmittelproduktion",
-  manufacturing: "Fertigung",
-  metalworking: "Metallverarbeitung",
-  car_dealership: "Autohaus",
-  hotel: "Hotel",
-  furniture_store: "Möbelhaus",
-  hardware_store: "Baumarkt",
-  shopping_center: "Einkaufszentrum",
-};
-
 function formatCategory(category: string): string {
-  return categoryLabels[category] ?? category;
+  return getCategoryLabel(category);
 }
 
 function getScoreColor(score: number): string {

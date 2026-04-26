@@ -7,6 +7,7 @@ import {
   Loader2, RefreshCw, Send, AlertCircle, CalendarDays,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CATEGORY_LABEL } from "@/lib/constants/categories";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -58,15 +59,6 @@ function daysUntil(dateStr: string): number {
   d.setHours(0, 0, 0, 0);
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
-
-const categoryLabels: Record<string, string> = {
-  logistics: "Logistik", warehouse: "Lager", cold_storage: "Kühlhaus",
-  supermarket: "Supermarkt", food_production: "Lebensmittel",
-  manufacturing: "Fertigung", metalworking: "Metallverarbeitung",
-  car_dealership: "Autohaus", hotel: "Hotel",
-  furniture_store: "Möbelhaus", hardware_store: "Baumarkt",
-  shopping_center: "Einkaufszentrum",
-};
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -310,7 +302,7 @@ export default function FollowupQueuePage() {
                                     <div className="font-medium text-slate-900">{job.company_name}</div>
                                     <div className="text-xs text-slate-400">
                                       {job.company_city}
-                                      {job.company_category && ` · ${categoryLabels[job.company_category] ?? job.company_category}`}
+                                      {job.company_category && ` · ${CATEGORY_LABEL[job.company_category] ?? job.company_category}`}
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5">

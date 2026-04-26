@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CATEGORY_OPTIONS, CATEGORY_LABEL } from "@/lib/constants/categories";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,25 +37,6 @@ interface OutreachLead {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const categoryOptions = [
-  { value: "logistics", label: "Logistik" },
-  { value: "warehouse", label: "Lager" },
-  { value: "cold_storage", label: "Kühlhaus" },
-  { value: "supermarket", label: "Supermarkt" },
-  { value: "food_production", label: "Lebensmittelproduktion" },
-  { value: "manufacturing", label: "Fertigung" },
-  { value: "metalworking", label: "Metallverarbeitung" },
-  { value: "car_dealership", label: "Autohaus" },
-  { value: "hotel", label: "Hotel" },
-  { value: "furniture_store", label: "Möbelhaus" },
-  { value: "hardware_store", label: "Baumarkt" },
-  { value: "shopping_center", label: "Einkaufszentrum" },
-];
-
-const categoryLabels: Record<string, string> = Object.fromEntries(
-  categoryOptions.map(({ value, label }) => [value, label])
-);
 
 const statusLabels: Record<string, string> = {
   new: "Neu",
@@ -352,7 +334,7 @@ export default function NewOutreachPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-white border border-slate-300 text-slate-900">
                     <SelectItem value="all">Alle Kategorien</SelectItem>
-                    {categoryOptions.map((opt) => (
+                    {CATEGORY_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
                         {opt.label}
                       </SelectItem>
@@ -466,7 +448,7 @@ export default function NewOutreachPage() {
                               {lead.city}
                             </td>
                             <td className="px-4 py-3 text-slate-500">
-                              {categoryLabels[lead.category] ?? lead.category}
+                              {CATEGORY_LABEL[lead.category] ?? lead.category}
                             </td>
                             <td className="px-4 py-3">
                               <ScoreColor score={lead.total_score} />

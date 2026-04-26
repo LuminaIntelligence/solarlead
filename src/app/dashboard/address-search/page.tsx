@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { CATEGORY_OPTIONS } from "@/lib/constants/categories";
 
 interface Suggestion {
   place_id: string;
@@ -64,22 +65,6 @@ type PageStatus =
   | "solar-error"
   | "saving"
   | "saved";
-
-const CATEGORIES = [
-  { value: "logistics", label: "Logistik" },
-  { value: "warehouse", label: "Lager" },
-  { value: "cold_storage", label: "Kühlhaus" },
-  { value: "supermarket", label: "Supermarkt" },
-  { value: "food_production", label: "Lebensmittelproduktion" },
-  { value: "manufacturing", label: "Fertigung" },
-  { value: "metalworking", label: "Metallverarbeitung" },
-  { value: "car_dealership", label: "Autohaus" },
-  { value: "hotel", label: "Hotel" },
-  { value: "furniture_store", label: "Möbelhaus" },
-  { value: "hardware_store", label: "Baumarkt" },
-  { value: "shopping_center", label: "Einkaufszentrum" },
-  { value: "other", label: "Sonstiges" },
-];
 
 function solarQualityLabel(q: string | null): string {
   switch (q) {
@@ -639,7 +624,7 @@ export default function AddressSearchPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {CATEGORIES.map((c) => (
+                          {[...CATEGORY_OPTIONS, { value: "other", label: "Sonstiges", emoji: "" }].map((c) => (
                             <SelectItem key={c.value} value={c.value}>
                               {c.label}
                             </SelectItem>

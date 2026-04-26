@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import type { SearchResult } from "@/lib/providers/search/types";
+import { CATEGORY_OPTIONS } from "@/lib/constants/categories";
 
 const COUNTRIES = [
   { value: "DE", label: "Deutschland" },
@@ -47,21 +48,6 @@ const RADIUS_OPTIONS = [
   { value: "25", label: "25 km" },
   { value: "50", label: "50 km" },
   { value: "100", label: "100 km" },
-];
-
-const CATEGORIES = [
-  { value: "logistics", label: "Logistik" },
-  { value: "warehouse", label: "Lager" },
-  { value: "cold_storage", label: "Kühlhaus" },
-  { value: "supermarket", label: "Supermarkt" },
-  { value: "food_production", label: "Lebensmittelproduktion" },
-  { value: "manufacturing", label: "Fertigung" },
-  { value: "metalworking", label: "Metallverarbeitung" },
-  { value: "car_dealership", label: "Autohaus" },
-  { value: "hotel", label: "Hotel" },
-  { value: "furniture_store", label: "Möbelhaus" },
-  { value: "hardware_store", label: "Baumarkt" },
-  { value: "shopping_center", label: "Einkaufszentrum" },
 ];
 
 type SaveStatus = "idle" | "saving" | "enriching" | "solar" | "scoring" | "done" | "error" | "disqualified";
@@ -419,7 +405,7 @@ export default function SearchPage() {
               <div className="space-y-2">
                 <Label>Geschäftskategorien</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {CATEGORIES.map((cat) => {
+                  {CATEGORY_OPTIONS.map((cat) => {
                     const checked = selectedCategories.includes(cat.value);
                     return (
                       <label
