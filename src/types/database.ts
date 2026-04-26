@@ -223,6 +223,13 @@ export interface OutreachBatch {
 }
 
 export type FollowupStatus = "pending" | "sent" | "skipped" | "cancelled";
+export type PipelineStage =
+  | "interested"
+  | "meeting_scheduled"
+  | "offer_sent"
+  | "closed_won"
+  | "closed_lost"
+  | null;
 
 export interface OutreachJob {
   id: string;
@@ -249,6 +256,8 @@ export interface OutreachJob {
   followup_scheduled_for: string | null;
   followup_sent_at: string | null;
   followup_status: FollowupStatus;
+  // Pipeline
+  pipeline_stage: PipelineStage;
   created_at: string;
   updated_at: string;
 }
