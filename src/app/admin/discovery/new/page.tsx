@@ -13,20 +13,66 @@ import type { DiscoveryCampaignArea } from "@/types/database";
 
 // ─── Category options ─────────────────────────────────────────────────────────
 
-const CATEGORY_OPTIONS = [
-  { value: "logistics",         label: "Logistik",              emoji: "🚛" },
-  { value: "warehouse",         label: "Lager / Halle",         emoji: "🏭" },
-  { value: "cold_storage",      label: "Kühlhaus",              emoji: "❄️" },
-  { value: "supermarket",       label: "Supermarkt",            emoji: "🛒" },
-  { value: "food_production",   label: "Lebensmittelproduktion",emoji: "🍔" },
-  { value: "manufacturing",     label: "Fertigung",             emoji: "⚙️" },
-  { value: "metalworking",      label: "Metallverarbeitung",    emoji: "🔩" },
-  { value: "car_dealership",    label: "Autohaus",              emoji: "🚗" },
-  { value: "hotel",             label: "Hotel",                 emoji: "🏨" },
-  { value: "furniture_store",   label: "Möbelhaus",             emoji: "🛋️" },
-  { value: "hardware_store",    label: "Baumarkt",              emoji: "🔨" },
-  { value: "shopping_center",   label: "Einkaufszentrum",       emoji: "🏬" },
+const CATEGORY_GROUPS = [
+  {
+    label: "Logistik & Handel",
+    items: [
+      { value: "logistics",        label: "Logistik",              emoji: "🚛" },
+      { value: "warehouse",        label: "Lager / Halle",         emoji: "🏭" },
+      { value: "cold_storage",     label: "Kühlhaus",              emoji: "❄️" },
+      { value: "wholesale",        label: "Großhandel",            emoji: "📦" },
+      { value: "supermarket",      label: "Supermarkt",            emoji: "🛒" },
+      { value: "shopping_center",  label: "Einkaufszentrum",       emoji: "🏬" },
+      { value: "hardware_store",   label: "Baumarkt",              emoji: "🔨" },
+      { value: "furniture_store",  label: "Möbelhaus",             emoji: "🛋️" },
+      { value: "car_dealership",   label: "Autohaus",              emoji: "🚗" },
+    ],
+  },
+  {
+    label: "Industrie & Produktion",
+    items: [
+      { value: "manufacturing",    label: "Fertigung",             emoji: "⚙️" },
+      { value: "metalworking",     label: "Metallverarbeitung",    emoji: "🔩" },
+      { value: "food_production",  label: "Lebensmittel",          emoji: "🍔" },
+      { value: "wood_processing",  label: "Holzverarbeitung",      emoji: "🪵" },
+      { value: "plastics",         label: "Kunststofftechnik",     emoji: "🔧" },
+      { value: "printing",         label: "Druckerei",             emoji: "🖨️" },
+      { value: "brewery",          label: "Brauerei / Getränke",   emoji: "🍺" },
+      { value: "recycling",        label: "Recycling / Entsorgung",emoji: "♻️" },
+    ],
+  },
+  {
+    label: "Agrar & Gewächshaus",
+    items: [
+      { value: "farm",             label: "Landwirtschaft",        emoji: "🌾" },
+      { value: "greenhouse",       label: "Gewächshaus",           emoji: "🌱" },
+    ],
+  },
+  {
+    label: "Öffentlich & Sozial",
+    items: [
+      { value: "hospital",         label: "Klinik / Krankenhaus",  emoji: "🏥" },
+      { value: "swimming_pool",    label: "Hallenbad / Freibad",   emoji: "🏊" },
+      { value: "sports_hall",      label: "Sporthalle",            emoji: "🏟️" },
+      { value: "school",           label: "Schule / Bildung",      emoji: "🏫" },
+      { value: "events_hall",      label: "Veranstaltungshalle",   emoji: "🎪" },
+      { value: "church",           label: "Kirche / Gemeinde",     emoji: "⛪" },
+    ],
+  },
+  {
+    label: "Dienstleistungen",
+    items: [
+      { value: "hotel",            label: "Hotel",                 emoji: "🏨" },
+      { value: "laundry",          label: "Wäscherei",             emoji: "👕" },
+      { value: "data_center",      label: "Rechenzentrum",         emoji: "🖥️" },
+      { value: "gas_station",      label: "Tankstelle",            emoji: "⛽" },
+      { value: "car_park",         label: "Parkhaus",              emoji: "🅿️" },
+    ],
+  },
 ];
+
+// Flat list for lookups (summary display, etc.)
+const CATEGORY_OPTIONS = CATEGORY_GROUPS.flatMap((g) => g.items);
 
 // ─── Coordinate lookup for custom radius search ───────────────────────────────
 
@@ -683,33 +729,83 @@ export default function NewDiscoveryCampaignPage() {
             <CardTitle className="text-slate-900 text-base">Branchen auswählen</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-500 mb-4">
-              Das System sucht jede Branche in jedem Suchkreis.
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {CATEGORY_OPTIONS.map((cat) => {
-                const selected = categories.includes(cat.value);
-                return (
-                  <button
-                    key={cat.value}
-                    type="button"
-                    onClick={() => toggleCategory(cat.value)}
-                    className={cn(
-                      "flex flex-col items-center gap-1.5 rounded-lg p-3 text-sm font-medium border transition-all",
-                      selected
-                        ? "border-[#B2D082] text-[#1F3D2E]"
-                        : "border-slate-200 text-slate-600 hover:border-slate-300 bg-slate-50"
-                    )}
-                    style={selected ? { backgroundColor: "#B2D082" } : undefined}
-                  >
-                    <span className="text-xl">{cat.emoji}</span>
-                    <span className="text-xs text-center leading-tight">{cat.label}</span>
-                  </button>
-                );
-              })}
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-slate-500">
+                Das System sucht jede Branche in jedem Suchkreis.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const all = CATEGORY_OPTIONS.map((c) => c.value);
+                    setCategories(all);
+                  }}
+                  className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                >
+                  Alle auswählen
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setCategories([])}
+                  className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                >
+                  Zurücksetzen
+                </button>
+              </div>
             </div>
+
+            <div className="space-y-5">
+              {CATEGORY_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      {group.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const groupValues = group.items.map((i) => i.value);
+                        const allSelected = groupValues.every((v) => categories.includes(v));
+                        if (allSelected) {
+                          setCategories((prev) => prev.filter((c) => !groupValues.includes(c)));
+                        } else {
+                          setCategories((prev) => [...new Set([...prev, ...groupValues])]);
+                        }
+                      }}
+                      className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2"
+                    >
+                      {group.items.every((i) => categories.includes(i.value)) ? "Gruppe abwählen" : "Gruppe wählen"}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {group.items.map((cat) => {
+                      const selected = categories.includes(cat.value);
+                      return (
+                        <button
+                          key={cat.value}
+                          type="button"
+                          onClick={() => toggleCategory(cat.value)}
+                          className={cn(
+                            "flex flex-col items-center gap-1.5 rounded-lg p-3 text-sm font-medium border transition-all",
+                            selected
+                              ? "border-[#B2D082] text-[#1F3D2E]"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300 bg-slate-50"
+                          )}
+                          style={selected ? { backgroundColor: "#B2D082" } : undefined}
+                        >
+                          <span className="text-xl">{cat.emoji}</span>
+                          <span className="text-xs text-center leading-tight">{cat.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {categories.length > 0 && (
-              <p className="text-xs text-slate-500 mt-3">
+              <p className="text-xs text-slate-500 mt-4">
                 {categories.length} Branche{categories.length !== 1 ? "n" : ""} × {areas.length} Suchkreis{areas.length !== 1 ? "e" : ""} ={" "}
                 <span className="text-slate-900 font-medium">bis zu {estimatedResults.toLocaleString("de-DE")} Treffer</span>
               </p>

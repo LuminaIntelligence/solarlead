@@ -7,18 +7,45 @@ import type { SearchProvider, SearchQuery, SearchResult } from "./types";
  * Duplicates are removed by place_id after merging.
  */
 const CATEGORY_SEARCH_TERMS: Record<string, string[]> = {
-  logistics:       ["Spedition", "Logistikzentrum", "Lager Logistik", "Frachtunternehmen"],
-  warehouse:       ["Lagerhalle", "Lagerhaus", "Betriebshalle", "Industriehalle"],
-  cold_storage:    ["Kühlhaus", "Tiefkühlhaus", "Kühllager", "Kühllogistik"],
-  supermarket:     ["Supermarkt", "Lebensmittelmarkt", "Verbrauchermarkt", "Lebensmitteldiscounter"],
-  food_production: ["Lebensmittelproduktion", "Lebensmittelfabrik", "Nahrungsmittelwerk", "Lebensmittelwerk"],
-  manufacturing:   ["Produktionswerk", "Fabrik", "Fertigungsbetrieb", "Industriewerk"],
-  metalworking:    ["Metallverarbeitung", "Stahlbau", "Metallbau", "Schlosserei Stahlbau"],
-  car_dealership:  ["Autohaus", "Kfz-Händler", "Autohändler", "Fahrzeughandel"],
-  hotel:           ["Hotel", "Business Hotel", "Tagungshotel"],
-  furniture_store: ["Möbelhaus", "Möbelmarkt", "Einrichtungshaus"],
-  hardware_store:  ["Baumarkt", "Baustoffhandel", "Baustoffe Großhandel"],
-  shopping_center: ["Einkaufszentrum", "Fachmarktzentrum", "Einkaufspark"],
+  // ── Logistik & Handel ──────────────────────────────────────────────────────
+  logistics:        ["Spedition", "Logistikzentrum", "Lager Logistik", "Frachtunternehmen"],
+  warehouse:        ["Lagerhalle", "Lagerhaus", "Betriebshalle", "Industriehalle"],
+  cold_storage:     ["Kühlhaus", "Tiefkühlhaus", "Kühllager", "Kühllogistik"],
+  wholesale:        ["Großhandel", "Handelslager", "Distributionszentrum", "Cash und Carry"],
+  supermarket:      ["Supermarkt", "Lebensmittelmarkt", "Verbrauchermarkt", "Lebensmitteldiscounter"],
+  shopping_center:  ["Einkaufszentrum", "Fachmarktzentrum", "Einkaufspark"],
+  hardware_store:   ["Baumarkt", "Baustoffhandel", "Baustoffe Großhandel"],
+  furniture_store:  ["Möbelhaus", "Möbelmarkt", "Einrichtungshaus"],
+  car_dealership:   ["Autohaus", "Kfz-Händler", "Autohändler", "Fahrzeughandel"],
+
+  // ── Industrie & Produktion ─────────────────────────────────────────────────
+  manufacturing:    ["Produktionswerk", "Fabrik", "Fertigungsbetrieb", "Industriewerk"],
+  metalworking:     ["Metallverarbeitung", "Stahlbau", "Metallbau", "Schlosserei Stahlbau"],
+  food_production:  ["Lebensmittelproduktion", "Lebensmittelfabrik", "Nahrungsmittelwerk", "Lebensmittelwerk"],
+  wood_processing:  ["Sägewerk", "Holzverarbeitung", "Holzbau Werk", "Zimmerei Industrie"],
+  plastics:         ["Kunststoffverarbeitung", "Kunststofftechnik", "Spritzguss Werk", "Kunststoffwerk"],
+  printing:         ["Druckerei", "Druckwerk", "Offsetdruck", "Druckbetrieb"],
+  brewery:          ["Brauerei", "Getränkewerk", "Getränkehersteller", "Abfüllbetrieb"],
+  recycling:        ["Recyclingbetrieb", "Entsorgungsunternehmen", "Schrotthandel", "Abfallwirtschaft"],
+
+  // ── Agrar & Gewächshaus ───────────────────────────────────────────────────
+  farm:             ["Bauernhof", "Landwirtschaftlicher Betrieb", "Stallung", "Agrarbetrieb"],
+  greenhouse:       ["Gewächshaus", "Gärtnerei", "Gartenbaubetrieb", "Baumschule Großhandel"],
+
+  // ── Öffentlich & Sozial ───────────────────────────────────────────────────
+  hospital:         ["Krankenhaus", "Klinik", "Pflegeheim", "Rehabilitationszentrum"],
+  swimming_pool:    ["Hallenbad", "Freibad", "Schwimmbad", "Freizeitbad"],
+  sports_hall:      ["Sporthalle", "Sportanlage", "Sportzentrum", "Sportpark"],
+  school:           ["Schule", "Berufsschule", "Gymnasium Schule", "Gesamtschule"],
+  events_hall:      ["Messehalle", "Veranstaltungshalle", "Kongresszentrum", "Stadthalle"],
+  church:           ["Kirche", "Gemeindezentrum", "Pfarrheim", "Kirchengemeinde Gebäude"],
+
+  // ── Dienstleistungen ──────────────────────────────────────────────────────
+  hotel:            ["Hotel", "Business Hotel", "Tagungshotel"],
+  laundry:          ["Wäscherei", "Industriewäscherei", "Textilreinigung", "Reinigungswerk"],
+  data_center:      ["Rechenzentrum", "Datacenter", "Serverstandort", "IT-Infrastruktur Zentrum"],
+  gas_station:      ["Tankstelle", "Autogas Tankstelle", "LKW Tankstelle"],
+  car_park:         ["Parkhaus", "Parkdeck", "Großparkplatz", "Park and Ride"],
 };
 
 interface PlacesTextSearchResponse {

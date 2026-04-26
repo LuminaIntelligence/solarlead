@@ -8,18 +8,41 @@ import {
 // --- Kategorie-Labels ---
 
 const CATEGORY_LABELS: Record<string, string> = {
-  cold_storage: 'Kühlhaus',
-  warehouse: 'Lager',
-  logistics: 'Logistik',
-  manufacturing: 'Fertigung',
-  metalworking: 'Metallverarbeitung',
-  food_production: 'Lebensmittelproduktion',
-  supermarket: 'Supermarkt',
+  // Logistik & Handel
+  logistics:       'Logistik',
+  warehouse:       'Lager / Halle',
+  cold_storage:    'Kühlhaus',
+  wholesale:       'Großhandel',
+  supermarket:     'Supermarkt',
   shopping_center: 'Einkaufszentrum',
-  hardware_store: 'Baumarkt',
+  hardware_store:  'Baumarkt',
   furniture_store: 'Möbelhaus',
-  car_dealership: 'Autohaus',
-  hotel: 'Hotel',
+  car_dealership:  'Autohaus',
+  // Industrie & Produktion
+  manufacturing:   'Fertigung',
+  metalworking:    'Metallverarbeitung',
+  food_production: 'Lebensmittelproduktion',
+  wood_processing: 'Holzverarbeitung',
+  plastics:        'Kunststofftechnik',
+  printing:        'Druckerei',
+  brewery:         'Brauerei / Getränke',
+  recycling:       'Recycling / Entsorgung',
+  // Agrar
+  farm:            'Landwirtschaft',
+  greenhouse:      'Gewächshaus / Gärtnerei',
+  // Öffentlich & Sozial
+  hospital:        'Klinik / Krankenhaus',
+  swimming_pool:   'Hallenbad / Freibad',
+  sports_hall:     'Sporthalle',
+  school:          'Schule / Bildung',
+  events_hall:     'Veranstaltungshalle',
+  church:          'Kirche / Gemeinde',
+  // Dienstleistungen
+  hotel:           'Hotel',
+  laundry:         'Wäscherei',
+  data_center:     'Rechenzentrum',
+  gas_station:     'Tankstelle',
+  car_park:        'Parkhaus',
 };
 
 function formatCategory(category: string): string {
@@ -32,18 +55,41 @@ function formatCategory(category: string): string {
 // --- Unternehmenseignung (Business Score) ---
 
 const BUSINESS_SCORES: Record<string, { score: number; label: string }> = {
-  cold_storage:     { score: 95, label: 'Große Flachdachfläche, sehr hoher Energiebedarf (24/7 Kühlung)' },
-  warehouse:        { score: 92, label: 'Große Flachdachfläche ideal für Solaranlagen' },
-  logistics:        { score: 90, label: 'Große Dachfläche mit erheblichem Energieverbrauch' },
-  manufacturing:    { score: 85, label: 'Hoher Energieverbrauch, oft große Dachfläche' },
-  metalworking:     { score: 83, label: 'Energieintensive Produktion mit gutem Dachpotenzial' },
-  food_production:  { score: 80, label: 'Hoher Energiebedarf durch Verarbeitung und Kühlung' },
-  supermarket:      { score: 75, label: 'Konstanter Energieverbrauch mit guter Dachfläche' },
-  shopping_center:  { score: 72, label: 'Große Dachfläche, mittlerer bis hoher Energieverbrauch' },
-  hardware_store:   { score: 65, label: 'Gute Dachfläche mit moderatem Energiebedarf' },
-  furniture_store:  { score: 63, label: 'Große Ausstellungsdächer geeignet für Solar' },
-  car_dealership:   { score: 60, label: 'Energiebedarf für Ausstellung und Beleuchtung' },
-  hotel:            { score: 55, label: 'Mittlere Dachfläche, ganzjähriger Energiebedarf' },
+  // Logistik & Handel
+  cold_storage:    { score: 95, label: 'Große Flachdachfläche, sehr hoher Energiebedarf (24/7 Kühlung)' },
+  warehouse:       { score: 92, label: 'Große Flachdachfläche ideal für Solaranlagen' },
+  logistics:       { score: 90, label: 'Große Dachfläche mit erheblichem Energieverbrauch' },
+  wholesale:       { score: 82, label: 'Große Hallendächer, hoher Eigenverbrauchspotenzial' },
+  shopping_center: { score: 72, label: 'Große Dachfläche, mittlerer bis hoher Energieverbrauch' },
+  supermarket:     { score: 75, label: 'Konstanter Energieverbrauch mit guter Dachfläche' },
+  hardware_store:  { score: 65, label: 'Gute Dachfläche mit moderatem Energiebedarf' },
+  furniture_store: { score: 63, label: 'Große Ausstellungsdächer geeignet für Solar' },
+  car_dealership:  { score: 60, label: 'Energiebedarf für Ausstellung und Beleuchtung' },
+  // Industrie & Produktion
+  manufacturing:   { score: 85, label: 'Hoher Energieverbrauch, oft große Flachdachfläche' },
+  metalworking:    { score: 83, label: 'Energieintensive Produktion mit gutem Dachpotenzial' },
+  food_production: { score: 80, label: 'Hoher Energiebedarf durch Verarbeitung und Kühlung' },
+  recycling:       { score: 85, label: 'Große Hallenflächen, energieintensiver Betrieb' },
+  wood_processing: { score: 82, label: 'Große Produktionshallen mit guten Dachflächen' },
+  plastics:        { score: 80, label: 'Energieintensive Fertigung, gute Dacheitgung' },
+  brewery:         { score: 78, label: 'Hoher Energiebedarf für Produktion und Kühlung' },
+  printing:        { score: 75, label: 'Hoher Stromverbrauch durch Druckmaschinen' },
+  // Agrar
+  farm:            { score: 93, label: 'Sehr große Stalldächer und Scheunen, ideale Flachdachflächen' },
+  greenhouse:      { score: 72, label: 'Hoher Energiebedarf für Heizung und Beleuchtung' },
+  // Öffentlich & Sozial
+  data_center:     { score: 95, label: 'Extrem hoher Stromverbrauch, 24/7 Betrieb' },
+  hospital:        { score: 88, label: 'Sehr hoher Energiebedarf, große Dachflächen' },
+  swimming_pool:   { score: 87, label: 'Hoher Energiebedarf für Heizung und Pumpen, große Dachfläche' },
+  sports_hall:     { score: 83, label: 'Große Flachdachfläche, moderater bis hoher Energiebedarf' },
+  events_hall:     { score: 80, label: 'Sehr große Hallendächer, hoher Spitzenbedarf' },
+  school:          { score: 68, label: 'Gute Flachdachfläche, politischer Wille zur Solarisierung' },
+  church:          { score: 48, label: 'Oft große Dachflächen, niedriger Eigenverbrauch' },
+  // Dienstleistungen
+  laundry:         { score: 88, label: 'Sehr hoher Energiebedarf durch Waschmaschinen und Trockner' },
+  hotel:           { score: 55, label: 'Mittlere Dachfläche, ganzjähriger Energiebedarf' },
+  car_park:        { score: 72, label: 'Große Dachflächen (Carport-Solar), wachsende E-Ladeinfrastruktur' },
+  gas_station:     { score: 55, label: 'Überdachung als Solardach nutzbar, moderater Eigenverbrauch' },
 };
 
 function calculateBusinessScore(category: string): { score: number; explanation: string } {
