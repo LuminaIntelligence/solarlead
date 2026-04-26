@@ -21,6 +21,7 @@ jobs:
         run: |
           ssh solarlead@${{ secrets.SERVER_HOST }} "
             cd /opt/solarlead &&
+            git checkout -- package.json package-lock.json &&
             git pull origin master &&
             npm install &&
             rm -rf .next &&
