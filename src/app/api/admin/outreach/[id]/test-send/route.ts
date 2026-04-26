@@ -63,11 +63,9 @@ export async function POST(
     templateType,
   });
 
-  // Add TEST banner to HTML
-  const testHtml = html.replace(
-    "<body",
-    `<body><div style="background:#fef3c7;border:2px dashed #f59e0b;padding:12px 16px;text-align:center;font-family:sans-serif;font-size:13px;font-weight:bold;color:#92400e;">⚠️ TEST-E-MAIL — Batch: ${batch.name} · Lead: ${job.company_name}</div>`
-  );
+  // Add TEST banner — match full opening <body ...> tag with regex to preserve its attributes
+  const banner = `<div style="background:#fef3c7;border:2px dashed #f59e0b;padding:12px 16px;text-align:center;font-family:sans-serif;font-size:13px;font-weight:bold;color:#92400e;">⚠️ TEST-E-MAIL — Batch: ${batch.name} · Lead: ${job.company_name}</div>`;
+  const testHtml = html.replace(/<body([^>]*)>/, `<body$1>${banner}`);
 
   const ok = await sendEmail({
     to,

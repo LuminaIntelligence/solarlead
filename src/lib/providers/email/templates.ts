@@ -22,6 +22,10 @@ function detectSalutation(title: string | null): "Herr" | "Frau" | "Herr/Frau" {
 function buildGreeting(contactName: string | null, contactTitle: string | null): string {
   if (!contactName) return "Guten Tag,";
   const salutation = detectSalutation(contactTitle);
+  if (salutation === "Herr/Frau") {
+    // Gender unknown — use full name without title
+    return `Guten Tag ${contactName.trim()},`;
+  }
   const lastName = contactName.trim().split(" ").slice(-1)[0];
   return `Guten Tag ${salutation} ${lastName},`;
 }
