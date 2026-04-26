@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Radar, ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, PauseCircle,
   RefreshCw, Play, Pause, ChevronLeft, ChevronRight, AlertTriangle,
-  Mail, X,
+  Mail, X, UserSearch,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -257,6 +257,8 @@ export default function DiscoveryCampaignDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showTestModal, setShowTestModal] = useState(false);
+  const [findContactsState, setFindContactsState] = useState<Record<string, "loading" | "done" | "error">>({});
+  const [findContactsResult, setFindContactsResult] = useState<Record<string, string>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async (p = page, sf = statusFilter) => {
@@ -315,6 +317,25 @@ export default function DiscoveryCampaignDetailPage() {
       setActionError(e instanceof Error ? e.message : "Fehler");
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function handleFindContacts(discoveryLeadId: string) {
+    setFindContactsState((s) => ({ ...s, [discoveryLeadId]: "loading" }));
+    setFindContactsResult((s) => ({ ...s, [discoveryLeadId]: "" }));
+    try {
+      const res = await fetch(`/api/admin/discovery/${id}/find-contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_id: discoveryLeadId }),
+      });
+      const json = await res.json();
+      setFindContactsState((s) => ({ ...s, [discoveryLeadId]: json.found > 0 ? "done" : "error" }));
+      setFindContactsResult((s) => ({ ...s, [discoveryLeadId]: json.message }));
+      if (json.found > 0) await fetchData();
+    } catch {
+      setFindContactsState((s) => ({ ...s, [discoveryLeadId]: "error" }));
+      setFindContactsResult((s) => ({ ...s, [discoveryLeadId]: "Netzwerkfehler" }));
     }
   }
 
@@ -665,9 +686,32 @@ export default function DiscoveryCampaignDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-500 text-xs">
-                        {contactCount > 0
-                          ? `${contactCount} Kontakt${contactCount !== 1 ? "e" : ""}`
-                          : "–"}
+                        <div className="flex items-center gap-1.5">
+                          {contactCount > 0
+                            ? <span className="text-green-600 font-medium">{contactCount} Kontakt{contactCount !== 1 ? "e" : ""}</span>
+                            : <span className="text-slate-400">–</span>
+                          }
+                          {/* Re-enrich button — only if lead has a website */}
+                          {lead.website && (
+                            <button
+                              title={findContactsResult[lead.id] || "Kontakt neu suchen"}
+                              onClick={() => handleFindContacts(lead.id)}
+                              disabled={findContactsState[lead.id] === "loading"}
+                              className={`p-0.5 rounded transition-colors ${
+                                findContactsState[lead.id] === "done"
+                                  ? "text-green-600"
+                                  : findContactsState[lead.id] === "error"
+                                  ? "text-red-400"
+                                  : "text-slate-300 hover:text-slate-600"
+                              }`}
+                            >
+                              {findContactsState[lead.id] === "loading"
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <UserSearch className="h-3 w-3" />
+                              }
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {isReady && (
