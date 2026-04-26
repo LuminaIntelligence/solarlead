@@ -98,10 +98,12 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
           solarQuality = solarResult.solar_quality;
           maxAreaM2 = solarResult.max_array_area_m2;
 
-          // Save solar assessment
-          await supabase.from("solar_assessments").insert({
+          // Save solar assessment (latitude + longitude required — NOT NULL in schema)
+          const { error: solarInsertErr } = await supabase.from("solar_assessments").insert({
             lead_id: leadId,
             provider: "google_solar",
+            latitude: dl.latitude,
+            longitude: dl.longitude,
             solar_quality: solarResult.solar_quality,
             max_array_panels_count: solarResult.max_array_panels_count,
             max_array_area_m2: solarResult.max_array_area_m2,
@@ -112,6 +114,9 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
             panel_capacity_watts: solarResult.panel_capacity_watts,
             raw_response_json: solarResult.raw_response_json,
           });
+          if (solarInsertErr) {
+            console.warn("[Enricher] solar_assessments insert failed:", solarInsertErr.message);
+          }
         }
       } catch (e) {
         console.warn("[Enricher] Solar assessment failed:", e);
