@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings } from "lucide-react";
+import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,18 @@ export default function AdminSettingsPage() {
   const [weights, setWeights] = useState<ScoringWeights>({ ...DEFAULT_WEIGHTS });
   const [savingWeights, setSavingWeights] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+
+  // Backfill solar tool
+  const [backfillStatus, setBackfillStatus] = useState<{ missing?: number; total?: number } | null>(null);
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ fixed?: number; error?: string; message?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/tools/backfill-solar")
+      .then((r) => r.json())
+      .then(setBackfillStatus)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -345,6 +357,74 @@ export default function AdminSettingsPage() {
               </Badge>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Solar Backfill Tool */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sun className="h-5 w-5 text-yellow-500" />
+            Solar-Daten Rückfüllung
+          </CardTitle>
+          <CardDescription>
+            Füllt fehlende Solar-Bewertungen aus Discovery-Daten nach — kein API-Kontingent verbraucht
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {backfillStatus && (
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+              <div className="text-sm">
+                <span className="font-medium text-slate-900">{backfillStatus.missing ?? "…"}</span>
+                <span className="text-slate-500"> von {backfillStatus.total ?? "…"} Leads fehlt Solar-Bewertung</span>
+              </div>
+              {backfillStatus.missing === 0 && (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              )}
+            </div>
+          )}
+
+          {backfillResult && (
+            <div className={`flex items-start gap-2 rounded-lg px-4 py-3 text-sm border ${
+              backfillResult.error ? "bg-red-50 border-red-200 text-red-700" : "bg-green-50 border-green-200 text-green-700"
+            }`}>
+              {backfillResult.error
+                ? <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                : <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />}
+              <span>{backfillResult.message ?? backfillResult.error}</span>
+            </div>
+          )}
+
+          <Button
+            onClick={async () => {
+              setBackfillRunning(true);
+              setBackfillResult(null);
+              try {
+                const res = await fetch("/api/admin/tools/backfill-solar", { method: "POST" });
+                const data = await res.json();
+                setBackfillResult(data);
+                // Refresh counter
+                const status = await fetch("/api/admin/tools/backfill-solar").then((r) => r.json());
+                setBackfillStatus(status);
+              } catch {
+                setBackfillResult({ error: "Netzwerkfehler" });
+              } finally {
+                setBackfillRunning(false);
+              }
+            }}
+            disabled={backfillRunning || backfillStatus?.missing === 0}
+            className="gap-2"
+          >
+            {backfillRunning ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Wird ausgeführt…</>
+            ) : (
+              <><Sun className="h-4 w-4" /> Jetzt rückfüllen ({backfillStatus?.missing ?? "…"} Leads)</>
+            )}
+          </Button>
+          <p className="text-xs text-slate-400">
+            Kopiert Dachfläche und Solarqualität aus Discovery-Kampagnen. Detailwerte (Panele, Jahresenergie)
+            können danach pro Lead über „Solar-Analyse durchführen" nachgeladen werden.
+          </p>
         </CardContent>
       </Card>
     </div>
