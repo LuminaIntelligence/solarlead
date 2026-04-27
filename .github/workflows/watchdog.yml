@@ -1,0 +1,32 @@
+name: Watchdog Cron
+
+on:
+  schedule:
+    # Every 10 minutes
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run watchdog
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/watchdog")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Watchdog failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          # Parse and display key metrics
+          FIXED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"fixed_campaigns={d.get('fixed_campaigns',0)}, reset_leads={d.get('reset_enriching_leads',0)}, queued={d.get('queued_orphaned_leads',0)}\")" 2>/dev/null || echo "parse error")
+          echo "Results: $FIXED"
