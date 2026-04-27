@@ -66,13 +66,19 @@ export async function POST(
 
       // Try to fetch a contact from the linked solar_lead_mass
       if (dl.lead_id) {
-        const { data: contact } = await supabase
+        // Prefer contacts with a title (named person) over generic office entries
+        const { data: contacts } = await supabase
           .from("lead_contacts")
           .select("name, title")
           .eq("lead_id", dl.lead_id)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .not("email", "is", null);
+
+        const contact = contacts?.sort((a, b) => {
+          // Named person with title comes first
+          const aScore = (a.title ? 2 : 0) + (a.name && !a.name.toLowerCase().includes("stelle") && !a.name.toLowerCase().includes("büro") ? 1 : 0);
+          const bScore = (b.title ? 2 : 0) + (b.name && !b.name.toLowerCase().includes("stelle") && !b.name.toLowerCase().includes("büro") ? 1 : 0);
+          return bScore - aScore;
+        })?.[0] ?? null;
 
         if (contact) {
           contactName = contact.name;
