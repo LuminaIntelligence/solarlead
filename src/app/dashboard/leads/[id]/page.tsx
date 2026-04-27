@@ -243,7 +243,7 @@ export default async function LeadDetailPage({
   const contactsData = lead.lead_contacts ?? [];
   const activitiesData = lead.lead_activities ?? [];
 
-  const scoring: ScoringBreakdown = calculateScore({
+  const calculatedScoring = calculateScore({
     category: lead.category,
     solarData: solarData
       ? {
@@ -263,6 +263,17 @@ export default async function LeadDetailPage({
     hasPhone: !!lead.phone,
     hasEmail: !!lead.email,
   });
+
+  // Use stored scores if available (may have been manually overridden),
+  // fall back to live calculation for explanations/labels
+  const scoring: ScoringBreakdown = {
+    ...calculatedScoring,
+    total_score: lead.total_score ?? calculatedScoring.total_score,
+    business_score: lead.business_score ?? calculatedScoring.business_score,
+    electricity_score: lead.electricity_score ?? calculatedScoring.electricity_score,
+    solar_score: lead.solar_score ?? calculatedScoring.solar_score,
+    outreach_score: lead.outreach_score ?? calculatedScoring.outreach_score,
+  };
 
   const outreachNotes = generateOutreachNotes(
     { company_name: lead.company_name, category: lead.category, city: lead.city },
