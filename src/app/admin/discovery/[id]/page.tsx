@@ -770,8 +770,18 @@ export default function DiscoveryCampaignDetailPage() {
                       <td className="px-4 py-3">
                         <LeadStatusBadge status={lead.status} />
                       </td>
-                      <td className="px-4 py-3 text-slate-900 font-medium max-w-[180px] truncate">
-                        {lead.company_name ?? lead.place_name ?? "–"}
+                      <td className="px-4 py-3 font-medium max-w-[180px] truncate">
+                        {lead.lead_id ? (
+                          <Link
+                            href={`/dashboard/leads/${lead.lead_id}`}
+                            target="_blank"
+                            className="text-[#1F3D2E] hover:text-[#B2D082] hover:underline transition-colors"
+                          >
+                            {lead.company_name ?? lead.place_name ?? "–"}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-900">{lead.company_name ?? lead.place_name ?? "–"}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-500">{lead.city ?? "–"}</td>
                       <td className="px-4 py-3 text-slate-500 capitalize">
