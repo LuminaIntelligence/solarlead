@@ -76,17 +76,7 @@ export async function POST(
     } catch (e) { console.warn("[FindContacts] Apollo failed:", e); }
   }
 
-  // ── Stage 2: Hunter.io ─────────────────────────────────────────────────────
-  if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
-    try {
-      const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
-      const result = await hunter.findContacts(contactQuery);
-      const valid = result.contacts.filter((c) => c.email);
-      if (valid.length > 0) { contacts = valid; source = "hunter"; }
-    } catch (e) { console.warn("[FindContacts] Hunter failed:", e); }
-  }
-
-  // ── Stage 3: Impressum-Scraper ─────────────────────────────────────────────
+  // ── Stage 2: Impressum-Scraper ─────────────────────────────────────────────
   if (contacts.length === 0) {
     try {
       const scraper = new ImpressumScraperProvider();
@@ -94,6 +84,16 @@ export async function POST(
       const valid = result.contacts.filter((c) => c.email || c.phone);
       if (valid.length > 0) { contacts = valid; source = "impressum"; }
     } catch (e) { console.warn("[FindContacts] Impressum-Scraper failed:", e); }
+  }
+
+  // ── Stage 3: Hunter.io ─────────────────────────────────────────────────────
+  if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
+    try {
+      const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
+      const result = await hunter.findContacts(contactQuery);
+      const valid = result.contacts.filter((c) => c.email);
+      if (valid.length > 0) { contacts = valid; source = "hunter"; }
+    } catch (e) { console.warn("[FindContacts] Hunter failed:", e); }
   }
 
   // ── Stage 4: Firecrawl (JS-Rendering) ──────────────────────────────────────

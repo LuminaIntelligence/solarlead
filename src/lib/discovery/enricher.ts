@@ -156,7 +156,7 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
       : null;
 
     if (domain) {
-      // ── Contact pipeline: Apollo → Hunter → Impressum → Firecrawl ──────────
+      // ── Contact pipeline: Apollo → Impressum → Hunter → Firecrawl ──────────
       // Each stage only runs if the previous found nothing.
       const contactQuery = { domain, company_name: dl.company_name, city: dl.city ?? undefined };
 
@@ -194,18 +194,7 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
         } catch (e) { console.warn("[Enricher] Apollo failed:", e); }
       }
 
-      // Stage 2: Hunter.io
-      if (!hasContacts && process.env.HUNTER_API_KEY) {
-        try {
-          const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
-          const result = await hunter.findContacts(contactQuery);
-          if (await saveContacts(result.contacts, "hunter")) {
-            console.log(`[Enricher] Hunter: ${contactCount} Kontakt(e) für ${domain}`);
-          }
-        } catch (e) { console.warn("[Enricher] Hunter failed:", e); }
-      }
-
-      // Stage 3: Impressum-Scraper (kostenlos)
+      // Stage 2: Impressum-Scraper (kostenlos)
       if (!hasContacts) {
         try {
           const scraper = new ImpressumScraperProvider();
@@ -214,6 +203,17 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
             console.log(`[Enricher] Impressum-Scraper: ${contactCount} Kontakt(e) für ${domain}`);
           }
         } catch (e) { console.warn("[Enricher] Impressum-Scraper failed:", e); }
+      }
+
+      // Stage 3: Hunter.io
+      if (!hasContacts && process.env.HUNTER_API_KEY) {
+        try {
+          const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
+          const result = await hunter.findContacts(contactQuery);
+          if (await saveContacts(result.contacts, "hunter")) {
+            console.log(`[Enricher] Hunter: ${contactCount} Kontakt(e) für ${domain}`);
+          }
+        } catch (e) { console.warn("[Enricher] Hunter failed:", e); }
       }
 
       // Stage 4: Firecrawl (JS-Rendering, letzter Ausweg)
