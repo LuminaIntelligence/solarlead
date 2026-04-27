@@ -101,7 +101,13 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
           solarQuality = solarResult.solar_quality;
           maxAreaM2 = solarResult.max_array_area_m2;
 
-          // Save solar assessment (latitude + longitude required — NOT NULL in schema)
+          // Save solar assessment — delete any old partial records first to avoid duplicates
+          await supabase
+            .from("solar_assessments")
+            .delete()
+            .eq("lead_id", leadId)
+            .is("max_array_panels_count", null);
+
           const { error: solarInsertErr } = await supabase.from("solar_assessments").insert({
             lead_id: leadId,
             provider: "google_solar",

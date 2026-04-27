@@ -137,16 +137,16 @@ export async function POST(req: NextRequest) {
         raw_response_json: result.raw_response_json,
       };
 
-      if (partialIds.has(lead.id)) {
-        await adminSupabase
-          .from("solar_assessments")
-          .update({ ...assessmentData, updated_at: new Date().toISOString() })
-          .eq("lead_id", lead.id);
-      } else {
-        await adminSupabase
-          .from("solar_assessments")
-          .upsert(assessmentData, { onConflict: "lead_id" });
-      }
+      // Delete any existing incomplete records, then insert the full one
+      await adminSupabase
+        .from("solar_assessments")
+        .delete()
+        .eq("lead_id", lead.id)
+        .is("max_array_panels_count", null);
+
+      await adminSupabase
+        .from("solar_assessments")
+        .insert(assessmentData);
 
       processed++;
     } catch (e) {
