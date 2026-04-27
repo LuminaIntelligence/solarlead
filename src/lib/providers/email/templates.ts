@@ -96,7 +96,7 @@ function htmlWrap(greeting: string, bodyHtml: string): string {
 <body style="font-family: Arial, sans-serif; font-size: 15px; color: #222; max-width: 600px; margin: 0 auto; padding: 24px; line-height: 1.7;">
   <p>${greeting}</p>
   ${bodyHtml}
-  <p style="margin-top: 24px;">Mit freundlichen Grüßen</p>
+  <p style="margin-top: 24px;">Mit freundlichen Grüßen<br><br>Sebastian Trautschold</p>
   ${SIGNATURE_HTML}
   <p style="margin-top: 32px; font-size: 11px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px;">
     Wenn Sie keine weiteren E-Mails von uns erhalten möchten, antworten Sie bitte mit „Abmelden".
@@ -128,6 +128,9 @@ Wenn das für Sie grundsätzlich interessant ist, erläutere ich Ihnen das gerne
 Passt es Ihnen eher Anfang oder Ende der Woche?
 
 Mit freundlichen Grüßen
+
+Sebastian Trautschold
+
 ${SIGNATURE_TEXT}
 
 ---
@@ -168,6 +171,9 @@ Ich würde mich freuen, wenn wir ins Gespräch kommen, dazu reicht ein Kennenler
 Wann würde es bei Ihnen passen?
 
 Mit freundlichen Grüßen
+
+Sebastian Trautschold
+
 ${SIGNATURE_TEXT}
 
 ---
@@ -207,6 +213,9 @@ Gern würde ich mich hierzu einmal mit Ihnen austauschen. Wenn das für Sie grun
 Über Ihr Feedback würde ich mich freuen.
 
 Mit freundlichen Grüßen
+
+Sebastian Trautschold
+
 ${SIGNATURE_TEXT}
 
 ---
