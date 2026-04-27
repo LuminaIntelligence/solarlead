@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Radar, ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, PauseCircle,
   RefreshCw, Play, Pause, ChevronLeft, ChevronRight, AlertTriangle,
-  Mail, X, UserSearch,
+  Mail, X, UserSearch, Sun,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -253,6 +253,7 @@ export default function DiscoveryCampaignDetailPage() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  const [solarCompleteFilter, setSolarCompleteFilter] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
@@ -266,9 +267,11 @@ export default function DiscoveryCampaignDetailPage() {
   const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchData = useCallback(async (p = page, sf = statusFilter) => {
+  const fetchData = useCallback(async (p = page, sf = statusFilter, sc = solarCompleteFilter) => {
     try {
-      const res = await fetch(`/api/admin/discovery/${id}?page=${p}&status=${sf}`);
+      const params = new URLSearchParams({ page: String(p), status: sf });
+      if (sc) params.set("solar_complete", "1");
+      const res = await fetch(`/api/admin/discovery/${id}?${params.toString()}`);
       if (!res.ok) return;
       const json: ApiResponse = await res.json();
       setData(json);
@@ -277,12 +280,12 @@ export default function DiscoveryCampaignDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, page, statusFilter]);
+  }, [id, page, statusFilter, solarCompleteFilter]);
 
   useEffect(() => {
     setLoading(true);
-    fetchData(page, statusFilter);
-  }, [page, statusFilter, fetchData]);
+    fetchData(page, statusFilter, solarCompleteFilter);
+  }, [page, statusFilter, solarCompleteFilter, fetchData]);
 
   // Auto-poll while running OR while enrichment is still in progress in background
   const isEnrichmentActive = (data?.enrichmentPending ?? 0) > 0;
@@ -713,6 +716,17 @@ export default function DiscoveryCampaignDetailPage() {
                 {f.label}
               </button>
             ))}
+            <button
+              onClick={() => { setSolarCompleteFilter((v) => !v); setPage(1); setSelected(new Set()); }}
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                solarCompleteFilter
+                  ? "bg-amber-400 text-amber-900"
+                  : "bg-slate-100 text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Sun className="h-3 w-3" />
+              Vollständige Solar-Daten
+            </button>
           </div>
         </CardHeader>
 

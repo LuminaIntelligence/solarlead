@@ -17,6 +17,7 @@ export async function GET(
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const statusFilter = searchParams.get("status") ?? "";
+  const solarComplete = searchParams.get("solar_complete") === "1";
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const pageSize = 50;
 
@@ -30,6 +31,18 @@ export async function GET(
     return NextResponse.json({ error: "Kampagne nicht gefunden" }, { status: 404 });
   }
 
+  // If filtering by complete solar data, fetch qualifying lead_ids first
+  let solarCompleteLeadIds: string[] | null = null;
+  if (solarComplete) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const adminClient = createAdminClient();
+    const { data: completeAssessments } = await adminClient
+      .from("solar_assessments")
+      .select("lead_id")
+      .not("max_array_panels_count", "is", null);
+    solarCompleteLeadIds = (completeAssessments ?? []).map((a: { lead_id: string }) => a.lead_id);
+  }
+
   let leadsQuery = supabase
     .from("discovery_leads")
     .select("*", { count: "exact" })
@@ -39,6 +52,14 @@ export async function GET(
 
   if (statusFilter) {
     leadsQuery = leadsQuery.eq("status", statusFilter);
+  }
+
+  if (solarCompleteLeadIds !== null) {
+    // If no complete leads exist, use a dummy UUID to return empty results
+    const ids = solarCompleteLeadIds.length > 0
+      ? solarCompleteLeadIds
+      : ["00000000-0000-0000-0000-000000000000"];
+    leadsQuery = leadsQuery.in("lead_id", ids);
   }
 
   // Count leads still waiting for enrichment (background progress indicator)
