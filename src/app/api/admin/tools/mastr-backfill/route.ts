@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Readable } from "stream";
+import { Readable, PassThrough } from "stream";
 import unzipper from "unzipper";
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
@@ -189,7 +189,8 @@ async function runBackfill(zipUrl: string): Promise<void> {
       throw new Error(`HTTP ${response.status} beim Download`);
     }
 
-    // Download-Fortschritt verfolgen
+    // Byte-Tracking via PassThrough — NICHT .on("data") direkt auf nodeStream,
+    // da das den Stream in flowing-mode versetzt und .pipe() dann leer ankommt.
     const contentLength = Number(response.headers.get("content-length") ?? 0);
     let downloaded = 0;
 
@@ -197,7 +198,8 @@ async function runBackfill(zipUrl: string): Promise<void> {
       response.body as import("stream/web").ReadableStream,
     );
 
-    nodeStream.on("data", (chunk: Buffer) => {
+    const byteCounter = new PassThrough();
+    byteCounter.on("data", (chunk: Buffer) => {
       downloaded += chunk.length;
       job.downloadedMB = Math.round(downloaded / 1_048_576);
       job.message = `Download: ${job.downloadedMB} MB${
@@ -215,6 +217,7 @@ async function runBackfill(zipUrl: string): Promise<void> {
       let foundSolarFile = false;
 
       nodeStream
+        .pipe(byteCounter)
         .pipe(unzipper.Parse())
         .on("entry", (entry: unzipper.Entry) => {
           const fileName = entry.path;
