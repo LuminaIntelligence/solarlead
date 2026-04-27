@@ -260,6 +260,10 @@ export default function DiscoveryCampaignDetailPage() {
   const [showTestModal, setShowTestModal] = useState(false);
   const [findContactsState, setFindContactsState] = useState<Record<string, "loading" | "done" | "error">>({});
   const [findContactsResult, setFindContactsResult] = useState<Record<string, string>>({});
+  const [enrichmentResuming, setEnrichmentResuming] = useState(false);
+  const [enrichmentStuck, setEnrichmentStuck] = useState(false);
+  const lastEnrichmentPendingRef = useRef<number | null>(null);
+  const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async (p = page, sf = statusFilter) => {
@@ -295,6 +299,38 @@ export default function DiscoveryCampaignDetailPage() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [data?.campaign?.status, isEnrichmentActive, fetchData, page, statusFilter]);
+
+  // Detect stuck enrichment: if pending count hasn't changed for 90 seconds, mark as stuck
+  useEffect(() => {
+    if (!isEnrichmentActive) {
+      setEnrichmentStuck(false);
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+      return;
+    }
+    const current = data?.enrichmentPending ?? 0;
+    if (lastEnrichmentPendingRef.current !== current) {
+      // Progress made — reset timer
+      lastEnrichmentPendingRef.current = current;
+      setEnrichmentStuck(false);
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+      stuckTimerRef.current = setTimeout(() => setEnrichmentStuck(true), 90_000);
+    }
+    return () => {
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+    };
+  }, [data?.enrichmentPending, isEnrichmentActive]);
+
+  async function handleResumeEnrichment() {
+    setEnrichmentResuming(true);
+    setEnrichmentStuck(false);
+    lastEnrichmentPendingRef.current = null;
+    try {
+      await fetch(`/api/admin/discovery/${id}/enrich-pending`, { method: "POST" });
+      await fetchData();
+    } finally {
+      setEnrichmentResuming(false);
+    }
+  }
 
   async function handlePause() {
     setActionLoading(true);
@@ -571,29 +607,49 @@ export default function DiscoveryCampaignDetailPage() {
         ))}
       </div>
 
-      {/* Enrichment progress banner — shown when campaign is done but background enrichment still runs */}
+      {/* Enrichment progress banner */}
       {isEnrichmentActive && (
-        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
-          <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
+        <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+          enrichmentStuck
+            ? "border-orange-200 bg-orange-50"
+            : "border-blue-200 bg-blue-50"
+        }`}>
+          {enrichmentStuck
+            ? <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+            : <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
+          }
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-blue-800">
-              Anreicherung läuft im Hintergrund
+            <p className={`text-sm font-medium ${enrichmentStuck ? "text-orange-800" : "text-blue-800"}`}>
+              {enrichmentStuck ? "Anreicherung scheint hängen zu bleiben" : "Anreicherung läuft im Hintergrund"}
             </p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              {data.enrichmentPending} Lead{data.enrichmentPending !== 1 ? "s" : ""} werden noch angereichert
-              (Solar-Analyse, Kontaktsuche, Scoring) — die Seite aktualisiert sich automatisch.
+            <p className={`text-xs mt-0.5 ${enrichmentStuck ? "text-orange-600" : "text-blue-600"}`}>
+              {data.enrichmentPending} Lead{data.enrichmentPending !== 1 ? "s" : ""} warten noch auf Solar-Analyse, Kontaktsuche & Scoring
+              {!enrichmentStuck && " — Seite aktualisiert sich automatisch."}
             </p>
           </div>
-          {/* Mini progress bar */}
+          {/* Resume button when stuck */}
+          {enrichmentStuck && (
+            <button
+              onClick={handleResumeEnrichment}
+              disabled={enrichmentResuming}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-60"
+            >
+              {enrichmentResuming
+                ? <><Loader2 className="h-3 w-3 animate-spin" /> Wird gestartet…</>
+                : <><RefreshCw className="h-3 w-3" /> Anreicherung fortsetzen</>
+              }
+            </button>
+          )}
+          {/* Progress bar */}
           {campaign.total_discovered > 0 && (
-            <div className="shrink-0 w-32">
-              <div className="flex justify-between text-xs text-blue-500 mb-1">
+            <div className="shrink-0 w-36">
+              <div className={`flex justify-between text-xs mb-1 ${enrichmentStuck ? "text-orange-500" : "text-blue-500"}`}>
                 <span>{campaign.total_discovered - data.enrichmentPending} / {campaign.total_discovered}</span>
                 <span>{Math.round(((campaign.total_discovered - data.enrichmentPending) / campaign.total_discovered) * 100)}%</span>
               </div>
-              <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+              <div className={`h-1.5 rounded-full overflow-hidden ${enrichmentStuck ? "bg-orange-100" : "bg-blue-100"}`}>
                 <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-1000"
+                  className={`h-full rounded-full transition-all duration-1000 ${enrichmentStuck ? "bg-orange-400" : "bg-blue-500"}`}
                   style={{ width: `${Math.round(((campaign.total_discovered - data.enrichmentPending) / campaign.total_discovered) * 100)}%` }}
                 />
               </div>
