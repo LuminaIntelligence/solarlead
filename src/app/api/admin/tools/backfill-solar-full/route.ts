@@ -54,14 +54,13 @@ async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminCl
 
   if (!allLeads.length) return [];
 
-  const allIds = allLeads.map((l) => l.id);
-
-  // All assessments that have panel data (= complete) — also paginated
+  // Fetch ALL complete assessments without filtering by lead_id —
+  // passing thousands of IDs in .in() exceeds Supabase URL limits and fails silently.
   const completeAssessments = await fetchAllPages<{ lead_id: string }>(
     adminSupabase,
     "solar_assessments",
     "lead_id",
-    (q) => q.in("lead_id", allIds).not("max_array_panels_count", "is", null)
+    (q) => q.not("max_array_panels_count", "is", null)
   );
 
   const completeIds = new Set(completeAssessments.map((a) => a.lead_id));
@@ -79,13 +78,17 @@ export async function GET() {
   const incomplete = await getIncompleteLeads(adminSupabase);
 
   // Split into partial (have record but missing panels) vs. none
-  const { data: partialRecords } = await adminSupabase
-    .from("solar_assessments")
-    .select("lead_id")
-    .in("lead_id", incomplete.length > 0 ? incomplete.map((l) => l.id) : ["00000000-0000-0000-0000-000000000000"])
-    .is("max_array_panels_count", null);
-
-  const partialIds = new Set((partialRecords ?? []).map((r) => r.lead_id));
+  // Fetch ALL partial assessments without a large .in() to avoid URL length limits
+  const allPartialRecords = await fetchAllPages<{ lead_id: string }>(
+    adminSupabase,
+    "solar_assessments",
+    "lead_id",
+    (q) => q.is("max_array_panels_count", null)
+  );
+  const incompleteIdSet = new Set(incomplete.map((l) => l.id));
+  const partialIds = new Set(
+    allPartialRecords.map((r) => r.lead_id).filter((id) => incompleteIdSet.has(id))
+  );
   const partial = incomplete.filter((l) => partialIds.has(l.id)).length;
   const missing = incomplete.filter((l) => !partialIds.has(l.id)).length;
 
@@ -134,16 +137,18 @@ export async function POST(req: NextRequest) {
       if (!result || !result.max_array_panels_count) {
         // API returned no panel data — mark as failed but still count as "processed" to avoid infinite loop
         failed++;
-        // Insert a placeholder so this lead isn't retried endlessly
+        // Insert a placeholder (only if none exists yet) so this lead isn't retried endlessly.
+        // Note: solar_assessments has no UNIQUE constraint on lead_id, so we use insert not upsert.
         if (!partialIds.has(lead.id)) {
-          await adminSupabase.from("solar_assessments").upsert({
+          await adminSupabase.from("solar_assessments").insert({
             lead_id: lead.id,
             provider: "google_solar",
             latitude: lead.latitude ?? 0,
             longitude: lead.longitude ?? 0,
             solar_quality: result?.solar_quality ?? "UNKNOWN",
             max_array_area_m2: result?.max_array_area_m2 ?? null,
-          }, { onConflict: "lead_id" });
+            max_array_panels_count: null,
+          });
         }
         continue;
       }
