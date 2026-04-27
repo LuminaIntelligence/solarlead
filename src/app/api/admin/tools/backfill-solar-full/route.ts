@@ -17,27 +17,52 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
 
 const BATCH_SIZE = 10;
 
+/** Fetch all rows from a table with pagination (bypasses Supabase 1000-row default limit) */
+async function fetchAllPages<T>(
+  adminSupabase: ReturnType<typeof createAdminClient>,
+  table: string,
+  select: string,
+  filters: (q: ReturnType<ReturnType<typeof createAdminClient>["from"]>) => ReturnType<ReturnType<typeof createAdminClient>["from"]>
+): Promise<T[]> {
+  const PAGE = 1000;
+  const results: T[] = [];
+  let offset = 0;
+  while (true) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q = (adminSupabase.from(table) as any).select(select).range(offset, offset + PAGE - 1);
+    q = filters(q);
+    const { data, error } = await q;
+    if (error || !data?.length) break;
+    results.push(...data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return results;
+}
+
 /** Returns all lead IDs that still need full solar data */
 async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminClient>) {
-  // All leads with coordinates
-  const { data: allLeads } = await adminSupabase
-    .from("solar_lead_mass")
-    .select("id, latitude, longitude")
-    .not("latitude", "is", null)
-    .not("longitude", "is", null);
+  // All leads with coordinates — paginated to get past 1000-row limit
+  const allLeads = await fetchAllPages<{ id: string; latitude: number; longitude: number }>(
+    adminSupabase,
+    "solar_lead_mass",
+    "id, latitude, longitude",
+    (q) => q.not("latitude", "is", null).not("longitude", "is", null)
+  );
 
-  if (!allLeads?.length) return [];
+  if (!allLeads.length) return [];
 
   const allIds = allLeads.map((l) => l.id);
 
-  // All assessments that have panel data (= complete)
-  const { data: completeAssessments } = await adminSupabase
-    .from("solar_assessments")
-    .select("lead_id")
-    .in("lead_id", allIds)
-    .not("max_array_panels_count", "is", null);
+  // All assessments that have panel data (= complete) — also paginated
+  const completeAssessments = await fetchAllPages<{ lead_id: string }>(
+    adminSupabase,
+    "solar_assessments",
+    "lead_id",
+    (q) => q.in("lead_id", allIds).not("max_array_panels_count", "is", null)
+  );
 
-  const completeIds = new Set((completeAssessments ?? []).map((a) => a.lead_id));
+  const completeIds = new Set(completeAssessments.map((a) => a.lead_id));
 
   // Return leads that are NOT complete
   return allLeads.filter((l) => !completeIds.has(l.id));
