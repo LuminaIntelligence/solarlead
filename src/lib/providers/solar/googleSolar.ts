@@ -40,7 +40,7 @@ export class GoogleSolarProvider implements SolarProvider {
       const params = new URLSearchParams({
         "location.latitude": query.latitude.toString(),
         "location.longitude": query.longitude.toString(),
-        requiredQuality: "MEDIUM",
+        requiredQuality: "LOW",
         key: this.apiKey,
       });
 

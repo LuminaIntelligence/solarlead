@@ -54,21 +54,19 @@ async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminCl
 
   if (!allLeads.length) return [];
 
-  // Fetch ALL assessment records (complete OR placeholder).
-  // Any record means the lead has already been attempted — we skip it to avoid
-  // infinite retries on leads where Google has no coverage.
-  // Leads that failed due to a network error (no record saved) will be retried naturally.
-  const allAssessments = await fetchAllPages<{ lead_id: string }>(
+  // Only leads with COMPLETE assessments (max_array_panels_count NOT NULL) are done.
+  // Leads with placeholder records (null panels) should be retried — Google may now
+  // return data with lower quality requirements.
+  const completeAssessments = await fetchAllPages<{ lead_id: string }>(
     adminSupabase,
     "solar_assessments",
     "lead_id",
-    (q) => q  // no filter — all records
+    (q) => q.not("max_array_panels_count", "is", null)
   );
 
-  const attemptedIds = new Set(allAssessments.map((a) => a.lead_id));
+  const completeIds = new Set(completeAssessments.map((a) => a.lead_id));
 
-  // Only return leads that have never been attempted
-  return allLeads.filter((l) => !attemptedIds.has(l.id));
+  return allLeads.filter((l) => !completeIds.has(l.id));
 }
 
 export async function GET() {
@@ -95,6 +93,22 @@ export async function GET() {
   const missing = incomplete.filter((l) => !partialIds.has(l.id)).length;
 
   return NextResponse.json({ partial, missing, total: incomplete.length });
+}
+
+/** DELETE — clears all placeholder records (null panels) so they re-enter the queue */
+export async function DELETE() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const adminSupabase = createAdminClient();
+  const { error, count } = await adminSupabase
+    .from("solar_assessments")
+    .delete({ count: "exact" })
+    .is("max_array_panels_count", null);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ deleted: count ?? 0 });
 }
 
 export async function POST(req: NextRequest) {
@@ -137,21 +151,10 @@ export async function POST(req: NextRequest) {
       const result = await provider.assess({ latitude: lead.latitude as number, longitude: lead.longitude as number });
 
       if (!result || !result.max_array_panels_count) {
-        // API returned no panel data — mark as failed but still count as "processed" to avoid infinite loop
+        // API returned no panel data for this location (no coverage at LOW quality).
+        // Count as failed, but do NOT insert a placeholder — leads without complete
+        // data should remain in the queue so they can be retried after API changes.
         failed++;
-        // Insert a placeholder (only if none exists yet) so this lead isn't retried endlessly.
-        // Note: solar_assessments has no UNIQUE constraint on lead_id, so we use insert not upsert.
-        if (!partialIds.has(lead.id)) {
-          await adminSupabase.from("solar_assessments").insert({
-            lead_id: lead.id,
-            provider: "google_solar",
-            latitude: lead.latitude ?? 0,
-            longitude: lead.longitude ?? 0,
-            solar_quality: result?.solar_quality ?? "UNKNOWN",
-            max_array_area_m2: result?.max_array_area_m2 ?? null,
-            max_array_panels_count: null,
-          });
-        }
         continue;
       }
 

@@ -48,6 +48,7 @@ export default function AdminSettingsPage() {
   // Full solar backfill (calls Google Solar API)
   const [solarFullStatus, setSolarFullStatus] = useState<{ partial?: number; missing?: number; total?: number } | null>(null);
   const [solarFullRunning, setSolarFullRunning] = useState(false);
+  const [solarFullResetting, setSolarFullResetting] = useState(false);
   const [solarFullProgress, setSolarFullProgress] = useState<{ processed: number; failed: number; remaining: number } | null>(null);
   const [solarFullDone, setSolarFullDone] = useState(false);
 
@@ -537,50 +538,80 @@ export default function AdminSettingsPage() {
             </div>
           )}
 
-          <Button
-            onClick={async () => {
-              setSolarFullRunning(true);
-              setSolarFullDone(false);
-              setSolarFullProgress(null);
-              let offset = 0;
-              let totalProcessed = 0;
-              let totalFailed = 0;
-              try {
-                while (true) {
-                  const res = await fetch("/api/admin/tools/backfill-solar-full", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ offset }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) break;
-                  totalProcessed += data.processed ?? 0;
-                  totalFailed += data.failed ?? 0;
-                  setSolarFullProgress({ processed: totalProcessed, failed: totalFailed, remaining: data.remaining ?? 0 });
-                  if ((data.remaining ?? 0) === 0 || (data.processed ?? 0) === 0) break;
-                  offset += data.processed;
-                  await new Promise((r) => setTimeout(r, 500));
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              onClick={async () => {
+                setSolarFullRunning(true);
+                setSolarFullDone(false);
+                setSolarFullProgress(null);
+                let totalProcessed = 0;
+                let totalFailed = 0;
+                let consecutiveAllFailed = 0;
+                try {
+                  while (true) {
+                    const res = await fetch("/api/admin/tools/backfill-solar-full", { method: "POST" });
+                    const data = await res.json();
+                    if (!res.ok) break;
+                    totalProcessed += data.processed ?? 0;
+                    totalFailed += data.failed ?? 0;
+                    setSolarFullProgress({ processed: totalProcessed, failed: totalFailed, remaining: data.remaining ?? 0 });
+                    if ((data.remaining ?? 0) === 0) break;
+                    // If a whole batch had 0 processed AND 0 failed (no leads found), stop
+                    if ((data.processed ?? 0) === 0 && (data.failed ?? 0) === 0) break;
+                    // Allow up to 3 consecutive all-failed batches, then stop to avoid infinite loop
+                    if ((data.processed ?? 0) === 0) {
+                      consecutiveAllFailed++;
+                      if (consecutiveAllFailed >= 3) break;
+                    } else {
+                      consecutiveAllFailed = 0;
+                    }
+                    await new Promise((r) => setTimeout(r, 500));
+                  }
+                  setSolarFullDone(true);
+                  const status = await fetch("/api/admin/tools/backfill-solar-full").then((r) => r.json());
+                  setSolarFullStatus(status);
+                } catch {
+                  // keep progress shown
+                } finally {
+                  setSolarFullRunning(false);
                 }
-                setSolarFullDone(true);
-                const status = await fetch("/api/admin/tools/backfill-solar-full").then((r) => r.json());
-                setSolarFullStatus(status);
-              } catch {
-                // keep progress shown
-              } finally {
-                setSolarFullRunning(false);
+              }}
+              disabled={solarFullRunning || solarFullResetting || solarFullStatus?.total === 0}
+              className="gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {solarFullRunning ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Wird geladen… ({solarFullProgress?.processed ?? 0} fertig)</>
+              ) : (
+                <><Sun className="h-4 w-4" /> Solar-Detaildaten nachladen ({solarFullStatus?.total ?? "…"} Leads)</>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!confirm("Alle Placeholder-Einträge (gescheiterte Versuche) löschen und Backfill neu starten?")) return;
+                setSolarFullResetting(true);
+                try {
+                  await fetch("/api/admin/tools/backfill-solar-full", { method: "DELETE" });
+                  const status = await fetch("/api/admin/tools/backfill-solar-full").then((r) => r.json());
+                  setSolarFullStatus(status);
+                  setSolarFullProgress(null);
+                  setSolarFullDone(false);
+                } finally {
+                  setSolarFullResetting(false);
+                }
+              }}
+              disabled={solarFullRunning || solarFullResetting}
+              className="gap-2 border-slate-300 text-slate-600"
+              title="Löscht alle Placeholder-Einträge (Leads ohne Paneldaten) damit sie nochmals versucht werden"
+            >
+              {solarFullResetting
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Wird zurückgesetzt…</>
+                : <><RotateCcw className="h-4 w-4" /> Fehlgeschlagene zurücksetzen</>
               }
-            }}
-            disabled={solarFullRunning || solarFullStatus?.total === 0}
-            className="gap-2 bg-orange-600 hover:bg-orange-700 text-white"
-          >
-            {solarFullRunning ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Wird geladen… ({solarFullProgress?.processed ?? 0} fertig)</>
-            ) : (
-              <><Sun className="h-4 w-4" /> Solar-Detaildaten nachladen ({solarFullStatus?.total ?? "…"} Leads)</>
-            )}
-          </Button>
+            </Button>
+          </div>
           <p className="text-xs text-slate-400">
-            Verarbeitet je 10 Leads pro API-Batch. Kann mehrere Minuten dauern je nach Anzahl.
+            Verarbeitet je 10 Leads pro API-Batch. &quot;Fehlgeschlagene zurücksetzen&quot; löscht Placeholder-Einträge damit alle Leads nochmals versucht werden.
           </p>
         </CardContent>
       </Card>
