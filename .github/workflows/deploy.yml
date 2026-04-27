@@ -17,6 +17,16 @@ jobs:
       - name: Add server to known hosts
         run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Sync secrets to server
+        run: |
+          ssh solarlead@${{ secrets.SERVER_HOST }} "
+            cd /opt/solarlead &&
+            grep -q '^CRON_SECRET=' .env.local 2>/dev/null \
+              && sed -i 's|^CRON_SECRET=.*|CRON_SECRET=${{ secrets.CRON_SECRET }}|' .env.local \
+              || echo 'CRON_SECRET=${{ secrets.CRON_SECRET }}' >> .env.local &&
+            echo 'Secrets synchronisiert'
+          "
+
       - name: Deploy via SSH
         run: |
           ssh solarlead@${{ secrets.SERVER_HOST }} "
