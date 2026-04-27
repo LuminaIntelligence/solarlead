@@ -1,7 +1,10 @@
 /**
  * Discovery Campaign Engine
- * Orchestrates Google Places search across all area × category combinations,
- * deduplicates against existing leads, and triggers enrichment per discovered lead.
+ * Phase 1: Orchestrates Google Places search across all area × category combinations,
+ *           deduplicates, inserts discovery_leads as "pending_enrichment".
+ * Phase 2: Enrichment is triggered separately per lead (not blocking the discovery loop).
+ *
+ * This decoupling prevents a slow enrichment from blocking the campaign completion.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GooglePlacesProvider } from "@/lib/providers/search/googlePlaces";
@@ -10,8 +13,8 @@ import type { DiscoveryCampaignArea } from "@/types/database";
 
 // Delay between Google Places calls to respect rate limits
 const PLACES_DELAY_MS = 600;
-// Delay between enrichment calls (Solar + Apollo)
-const ENRICH_DELAY_MS = 1500;
+// Heartbeat: update campaign updated_at every N area/category combinations
+const HEARTBEAT_EVERY = 5;
 
 export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
   const supabase = createAdminClient();
@@ -61,7 +64,7 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
       (existingDL ?? []).map((r: { place_id: string }) => r.place_id).filter(Boolean)
     );
 
-    // ── Dedup set 2: place_ids already in solar_lead_mass (global, cross-campaign)
+    // ── Dedup set 2: place_ids already in solar_lead_mass (global)
     const { data: existingLeads } = await supabase
       .from("solar_lead_mass")
       .select("place_id")
@@ -71,10 +74,7 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
       (existingLeads ?? []).map((r: { place_id: string }) => r.place_id).filter(Boolean)
     );
 
-    // ── Dedup set 3: PLZ + category combinations already processed in this campaign.
-    // Key format: "{postal_code}:{category}"
-    // When circles overlap, a PLZ that has already yielded results for a given
-    // category is skipped — avoiding redundant API processing of the same area.
+    // ── Dedup set 3: PLZ + category already processed
     const processedPlzCats = new Set<string>(
       (existingDL ?? [])
         .filter((r: { postal_code: string | null; category: string }) => r.postal_code && r.category)
@@ -83,20 +83,29 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
 
     let totalDiscovered = 0;
     let totalDuplicates = 0;
+    let iterationCount = 0;
 
-    // Iterate area × category
+    // ── Phase 1: Discover all places (fast — no enrichment here) ─────────────
     for (const area of areas) {
       for (const category of categories) {
+        iterationCount++;
         const label = area.type === "radius"
           ? `${area.value} (${area.radius_km} km)`
           : area.value;
+
+        // Heartbeat every N iterations so the UI sees progress
+        if (iterationCount % HEARTBEAT_EVERY === 0) {
+          await supabase
+            .from("discovery_campaigns")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", campaignId);
+        }
 
         console.log(`[Engine] Searching: ${label} / ${category}`);
 
         try {
           let results;
           if (area.type === "radius" && area.lat != null && area.lng != null && area.radius_km != null) {
-            // Coordinate-based search — covers all towns within radius incl. small ones
             results = await placesProvider.searchByCoords(
               area.lat,
               area.lng,
@@ -107,7 +116,6 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
               3
             );
           } else {
-            // Legacy city-name search
             results = await placesProvider.searchCategoryPaginated(
               area.value,
               "DE",
@@ -122,17 +130,11 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
           for (const result of results) {
             const placeId = result.place_id ?? null;
 
-            // ── Check 1: place_id dedup (exact same business)
-            if (placeId) {
-              if (globalPlaceIds.has(placeId) || campaignPlaceIds.has(placeId)) {
-                totalDuplicates++;
-                continue;
-              }
+            if (placeId && (globalPlaceIds.has(placeId) || campaignPlaceIds.has(placeId))) {
+              totalDuplicates++;
+              continue;
             }
 
-            // ── Check 2: PLZ + category dedup (overlapping circles)
-            // If this PLZ was already covered for this category by a previous circle,
-            // skip — we've already found the businesses there.
             if (result.postal_code) {
               const plzKey = `${result.postal_code}:${category}`;
               if (processedPlzCats.has(plzKey)) {
@@ -141,7 +143,6 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
               }
             }
 
-            // Mark place_id as seen
             if (placeId) {
               campaignPlaceIds.add(placeId);
               globalPlaceIds.add(placeId);
@@ -164,14 +165,12 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
             });
           }
 
-          // Register PLZs of accepted leads so overlapping circles skip them
           for (const lead of newLeads) {
             if (lead.postal_code) {
               processedPlzCats.add(`${lead.postal_code}:${category}`);
             }
           }
 
-          // Batch insert new discovery leads
           if (newLeads.length > 0) {
             const { data: inserted } = await supabase
               .from("discovery_leads")
@@ -181,7 +180,7 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
             const insertedCount = inserted?.length ?? 0;
             totalDiscovered += insertedCount;
 
-            // Update campaign counter
+            // Update counter
             const { data: camp } = await supabase
               .from("discovery_campaigns")
               .select("total_discovered, total_duplicates")
@@ -197,24 +196,34 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
               })
               .eq("id", campaignId);
 
-            totalDuplicates = 0; // reset for next batch
+            totalDuplicates = 0;
 
-            // Enrich each new lead
-            for (const insertedLead of inserted ?? []) {
-              await enrichDiscoveryLead(insertedLead.id);
-              await new Promise((r) => setTimeout(r, ENRICH_DELAY_MS));
-            }
+            // ── Phase 2: Enrich each new lead in background (non-blocking) ──
+            // Fire-and-forget with a small stagger to avoid API flood
+            const leadsToEnrich = inserted ?? [];
+            (async () => {
+              for (let i = 0; i < leadsToEnrich.length; i++) {
+                try {
+                  await enrichDiscoveryLead(leadsToEnrich[i].id);
+                } catch (e) {
+                  console.warn(`[Engine] Enrichment failed for ${leadsToEnrich[i].id}:`, e);
+                }
+                // Stagger: 2s between enrichments to avoid API flood
+                if (i < leadsToEnrich.length - 1) {
+                  await new Promise((r) => setTimeout(r, 2000));
+                }
+              }
+            })();
           }
         } catch (searchErr) {
           console.error(`[Engine] Search failed for ${label}/${category}:`, searchErr);
         }
 
-        // Pause between searches
         await new Promise((r) => setTimeout(r, PLACES_DELAY_MS));
       }
     }
 
-    // Mark completed
+    // ── Phase 1 complete: all places discovered ───────────────────────────────
     await supabase
       .from("discovery_campaigns")
       .update({
@@ -224,7 +233,7 @@ export async function runDiscoveryCampaign(campaignId: string): Promise<void> {
       })
       .eq("id", campaignId);
 
-    console.log(`[Engine] Campaign ${campaignId} completed. Discovered: ${totalDiscovered}`);
+    console.log(`[Engine] Campaign ${campaignId} discovery completed. Discovered: ${totalDiscovered}`);
   } catch (err) {
     console.error("[Engine] Campaign failed:", err);
     await failCampaign(

@@ -206,7 +206,7 @@ function extractName(html: string, email: string): string | null {
   return null;
 }
 
-async function fetchPage(url: string, timeoutMs = 10000): Promise<string | null> {
+async function fetchPage(url: string, timeoutMs = 5000): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

@@ -320,6 +320,12 @@ export default function DiscoveryCampaignDetailPage() {
     }
   }
 
+  async function handleForceComplete() {
+    if (!confirm("Kampagne als abgeschlossen markieren?")) return;
+    await fetch(`/api/admin/discovery/${id}/force-complete`, { method: "POST" });
+    await fetchData();
+  }
+
   async function handleFindContacts(discoveryLeadId: string) {
     setFindContactsState((s) => ({ ...s, [discoveryLeadId]: "loading" }));
     setFindContactsResult((s) => ({ ...s, [discoveryLeadId]: "" }));
@@ -473,16 +479,29 @@ export default function DiscoveryCampaignDetailPage() {
             Test-E-Mail
           </Button>
           {campaign.status === "running" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePause}
-              disabled={actionLoading}
-              className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
-            >
-              <Pause className="h-3.5 w-3.5 mr-1" />
-              Pausieren
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePause}
+                disabled={actionLoading}
+                className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+              >
+                <Pause className="h-3.5 w-3.5 mr-1" />
+                Pausieren
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleForceComplete}
+                disabled={actionLoading}
+                title="Kampagne manuell als abgeschlossen markieren (z.B. wenn der Prozess hängt)"
+                className="border-slate-300 text-slate-600 hover:bg-slate-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                Beenden
+              </Button>
+            </>
           )}
           {(campaign.status === "paused" || campaign.status === "failed") && (
             <Button
