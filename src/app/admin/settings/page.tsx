@@ -878,31 +878,41 @@ export default function AdminSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
 
-          {/* URL-Eingabe */}
-          <div className="space-y-1.5">
-            <Label htmlFor="mastr-url" className="text-sm">
-              Download-URL (optional — wird automatisch erkannt)
-            </Label>
-            <Input
-              id="mastr-url"
-              placeholder="https://download.marktstammdatenregister.de/Gesamtdatenexport_…zip"
-              value={mastrUrl}
-              onChange={(e) => setMastrUrl(e.target.value)}
-              className="font-mono text-xs"
-            />
-            <p className="text-xs text-slate-400">
-              URL von{" "}
-              <a
-                href="https://www.marktstammdatenregister.de/MaStR/Datendownload"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
-              >
-                marktstammdatenregister.de/MaStR/Datendownload
+          {/* Empfohlener Weg: lokale Datei per SCP */}
+          <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800 space-y-1">
+            <p className="font-medium">⚡ Empfohlen: ZIP lokal herunterladen und per SCP hochladen</p>
+            <p className="text-xs text-blue-600">
+              1. ZIP lokal laden:{" "}
+              <a href="https://www.marktstammdatenregister.de/MaStR/Datendownload" target="_blank" rel="noopener noreferrer" className="underline">
+                marktstammdatenregister.de
               </a>
-              {" "}— leer lassen für automatische Erkennung.
+              {" "}→ Gesamtdatenexport (~585 MB)
+            </p>
+            <p className="text-xs text-blue-600 font-mono">
+              2. scp Gesamtdatenexport.zip solarlead@SERVERIP:/tmp/mastr.zip
+            </p>
+            <p className="text-xs text-blue-600">
+              3. Pfad unten eintragen: <span className="font-mono">/tmp/mastr.zip</span>
             </p>
           </div>
+
+          {/* Lokaler Pfad (nach SCP) */}
+          <div className="space-y-1.5">
+            <Label htmlFor="mastr-local" className="text-sm font-medium">Lokaler Pfad auf dem Server</Label>
+            <Input
+              id="mastr-local"
+              placeholder="/tmp/mastr.zip"
+              value={mastrUrl}
+              onChange={(e) => setMastrUrl(e.target.value)}
+              className="font-mono text-sm"
+            />
+          </div>
+
+          {/* Fallback: URL */}
+          <details className="text-xs text-slate-400">
+            <summary className="cursor-pointer hover:text-slate-600">Alternativ: Direkt-Download (langsam, ~1 MB/min)</summary>
+            <p className="mt-1">Feld leer lassen für automatische URL-Erkennung, oder URL von marktstammdatenregister.de einfügen.</p>
+          </details>
 
           {/* Job-Status */}
           {mastrJob && mastrJob.status !== "idle" && (
@@ -967,7 +977,11 @@ export default function AdminSettingsPage() {
                 const res = await fetch("/api/admin/tools/mastr-backfill", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ url: mastrUrl.trim() || undefined }),
+                  body: JSON.stringify(
+                    mastrUrl.trim().startsWith("/") || mastrUrl.trim().startsWith("C:")
+                      ? { localPath: mastrUrl.trim() }
+                      : { url: mastrUrl.trim() || undefined }
+                  ),
                 });
                 const data = await res.json();
                 if (!res.ok) {
