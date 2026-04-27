@@ -40,8 +40,11 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/reset-password") ||
     request.nextUrl.pathname.startsWith("/auth/callback");
 
+  // Cron endpoints authenticate via x-cron-secret header — never redirect
+  const isCronRoute = request.nextUrl.pathname.startsWith("/api/cron/");
+
   // Protect dashboard and admin routes
-  if (!user && !isAuthPage && request.nextUrl.pathname !== "/") {
+  if (!user && !isAuthPage && !isCronRoute && request.nextUrl.pathname !== "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
