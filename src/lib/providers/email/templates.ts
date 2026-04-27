@@ -53,15 +53,25 @@ Utechter Str. 5
 19217 Utecht`;
 
 const SIGNATURE_HTML = `
-<table style="margin-top: 24px; border-top: 2px solid #6B8F47; padding-top: 16px;">
+<table style="margin-top: 24px; border-top: 2px solid #1F3D2E; padding-top: 0; width: 100%; border-collapse: collapse;">
   <tr>
-    <td style="font-size: 14px; color: #222; line-height: 1.7;">
+    <td style="background-color: #1F3D2E; padding: 12px 16px; border-radius: 4px 4px 0 0;" colspan="2">
+      <a href="https://www.greenscout-ev.de" target="_blank" style="text-decoration: none;">
+        <img src="https://greenscout-ev.de/wp-content/uploads/2025/10/greenscout_logo_white.png"
+             alt="GreenScout e.V."
+             height="36"
+             style="display: block; height: 36px; width: auto;" />
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td style="font-size: 14px; color: #222; line-height: 1.7; padding-top: 14px;">
       Herzliche Grüße<br>
       <strong>Sebastian Trautschold</strong><br>
       Vorstand<br><br>
       Telefon: 038875 169780<br>
-      E-Mail: <a href="mailto:sebastian.trautschold@greenscout-ev.de" style="color: #6B8F47;">sebastian.trautschold@greenscout-ev.de</a><br>
-      Internet: <a href="https://www.greenscout-ev.de" style="color: #6B8F47;">https://www.greenscout-ev.de</a><br><br>
+      E-Mail: <a href="mailto:sebastian.trautschold@greenscout-ev.de" style="color: #1F3D2E;">sebastian.trautschold@greenscout-ev.de</a><br>
+      Internet: <a href="https://www.greenscout-ev.de" style="color: #1F3D2E;">https://www.greenscout-ev.de</a><br><br>
       <strong>GreenScout e.V.</strong><br>
       Utechter Str. 5 · 19217 Utecht
     </td>
