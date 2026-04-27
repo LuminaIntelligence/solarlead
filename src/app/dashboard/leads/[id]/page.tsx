@@ -39,6 +39,7 @@ import { LeadContacts } from "@/components/leads/lead-contacts";
 import { LeadActivities } from "@/components/leads/lead-activities";
 import { LeadCrmSidebar } from "@/components/leads/lead-crm-sidebar";
 import { GreenScoutEmailTemplates } from "@/components/leads/greenscout-email-templates";
+import { ExistingSolarButton } from "@/components/leads/existing-solar-button";
 
 const CATEGORY_LABELS: Record<string, string> = {
   logistics: "Logistik",
@@ -766,11 +767,20 @@ export default async function LeadDetailPage({
             <CardHeader>
               <CardTitle className="text-lg">Status</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <LeadStatusEditor
                 leadId={lead.id}
                 currentStatus={lead.status}
               />
+              {lead.status !== "existing_solar" && (
+                <ExistingSolarButton leadId={lead.id} />
+              )}
+              {lead.status === "existing_solar" && (
+                <div className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-sm text-orange-700">
+                  <Sun className="h-4 w-4 shrink-0" />
+                  Bereits Solar vorhanden — wird aus Kampagnen ausgeschlossen
+                </div>
+              )}
             </CardContent>
           </Card>
 

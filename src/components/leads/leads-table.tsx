@@ -21,6 +21,7 @@ const statusColors: Record<LeadStatus, string> = {
   contacted: "bg-purple-100 text-purple-800",
   qualified: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
+  existing_solar: "bg-orange-100 text-orange-800",
 };
 
 function getScoreBarColor(score: number): string {
@@ -35,6 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   contacted: "Kontaktiert",
   qualified: "Qualifiziert",
   rejected: "Abgelehnt",
+  existing_solar: "☀️ Bereits Solar",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {

@@ -18,6 +18,7 @@ const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "contacted", label: "Kontaktiert" },
   { value: "qualified", label: "Qualifiziert" },
   { value: "rejected", label: "Abgelehnt" },
+  { value: "existing_solar", label: "☀️ Bereits Solar vorhanden" },
 ];
 
 interface LeadStatusEditorProps {

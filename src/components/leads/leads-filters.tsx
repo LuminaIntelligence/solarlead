@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const STATUSES = ["new", "reviewed", "contacted", "qualified", "rejected"];
+const STATUSES = ["new", "reviewed", "contacted", "qualified", "rejected", "existing_solar"];
 
 const CATEGORIES = [
   "logistics",
@@ -36,6 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   contacted: "Kontaktiert",
   qualified: "Qualifiziert",
   rejected: "Abgelehnt",
+  existing_solar: "☀️ Bereits Solar",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {

@@ -1,6 +1,6 @@
 export type UserRole = "admin" | "user";
 
-export type LeadStatus = "new" | "reviewed" | "contacted" | "qualified" | "rejected";
+export type LeadStatus = "new" | "reviewed" | "contacted" | "qualified" | "rejected" | "existing_solar";
 export type LeadSource = "google_places" | "csv_import" | "manual";
 
 export interface Lead {

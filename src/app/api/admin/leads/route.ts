@@ -31,12 +31,23 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
     const category = searchParams.get("category") || "";
+    const solarComplete = searchParams.get("solar_complete") === "1";
+
+    // If filtering by complete solar data: get lead_ids from solar_assessments first
+    let solarCompleteIds: Set<string> | null = null;
+    if (solarComplete) {
+      const { data: completeAssessments } = await adminClient
+        .from("solar_assessments")
+        .select("lead_id")
+        .not("max_array_panels_count", "is", null);
+      solarCompleteIds = new Set((completeAssessments ?? []).map((a) => a.lead_id));
+    }
 
     // Leads abfragen
     let query = adminClient
       .from("solar_lead_mass")
       .select("*")
-      .order("created_at", { ascending: false })
+      .order("total_score", { ascending: false })
       .limit(500);
 
     if (status) {
@@ -51,7 +62,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: leads, error: leadsError } = await query;
+    const { data: leadsRaw, error: leadsError } = await query;
+    const leads = solarCompleteIds
+      ? (leadsRaw ?? []).filter((l) => solarCompleteIds!.has(l.id))
+      : leadsRaw;
 
     if (leadsError) {
       console.error("Fehler beim Abrufen der Leads:", leadsError.message);

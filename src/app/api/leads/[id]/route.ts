@@ -8,7 +8,7 @@ const UpdateLeadSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   postal_code: z.string().nullable().optional(),
-  status: z.enum(["new", "reviewed", "contacted", "qualified", "rejected"]).optional(),
+  status: z.enum(["new", "reviewed", "contacted", "qualified", "rejected", "existing_solar"]).optional(),
   notes: z.string().nullable().optional(),
   linkedin_url: z.string().nullable().optional(),
   website: z.string().nullable().optional(),

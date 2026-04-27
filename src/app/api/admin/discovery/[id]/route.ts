@@ -54,6 +54,16 @@ export async function GET(
     leadsQuery = leadsQuery.eq("status", statusFilter);
   }
 
+  // Always exclude discovery_leads where the linked lead is marked as existing_solar
+  const { data: existingSolarLeads } = await supabase
+    .from("solar_lead_mass")
+    .select("id")
+    .eq("status", "existing_solar");
+  if (existingSolarLeads?.length) {
+    const excludeIds = existingSolarLeads.map((l: { id: string }) => l.id);
+    leadsQuery = leadsQuery.not("lead_id", "in", `(${excludeIds.join(",")})`);
+  }
+
   if (solarCompleteLeadIds !== null) {
     // If no complete leads exist, use a dummy UUID to return empty results
     const ids = solarCompleteLeadIds.length > 0
