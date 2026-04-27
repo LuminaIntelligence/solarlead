@@ -1,11 +1,8 @@
 /**
  * POST /api/admin/tools/backfill-solar-full
  *
- * Calls Google Solar API for all leads that are missing detailed solar data
- * (max_array_panels_count IS NULL) but have coordinates.
- *
- * Processes in batches of 10 per request — call repeatedly with `offset` until
- * `remaining === 0`.
+ * Calls Google Solar API for all leads missing detailed solar data.
+ * Processes BATCH_SIZE leads per request — call repeatedly until remaining === 0.
  *
  * GET returns the count of leads needing full solar backfill.
  */
@@ -20,49 +17,58 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
 
 const BATCH_SIZE = 10;
 
+/** Returns all lead IDs that still need full solar data */
+async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminClient>) {
+  // All leads with coordinates
+  const { data: allLeads } = await adminSupabase
+    .from("solar_lead_mass")
+    .select("id, latitude, longitude")
+    .not("latitude", "is", null)
+    .not("longitude", "is", null);
+
+  if (!allLeads?.length) return [];
+
+  const allIds = allLeads.map((l) => l.id);
+
+  // All assessments that have panel data (= complete)
+  const { data: completeAssessments } = await adminSupabase
+    .from("solar_assessments")
+    .select("lead_id")
+    .in("lead_id", allIds)
+    .not("max_array_panels_count", "is", null);
+
+  const completeIds = new Set((completeAssessments ?? []).map((a) => a.lead_id));
+
+  // Return leads that are NOT complete
+  return allLeads.filter((l) => !completeIds.has(l.id));
+}
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const adminSupabase = createAdminClient();
+  const incomplete = await getIncompleteLeads(adminSupabase);
 
-  // Count leads with partial solar assessments (missing panel count)
-  const { data: partial } = await adminSupabase
+  // Split into partial (have record but missing panels) vs. none
+  const { data: partialRecords } = await adminSupabase
     .from("solar_assessments")
     .select("lead_id")
+    .in("lead_id", incomplete.length > 0 ? incomplete.map((l) => l.id) : ["00000000-0000-0000-0000-000000000000"])
     .is("max_array_panels_count", null);
 
-  // Count leads with no solar assessment at all but having coordinates
-  const { data: noAssessment } = await adminSupabase
-    .from("solar_lead_mass")
-    .select("id")
-    .not("latitude", "is", null)
-    .not("longitude", "is", null);
+  const partialIds = new Set((partialRecords ?? []).map((r) => r.lead_id));
+  const partial = incomplete.filter((l) => partialIds.has(l.id)).length;
+  const missing = incomplete.filter((l) => !partialIds.has(l.id)).length;
 
-  const noAssessmentIds = (noAssessment ?? []).map((l) => l.id);
-  const { data: existing } = await adminSupabase
-    .from("solar_assessments")
-    .select("lead_id")
-    .in("lead_id", noAssessmentIds.length > 0 ? noAssessmentIds : ["00000000-0000-0000-0000-000000000000"]);
-
-  const existingIds = new Set((existing ?? []).map((e) => e.lead_id));
-  const missingCount = noAssessmentIds.filter((id) => !existingIds.has(id)).length;
-
-  return NextResponse.json({
-    partial: partial?.length ?? 0,
-    missing: missingCount,
-    total: (partial?.length ?? 0) + missingCount,
-  });
+  return NextResponse.json({ partial, missing, total: incomplete.length });
 }
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const body = await req.json().catch(() => ({}));
-  const offset = Number(body.offset ?? 0);
 
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY;
   if (!apiKey) {
@@ -72,119 +78,93 @@ export async function POST(req: NextRequest) {
   const adminSupabase = createAdminClient();
   const provider = new GoogleSolarProvider(apiKey);
 
-  // 1. Find leads with partial solar assessments (have record but missing panels)
-  const { data: partialAssessments } = await adminSupabase
-    .from("solar_assessments")
-    .select("lead_id, latitude, longitude")
-    .is("max_array_panels_count", null)
-    .not("latitude", "is", null)
-    .not("longitude", "is", null)
-    .range(offset, offset + BATCH_SIZE - 1);
+  // Get all incomplete leads, take a batch
+  const incomplete = await getIncompleteLeads(adminSupabase);
+  const remaining_before = incomplete.length;
 
-  // 2. Also find leads with NO assessment but with coordinates
-  const { data: allLeads } = await adminSupabase
-    .from("solar_lead_mass")
-    .select("id, latitude, longitude")
-    .not("latitude", "is", null)
-    .not("longitude", "is", null);
-
-  const partialIds = new Set((partialAssessments ?? []).map((a) => a.lead_id));
-
-  const { data: existingAssessments } = await adminSupabase
-    .from("solar_assessments")
-    .select("lead_id")
-    .in("lead_id", (allLeads ?? []).map((l) => l.id).length > 0
-      ? (allLeads ?? []).map((l) => l.id)
-      : ["00000000-0000-0000-0000-000000000000"]);
-
-  const existingIds = new Set((existingAssessments ?? []).map((e) => e.lead_id));
-  const leadsWithoutAssessment = (allLeads ?? [])
-    .filter((l) => !existingIds.has(l.id) && !partialIds.has(l.id))
-    .slice(0, BATCH_SIZE - (partialAssessments?.length ?? 0));
-
-  // Combine both lists
-  const toProcess = [
-    ...(partialAssessments ?? []).map((a) => ({ lead_id: a.lead_id, latitude: a.latitude, longitude: a.longitude, isPartial: true })),
-    ...leadsWithoutAssessment.map((l) => ({ lead_id: l.id, latitude: l.latitude as number, longitude: l.longitude as number, isPartial: false })),
-  ].slice(0, BATCH_SIZE);
-
-  if (toProcess.length === 0) {
+  if (remaining_before === 0) {
     return NextResponse.json({ processed: 0, failed: 0, remaining: 0, message: "Alle Leads haben vollständige Solar-Daten." });
   }
+
+  const batch = incomplete.slice(0, BATCH_SIZE);
+
+  // Find which ones already have a partial record
+  const { data: partialRecords } = await adminSupabase
+    .from("solar_assessments")
+    .select("lead_id")
+    .in("lead_id", batch.map((l) => l.id))
+    .is("max_array_panels_count", null);
+
+  const partialIds = new Set((partialRecords ?? []).map((r) => r.lead_id));
 
   let processed = 0;
   let failed = 0;
 
-  for (const item of toProcess) {
+  for (const lead of batch) {
     try {
-      const result = await provider.assess({ latitude: item.latitude, longitude: item.longitude });
+      const result = await provider.assess({ latitude: lead.latitude as number, longitude: lead.longitude as number });
 
       if (!result || !result.max_array_panels_count) {
+        // API returned no panel data — mark as failed but still count as "processed" to avoid infinite loop
         failed++;
+        // Insert a placeholder so this lead isn't retried endlessly
+        if (!partialIds.has(lead.id)) {
+          await adminSupabase.from("solar_assessments").upsert({
+            lead_id: lead.id,
+            provider: "google_solar",
+            latitude: lead.latitude ?? 0,
+            longitude: lead.longitude ?? 0,
+            solar_quality: result?.solar_quality ?? "UNKNOWN",
+            max_array_area_m2: result?.max_array_area_m2 ?? null,
+          }, { onConflict: "lead_id" });
+        }
         continue;
       }
 
-      if (item.isPartial) {
-        // Update existing partial record
+      const assessmentData = {
+        lead_id: lead.id,
+        provider: "google_solar",
+        latitude: lead.latitude ?? 0,
+        longitude: lead.longitude ?? 0,
+        solar_quality: result.solar_quality,
+        max_array_panels_count: result.max_array_panels_count,
+        max_array_area_m2: result.max_array_area_m2,
+        annual_energy_kwh: result.annual_energy_kwh,
+        sunshine_hours: result.sunshine_hours,
+        carbon_offset: result.carbon_offset,
+        segment_count: result.segment_count,
+        panel_capacity_watts: result.panel_capacity_watts,
+        raw_response_json: result.raw_response_json,
+      };
+
+      if (partialIds.has(lead.id)) {
         await adminSupabase
           .from("solar_assessments")
-          .update({
-            solar_quality: result.solar_quality,
-            max_array_panels_count: result.max_array_panels_count,
-            max_array_area_m2: result.max_array_area_m2,
-            annual_energy_kwh: result.annual_energy_kwh,
-            sunshine_hours: result.sunshine_hours,
-            carbon_offset: result.carbon_offset,
-            segment_count: result.segment_count,
-            panel_capacity_watts: result.panel_capacity_watts,
-            raw_response_json: result.raw_response_json,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("lead_id", item.lead_id)
-          .is("max_array_panels_count", null);
+          .update({ ...assessmentData, updated_at: new Date().toISOString() })
+          .eq("lead_id", lead.id);
       } else {
-        // Insert new assessment
         await adminSupabase
           .from("solar_assessments")
-          .insert({
-            lead_id: item.lead_id,
-            provider: "google_solar",
-            latitude: item.latitude,
-            longitude: item.longitude,
-            solar_quality: result.solar_quality,
-            max_array_panels_count: result.max_array_panels_count,
-            max_array_area_m2: result.max_array_area_m2,
-            annual_energy_kwh: result.annual_energy_kwh,
-            sunshine_hours: result.sunshine_hours,
-            carbon_offset: result.carbon_offset,
-            segment_count: result.segment_count,
-            panel_capacity_watts: result.panel_capacity_watts,
-            raw_response_json: result.raw_response_json,
-          });
+          .upsert(assessmentData, { onConflict: "lead_id" });
       }
 
       processed++;
     } catch (e) {
-      console.warn(`[SolarBackfillFull] Failed for lead ${item.lead_id}:`, e);
+      console.warn(`[SolarBackfillFull] Failed for lead ${lead.id}:`, e);
       failed++;
     }
 
-    // Small stagger to avoid API rate limits
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 300));
   }
 
-  // Count remaining
-  const { data: stillPartial } = await adminSupabase
-    .from("solar_assessments")
-    .select("lead_id", { count: "exact", head: true })
-    .is("max_array_panels_count", null);
-
-  const remaining = (stillPartial as unknown as { count: number } | null)?.count ?? 0;
+  // Recount remaining after this batch
+  const stillIncomplete = await getIncompleteLeads(adminSupabase);
+  const remaining = stillIncomplete.length;
 
   return NextResponse.json({
     processed,
     failed,
     remaining,
-    message: `${processed} Leads angereichert, ${failed} fehlgeschlagen.`,
+    message: `${processed} Leads angereichert, ${failed} fehlgeschlagen. Noch ${remaining} ausstehend.`,
   });
 }
