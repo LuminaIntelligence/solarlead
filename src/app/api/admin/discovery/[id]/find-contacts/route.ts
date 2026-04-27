@@ -2,7 +2,8 @@
  * POST /api/admin/discovery/[id]/find-contacts
  *
  * Re-runs contact enrichment for a single discovery_lead.
- * Returns detailed debug info about which URLs were tried and what was found.
+ * Pipeline: Apollo → Hunter → Impressum-Scraper → Firecrawl
+ * Returns detailed debug info about which sources were tried.
  *
  * Body: { lead_id: string }  — the discovery_lead.id (not the solar_lead_mass.id)
  */
@@ -11,7 +12,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ImpressumScraperProvider, type ScraperDebugLog } from "@/lib/providers/contacts/impressum";
+import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
+import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
 import { getContactProvider } from "@/lib/providers/contacts";
+import type { Contact } from "@/lib/providers/contacts/types";
 
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
@@ -51,59 +55,61 @@ export async function POST(
     return NextResponse.json({
       found: 0,
       message: "Keine Website für diesen Lead hinterlegt.",
-      debug: { tried_urls: [], found_on_url: null, emails_raw: [], error: "Keine Website" },
+      debug: { tried_urls: [], found_on_url: null, emails_raw: [], phones_raw: [], error: "Keine Website" },
     });
   }
 
   const campaign = dl.discovery_campaigns as { created_by: string };
+  const contactQuery = { domain, company_name: dl.company_name, city: dl.city ?? undefined };
   const debugLog: ScraperDebugLog = { tried_urls: [], found_on_url: null, emails_raw: [], phones_raw: [] };
 
-  // ── Apollo first (if key exists) ──────────────────────────────────────────
-  let contacts: Array<{
-    apollo_id: string | null;
-    name: string | null;
-    title: string | null;
-    email: string | null;
-    phone: string | null;
-    linkedin_url: string | null;
-    seniority: string | null;
-    department: string | null;
-  }> = [];
-  let source = "impressum";
+  let contacts: Contact[] = [];
+  let source = "";
 
+  // ── Stage 1: Apollo ────────────────────────────────────────────────────────
   if (process.env.APOLLO_API_KEY) {
     try {
-      const apolloProvider = getContactProvider("live", process.env.APOLLO_API_KEY);
-      const apolloResult = await apolloProvider.findContacts({
-        domain,
-        company_name: dl.company_name,
-        city: dl.city,
-      });
-      const valid = apolloResult.contacts.filter((c) => c.email);
-      if (valid.length > 0) {
-        contacts = valid;
-        source = "apollo";
-      }
-    } catch (e) {
-      console.warn("[FindContacts] Apollo failed:", e);
-    }
+      const apollo = getContactProvider("live", process.env.APOLLO_API_KEY);
+      const result = await apollo.findContacts(contactQuery);
+      const valid = result.contacts.filter((c) => c.email);
+      if (valid.length > 0) { contacts = valid; source = "apollo"; }
+    } catch (e) { console.warn("[FindContacts] Apollo failed:", e); }
   }
 
-  // ── Impressum scraper if Apollo found nothing ────────────────────────────
+  // ── Stage 2: Hunter.io ─────────────────────────────────────────────────────
+  if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
+    try {
+      const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
+      const result = await hunter.findContacts(contactQuery);
+      const valid = result.contacts.filter((c) => c.email);
+      if (valid.length > 0) { contacts = valid; source = "hunter"; }
+    } catch (e) { console.warn("[FindContacts] Hunter failed:", e); }
+  }
+
+  // ── Stage 3: Impressum-Scraper ─────────────────────────────────────────────
   if (contacts.length === 0) {
-    const scraper = new ImpressumScraperProvider();
-    const result = await scraper.findContacts(
-      { domain, company_name: dl.company_name, city: dl.city ?? undefined },
-      debugLog
-    );
-    contacts = result.contacts.filter((c) => c.email);
-    source = "impressum";
+    try {
+      const scraper = new ImpressumScraperProvider();
+      const result = await scraper.findContacts(contactQuery, debugLog);
+      const valid = result.contacts.filter((c) => c.email || c.phone);
+      if (valid.length > 0) { contacts = valid; source = "impressum"; }
+    } catch (e) { console.warn("[FindContacts] Impressum-Scraper failed:", e); }
+  }
+
+  // ── Stage 4: Firecrawl (JS-Rendering) ──────────────────────────────────────
+  if (contacts.length === 0 && process.env.FIRECRAWL_API_KEY) {
+    try {
+      const firecrawl = new FirecrawlContactProvider(process.env.FIRECRAWL_API_KEY);
+      const result = await firecrawl.findContacts(contactQuery);
+      const valid = result.contacts.filter((c) => c.email || c.phone);
+      if (valid.length > 0) { contacts = valid; source = "firecrawl"; }
+    } catch (e) { console.warn("[FindContacts] Firecrawl failed:", e); }
   }
 
   if (contacts.length === 0) {
     return NextResponse.json({
       found: 0,
-      message: `Keine E-Mails gefunden. ${debugLog.tried_urls.length} URLs geprüft.`,
+      message: `Keine Kontakte gefunden (Apollo → Hunter → Impressum → Firecrawl). ${debugLog.tried_urls.length} URLs geprüft.`,
       debug: debugLog,
     });
   }
@@ -135,11 +141,12 @@ export async function POST(
   }
 
   // ── Update discovery_lead counts ──────────────────────────────────────────
+  const emailCount = contacts.filter((c) => c.email).length;
   await adminSupabase
     .from("discovery_leads")
     .update({
-      has_contacts: true,
-      contact_count: contacts.length,
+      has_contacts: emailCount > 0,
+      contact_count: emailCount,
       updated_at: new Date().toISOString(),
     })
     .eq("id", lead_id);
@@ -147,8 +154,9 @@ export async function POST(
   return NextResponse.json({
     found: savedCount,
     source,
-    emails: contacts.map((c) => c.email),
-    message: `${savedCount} Kontakt(e) gefunden und gespeichert (Quelle: ${source}).`,
+    emails: contacts.map((c) => c.email).filter(Boolean),
+    phones: contacts.map((c) => c.phone).filter(Boolean),
+    message: `${savedCount} Kontakt(e) gefunden via ${source}.`,
     debug: debugLog,
   });
 }

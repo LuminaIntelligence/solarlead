@@ -7,6 +7,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSolarProvider } from "@/lib/providers/solar";
 import { getContactProvider } from "@/lib/providers/contacts";
 import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
+import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
+import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
+import type { Contact } from "@/lib/providers/contacts/types";
 import { calculateScore } from "@/lib/scoring";
 
 const MIN_ROOF_AREA_M2 = 500;
@@ -153,81 +156,75 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
       : null;
 
     if (domain) {
-      const contactProvider = getContactProvider(
-        "live",
-        process.env.APOLLO_API_KEY
-      );
-      try {
-        const contactResult = await contactProvider.findContacts({
-          domain,
-          company_name: dl.company_name,
-          city: dl.city,
-        });
+      // ── Contact pipeline: Apollo → Hunter → Impressum → Firecrawl ──────────
+      // Each stage only runs if the previous found nothing.
+      const contactQuery = { domain, company_name: dl.company_name, city: dl.city ?? undefined };
 
-        const validContacts = contactResult.contacts.filter((c) => c.email);
-        contactCount = validContacts.length;
-        hasContacts = contactCount > 0;
+      const saveContacts = async (contacts: Contact[], source: string) => {
+        const valid = contacts.filter((c) => c.email || c.phone);
+        if (valid.length === 0) return false;
+        await supabase.from("lead_contacts").insert(
+          valid.map((c) => ({
+            lead_id: leadId,
+            user_id: campaign.created_by,
+            name: c.name,
+            title: c.title,
+            email: c.email,
+            phone: c.phone,
+            linkedin_url: c.linkedin_url ?? null,
+            apollo_id: c.apollo_id ?? null,
+            seniority: c.seniority,
+            department: c.department ?? null,
+            source,
+          }))
+        );
+        contactCount = valid.filter((c) => c.email).length;
+        hasContacts = valid.filter((c) => c.email).length > 0 || valid.filter((c) => c.phone).length > 0;
+        return true;
+      };
 
-        // Save contacts
-        if (validContacts.length > 0) {
-          await supabase.from("lead_contacts").insert(
-            validContacts.map((c) => ({
-              lead_id: leadId,
-              user_id: campaign.created_by,
-              name: c.name,
-              title: c.title,
-              email: c.email,
-              phone: c.phone,
-              linkedin_url: c.linkedin_url,
-              apollo_id: c.apollo_id,
-              seniority: c.seniority,
-              department: c.department,
-              source: "apollo",
-            }))
-          );
-        }
-      } catch (e) {
-        console.warn("[Enricher] Apollo contacts failed:", e);
+      // Stage 1: Apollo
+      if (process.env.APOLLO_API_KEY) {
+        try {
+          const apolloProvider = getContactProvider("live", process.env.APOLLO_API_KEY);
+          const result = await apolloProvider.findContacts(contactQuery);
+          if (await saveContacts(result.contacts, "apollo")) {
+            console.log(`[Enricher] Apollo: ${contactCount} Kontakt(e) für ${domain}`);
+          }
+        } catch (e) { console.warn("[Enricher] Apollo failed:", e); }
       }
-    }
 
-    // 5b. Impressum-Scraper as fallback if Apollo found nothing
-    if (!hasContacts && domain) {
-      try {
-        const scraper = new ImpressumScraperProvider();
-        const scraperResult = await scraper.findContacts({
-          domain,
-          company_name: dl.company_name,
-          city: dl.city ?? undefined,
-        });
+      // Stage 2: Hunter.io
+      if (!hasContacts && process.env.HUNTER_API_KEY) {
+        try {
+          const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
+          const result = await hunter.findContacts(contactQuery);
+          if (await saveContacts(result.contacts, "hunter")) {
+            console.log(`[Enricher] Hunter: ${contactCount} Kontakt(e) für ${domain}`);
+          }
+        } catch (e) { console.warn("[Enricher] Hunter failed:", e); }
+      }
 
-        const validContacts = scraperResult.contacts.filter((c) => c.email);
-        if (validContacts.length > 0) {
-          contactCount = validContacts.length;
-          hasContacts = true;
+      // Stage 3: Impressum-Scraper (kostenlos)
+      if (!hasContacts) {
+        try {
+          const scraper = new ImpressumScraperProvider();
+          const result = await scraper.findContacts(contactQuery);
+          if (await saveContacts(result.contacts, "impressum")) {
+            console.log(`[Enricher] Impressum-Scraper: ${contactCount} Kontakt(e) für ${domain}`);
+          }
+        } catch (e) { console.warn("[Enricher] Impressum-Scraper failed:", e); }
+      }
 
-          await supabase.from("lead_contacts").insert(
-            validContacts.map((c) => ({
-              lead_id: leadId,
-              user_id: campaign.created_by,
-              name: c.name,
-              title: c.title,
-              email: c.email,
-              phone: c.phone,
-              linkedin_url: null,
-              apollo_id: null,
-              seniority: c.seniority,
-              department: null,
-              source: "impressum",
-            }))
-          );
-
-          console.log(
-            `[Enricher] Impressum-Scraper hat ${validContacts.length} Kontakt(e) für ${domain} gefunden`
-          );
-        }
-      } catch (e) {
-        console.warn("[Enricher] Impressum-Scraper failed:", e);
+      // Stage 4: Firecrawl (JS-Rendering, letzter Ausweg)
+      if (!hasContacts && process.env.FIRECRAWL_API_KEY) {
+        try {
+          const firecrawl = new FirecrawlContactProvider(process.env.FIRECRAWL_API_KEY);
+          const result = await firecrawl.findContacts(contactQuery);
+          if (await saveContacts(result.contacts, "firecrawl")) {
+            console.log(`[Enricher] Firecrawl: ${contactCount} Kontakt(e) für ${domain}`);
+          }
+        } catch (e) { console.warn("[Enricher] Firecrawl failed:", e); }
       }
     }
 
