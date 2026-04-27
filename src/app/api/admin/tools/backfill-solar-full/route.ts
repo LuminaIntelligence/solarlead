@@ -54,19 +54,21 @@ async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminCl
 
   if (!allLeads.length) return [];
 
-  // Fetch ALL complete assessments without filtering by lead_id —
-  // passing thousands of IDs in .in() exceeds Supabase URL limits and fails silently.
-  const completeAssessments = await fetchAllPages<{ lead_id: string }>(
+  // Fetch ALL assessment records (complete OR placeholder).
+  // Any record means the lead has already been attempted — we skip it to avoid
+  // infinite retries on leads where Google has no coverage.
+  // Leads that failed due to a network error (no record saved) will be retried naturally.
+  const allAssessments = await fetchAllPages<{ lead_id: string }>(
     adminSupabase,
     "solar_assessments",
     "lead_id",
-    (q) => q.not("max_array_panels_count", "is", null)
+    (q) => q  // no filter — all records
   );
 
-  const completeIds = new Set(completeAssessments.map((a) => a.lead_id));
+  const attemptedIds = new Set(allAssessments.map((a) => a.lead_id));
 
-  // Return leads that are NOT complete
-  return allLeads.filter((l) => !completeIds.has(l.id));
+  // Only return leads that have never been attempted
+  return allLeads.filter((l) => !attemptedIds.has(l.id));
 }
 
 export async function GET() {
