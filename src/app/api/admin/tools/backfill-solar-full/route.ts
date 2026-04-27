@@ -18,11 +18,13 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
 const BATCH_SIZE = 10;
 
 /** Fetch all rows from a table with pagination (bypasses Supabase 1000-row default limit) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchAllPages<T>(
   adminSupabase: ReturnType<typeof createAdminClient>,
   table: string,
   select: string,
-  filters: (q: ReturnType<ReturnType<typeof createAdminClient>["from"]>) => ReturnType<ReturnType<typeof createAdminClient>["from"]>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filters: (q: any) => any
 ): Promise<T[]> {
   const PAGE = 1000;
   const results: T[] = [];

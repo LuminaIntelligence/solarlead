@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, Search, X } from "lucide-react";
+import { Loader2, Search, Sun, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,7 @@ export default function AdminLeadsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [solarCompleteFilter, setSolarCompleteFilter] = useState(false);
 
   const loadLeads = useCallback(async () => {
     try {
@@ -83,6 +84,7 @@ export default function AdminLeadsPage() {
       if (searchQuery) params.set("search", searchQuery);
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
+      if (solarCompleteFilter) params.set("solar_complete", "1");
 
       const res = await fetch(`/api/admin/leads?${params.toString()}`);
       if (!res.ok) throw new Error("Fehler beim Laden der Leads");
@@ -94,7 +96,7 @@ export default function AdminLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, categoryFilter]);
+  }, [searchQuery, statusFilter, categoryFilter, solarCompleteFilter]);
 
   useEffect(() => {
     loadLeads();
@@ -104,9 +106,10 @@ export default function AdminLeadsPage() {
     setSearchQuery("");
     setStatusFilter("");
     setCategoryFilter("");
+    setSolarCompleteFilter(false);
   }
 
-  const hasFilters = searchQuery || statusFilter || categoryFilter;
+  const hasFilters = searchQuery || statusFilter || categoryFilter || solarCompleteFilter;
 
   return (
     <div className="space-y-6">
@@ -156,6 +159,15 @@ export default function AdminLeadsPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant={solarCompleteFilter ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSolarCompleteFilter((v) => !v)}
+              className={solarCompleteFilter ? "bg-amber-500 hover:bg-amber-600 text-white border-0" : ""}
+            >
+              <Sun className="mr-1 h-4 w-4" />
+              Vollständige Solar-Daten
+            </Button>
             {hasFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X className="mr-1 h-4 w-4" />
