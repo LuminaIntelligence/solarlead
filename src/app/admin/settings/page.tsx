@@ -51,6 +51,7 @@ export default function AdminSettingsPage() {
   const [solarFullResetting, setSolarFullResetting] = useState(false);
   const [solarFullProgress, setSolarFullProgress] = useState<{ processed: number; failed: number; remaining: number } | null>(null);
   const [solarFullDone, setSolarFullDone] = useState(false);
+  const [solarFullRateLimited, setSolarFullRateLimited] = useState(false);
 
   // Backfill contacts tool
   const [contactBackfillMissing, setContactBackfillMissing] = useState<number | null>(null);
@@ -531,10 +532,22 @@ export default function AdminSettingsPage() {
             </div>
           )}
 
-          {solarFullDone && (
+          {solarFullRateLimited && (
+            <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              API-Kontingent erschöpft. Bitte morgen weitermachen — Google Solar API hat ein Tageslimit.
+            </div>
+          )}
+          {solarFullDone && !solarFullRateLimited && (solarFullProgress?.remaining ?? 1) === 0 && (
             <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               Alle Solar-Detaildaten wurden erfolgreich geladen.
+            </div>
+          )}
+          {solarFullDone && !solarFullRateLimited && (solarFullProgress?.remaining ?? 0) > 0 && (
+            <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {solarFullProgress?.remaining} Leads haben keine Google Solar Abdeckung und können nicht angereichert werden.
             </div>
           )}
 
@@ -543,6 +556,7 @@ export default function AdminSettingsPage() {
               onClick={async () => {
                 setSolarFullRunning(true);
                 setSolarFullDone(false);
+                setSolarFullRateLimited(false);
                 setSolarFullProgress(null);
                 let totalProcessed = 0;
                 let totalFailed = 0;
@@ -555,17 +569,19 @@ export default function AdminSettingsPage() {
                     totalProcessed += data.processed ?? 0;
                     totalFailed += data.failed ?? 0;
                     setSolarFullProgress({ processed: totalProcessed, failed: totalFailed, remaining: data.remaining ?? 0 });
+                    // Rate limited — stop immediately
+                    if (data.rateLimited) { setSolarFullRateLimited(true); break; }
                     if ((data.remaining ?? 0) === 0) break;
-                    // If a whole batch had 0 processed AND 0 failed (no leads found), stop
+                    // No leads found at all — nothing left to process
                     if ((data.processed ?? 0) === 0 && (data.failed ?? 0) === 0) break;
-                    // Allow up to 3 consecutive all-failed batches, then stop to avoid infinite loop
+                    // Allow up to 5 consecutive all-failed batches before giving up
                     if ((data.processed ?? 0) === 0) {
                       consecutiveAllFailed++;
-                      if (consecutiveAllFailed >= 3) break;
+                      if (consecutiveAllFailed >= 5) break;
                     } else {
                       consecutiveAllFailed = 0;
                     }
-                    await new Promise((r) => setTimeout(r, 500));
+                    await new Promise((r) => setTimeout(r, 1000));
                   }
                   setSolarFullDone(true);
                   const status = await fetch("/api/admin/tools/backfill-solar-full").then((r) => r.json());

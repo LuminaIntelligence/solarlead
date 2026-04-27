@@ -145,15 +145,15 @@ export async function POST(req: NextRequest) {
 
   let processed = 0;
   let failed = 0;
+  let rateLimited = false;
 
   for (const lead of batch) {
     try {
       const result = await provider.assess({ latitude: lead.latitude as number, longitude: lead.longitude as number });
 
       if (!result || !result.max_array_panels_count) {
-        // API returned no panel data for this location (no coverage at LOW quality).
-        // Count as failed, but do NOT insert a placeholder — leads without complete
-        // data should remain in the queue so they can be retried after API changes.
+        // API returned no panel data for this location (no coverage).
+        // Do NOT insert a placeholder — lead stays in queue for future retries.
         failed++;
         continue;
       }
@@ -187,11 +187,17 @@ export async function POST(req: NextRequest) {
 
       processed++;
     } catch (e) {
-      console.warn(`[SolarBackfillFull] Failed for lead ${lead.id}:`, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[SolarBackfillFull] Failed for lead ${lead.id}:`, msg);
+      // Rate limit / quota exhausted — stop the whole batch immediately
+      if (msg.includes("quota") || msg.includes("rate-limit") || msg.includes("429") || msg.includes("403")) {
+        rateLimited = true;
+        break;
+      }
       failed++;
     }
 
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Recount remaining after this batch
@@ -202,6 +208,9 @@ export async function POST(req: NextRequest) {
     processed,
     failed,
     remaining,
-    message: `${processed} Leads angereichert, ${failed} fehlgeschlagen. Noch ${remaining} ausstehend.`,
+    rateLimited,
+    message: rateLimited
+      ? `API-Kontingent erschöpft nach ${processed} Leads. Bitte morgen weitermachen.`
+      : `${processed} Leads angereichert, ${failed} fehlgeschlagen. Noch ${remaining} ausstehend.`,
   });
 }

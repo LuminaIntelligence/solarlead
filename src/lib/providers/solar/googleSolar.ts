@@ -56,6 +56,10 @@ export class GoogleSolarProvider implements SolarProvider {
         console.error(
           `[GoogleSolarProvider] API returned ${response.status}: ${errorText}`
         );
+        // Throw on rate limit / quota errors so the caller can stop the batch
+        if (response.status === 429 || response.status === 403) {
+          throw new Error(`API quota/rate-limit: ${response.status} ${errorText}`);
+        }
         return null;
       }
 
