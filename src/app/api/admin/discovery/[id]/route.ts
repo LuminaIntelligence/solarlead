@@ -41,15 +41,32 @@ export async function GET(
     leadsQuery = leadsQuery.eq("status", statusFilter);
   }
 
-  const { data: leads, count, error: leadsErr } = await leadsQuery;
-  if (leadsErr) return NextResponse.json({ error: leadsErr.message }, { status: 500 });
+  // Count leads still waiting for enrichment (background progress indicator)
+  const [leadsResult, pendingResult, enrichingResult] = await Promise.all([
+    leadsQuery,
+    supabase
+      .from("discovery_leads")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", id)
+      .eq("status", "pending_enrichment"),
+    supabase
+      .from("discovery_leads")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", id)
+      .eq("status", "enriching"),
+  ]);
+
+  if (leadsResult.error) return NextResponse.json({ error: leadsResult.error.message }, { status: 500 });
+
+  const enrichmentPending = (pendingResult.count ?? 0) + (enrichingResult.count ?? 0);
 
   return NextResponse.json({
     campaign,
-    leads: leads ?? [],
-    total: count ?? 0,
+    leads: leadsResult.data ?? [],
+    total: leadsResult.count ?? 0,
     page,
     pageSize,
+    enrichmentPending,
   });
 }
 

@@ -195,6 +195,7 @@ interface ApiResponse {
   total: number;
   page: number;
   pageSize: number;
+  enrichmentPending: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -279,16 +280,21 @@ export default function DiscoveryCampaignDetailPage() {
     fetchData(page, statusFilter);
   }, [page, statusFilter, fetchData]);
 
-  // Auto-poll while running
+  // Auto-poll while running OR while enrichment is still in progress in background
+  const isEnrichmentActive = (data?.enrichmentPending ?? 0) > 0;
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current);
-    if (data?.campaign?.status === "running" || data?.campaign?.status === "pending") {
-      pollRef.current = setInterval(() => fetchData(page, statusFilter), 4000);
+    const shouldPoll =
+      data?.campaign?.status === "running" ||
+      data?.campaign?.status === "pending" ||
+      isEnrichmentActive;
+    if (shouldPoll) {
+      pollRef.current = setInterval(() => fetchData(page, statusFilter), 5000);
     }
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [data?.campaign?.status, fetchData, page, statusFilter]);
+  }, [data?.campaign?.status, isEnrichmentActive, fetchData, page, statusFilter]);
 
   async function handlePause() {
     setActionLoading(true);
@@ -564,6 +570,37 @@ export default function DiscoveryCampaignDetailPage() {
           </Card>
         ))}
       </div>
+
+      {/* Enrichment progress banner — shown when campaign is done but background enrichment still runs */}
+      {isEnrichmentActive && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+          <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-blue-800">
+              Anreicherung läuft im Hintergrund
+            </p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              {data.enrichmentPending} Lead{data.enrichmentPending !== 1 ? "s" : ""} werden noch angereichert
+              (Solar-Analyse, Kontaktsuche, Scoring) — die Seite aktualisiert sich automatisch.
+            </p>
+          </div>
+          {/* Mini progress bar */}
+          {campaign.total_discovered > 0 && (
+            <div className="shrink-0 w-32">
+              <div className="flex justify-between text-xs text-blue-500 mb-1">
+                <span>{campaign.total_discovered - data.enrichmentPending} / {campaign.total_discovered}</span>
+                <span>{Math.round(((campaign.total_discovered - data.enrichmentPending) / campaign.total_discovered) * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 rounded-full transition-all duration-1000"
+                  style={{ width: `${Math.round(((campaign.total_discovered - data.enrichmentPending) / campaign.total_discovered) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Leads table */}
       <Card className="bg-white border-slate-200">

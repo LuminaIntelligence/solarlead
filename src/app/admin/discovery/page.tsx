@@ -38,6 +38,17 @@ export default async function DiscoveryPage() {
 
   const list: DiscoveryCampaign[] = campaigns ?? [];
 
+  // Count pending_enrichment leads per campaign for background progress indicator
+  const { data: pendingRows } = await supabase
+    .from("discovery_leads")
+    .select("campaign_id")
+    .in("status", ["pending_enrichment", "enriching"]);
+
+  const pendingByCampaign = (pendingRows ?? []).reduce<Record<string, number>>((acc, r) => {
+    acc[r.campaign_id] = (acc[r.campaign_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
   const totalDiscovered = list.reduce((s, c) => s + c.total_discovered, 0);
   const totalReady      = list.reduce((s, c) => s + c.total_ready, 0);
   const totalApproved   = list.reduce((s, c) => s + c.total_approved, 0);
@@ -117,6 +128,13 @@ export default async function DiscoveryPage() {
                         <div className="flex items-center gap-2">
                           <StatusIcon status={c.status} />
                           <StatusBadge status={c.status} />
+                          {/* Enrichment in progress indicator */}
+                          {(pendingByCampaign[c.id] ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              {pendingByCampaign[c.id]} anreichern…
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
