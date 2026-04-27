@@ -66,9 +66,9 @@ export default function AdminSettingsPage() {
   const [solarDetectionDone, setSolarDetectionDone] = useState(false);
 
   // MaStR Backfill
-  type MastrStatus = "idle" | "fetching_url" | "downloading" | "parsing" | "matching" | "updating" | "done" | "error";
+  type MastrStatus = "idle" | "fetching_url" | "wget_download" | "downloading" | "parsing" | "matching" | "updating" | "done" | "error";
   const [mastrJob, setMastrJob] = useState<{
-    status: MastrStatus; message: string; downloadedMB: number;
+    status: MastrStatus; message: string; downloadedMB: number; totalMB: number;
     parsedUnits: number; leadsTotal: number; leadsChecked: number;
     matchesFound: number; updatedCount: number; error: string | null;
   } | null>(null);
@@ -878,41 +878,27 @@ export default function AdminSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
 
-          {/* Empfohlener Weg: lokale Datei per SCP */}
-          <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800 space-y-1">
-            <p className="font-medium">⚡ Empfohlen: ZIP lokal herunterladen und per SCP hochladen</p>
-            <p className="text-xs text-blue-600">
-              1. ZIP lokal laden:{" "}
-              <a href="https://www.marktstammdatenregister.de/MaStR/Datendownload" target="_blank" rel="noopener noreferrer" className="underline">
-                marktstammdatenregister.de
-              </a>
-              {" "}→ Gesamtdatenexport (~585 MB)
-            </p>
-            <p className="text-xs text-blue-600 font-mono">
-              2. scp Gesamtdatenexport.zip solarlead@SERVERIP:/tmp/mastr.zip
-            </p>
-            <p className="text-xs text-blue-600">
-              3. Pfad unten eintragen: <span className="font-mono">/tmp/mastr.zip</span>
-            </p>
-          </div>
-
-          {/* Lokaler Pfad (nach SCP) */}
+          {/* URL-Eingabe (optional) */}
           <div className="space-y-1.5">
-            <Label htmlFor="mastr-local" className="text-sm font-medium">Lokaler Pfad auf dem Server</Label>
+            <Label htmlFor="mastr-url" className="text-sm font-medium">
+              Download-URL{" "}
+              <span className="font-normal text-slate-400">(optional — wird automatisch erkannt)</span>
+            </Label>
             <Input
-              id="mastr-local"
-              placeholder="/tmp/mastr.zip"
+              id="mastr-url"
+              placeholder="https://download.marktstammdatenregister.de/Gesamtdatenexport_….zip"
               value={mastrUrl}
               onChange={(e) => setMastrUrl(e.target.value)}
-              className="font-mono text-sm"
+              className="font-mono text-xs"
             />
+            <p className="text-xs text-slate-400">
+              Von{" "}
+              <a href="https://www.marktstammdatenregister.de/MaStR/Datendownload" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                marktstammdatenregister.de/MaStR/Datendownload
+              </a>
+              {" "}→ „Gesamtdatenexport" — oder leer lassen für Auto-Erkennung.
+            </p>
           </div>
-
-          {/* Fallback: URL */}
-          <details className="text-xs text-slate-400">
-            <summary className="cursor-pointer hover:text-slate-600">Alternativ: Direkt-Download (langsam, ~1 MB/min)</summary>
-            <p className="mt-1">Feld leer lassen für automatische URL-Erkennung, oder URL von marktstammdatenregister.de einfügen.</p>
-          </details>
 
           {/* Job-Status */}
           {mastrJob && mastrJob.status !== "idle" && (
@@ -971,38 +957,65 @@ export default function AdminSettingsPage() {
             </div>
           )}
 
-          <Button
-            onClick={async () => {
-              try {
-                const res = await fetch("/api/admin/tools/mastr-backfill", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(
-                    mastrUrl.trim().startsWith("/") || mastrUrl.trim().startsWith("C:")
-                      ? { localPath: mastrUrl.trim() }
-                      : { url: mastrUrl.trim() || undefined }
-                  ),
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                  setMastrJob({ status: "error", message: data.error ?? "Unbekannter Fehler", downloadedMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: data.error });
-                  return;
+          <div className="flex gap-2 flex-wrap">
+            {/* wget-Download + Verarbeitung (alles auf dem Server) */}
+            <Button
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/admin/tools/mastr-backfill", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "wget", url: mastrUrl.trim() || undefined }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    setMastrJob({ status: "error", message: data.error ?? "Fehler", downloadedMB: 0, totalMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: data.error });
+                    return;
+                  }
+                  setMastrPolling(true);
+                } catch {
+                  setMastrJob({ status: "error", message: "Netzwerkfehler", downloadedMB: 0, totalMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: "Netzwerkfehler" });
                 }
-                setMastrPolling(true);
-              } catch {
-                setMastrJob({ status: "error", message: "Netzwerkfehler", downloadedMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: "Netzwerkfehler" });
-              }
-            }}
-            disabled={mastrPolling}
-            className="gap-2 bg-blue-700 hover:bg-blue-800 text-white"
-          >
-            {mastrPolling
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Läuft auf dem Server…</>
-              : <><Database className="h-4 w-4" /> MaStR Backfill jetzt starten</>}
-          </Button>
+              }}
+              disabled={mastrPolling}
+              className="gap-2 bg-blue-700 hover:bg-blue-800 text-white"
+            >
+              {mastrPolling && (mastrJob?.status === "wget_download" || mastrJob?.status === "fetching_url")
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Lade herunter…</>
+                : <><Database className="h-4 w-4" /> Auf Server herunterladen &amp; verarbeiten</>}
+            </Button>
+
+            {/* Nur verarbeiten (wenn ZIP bereits per SCP vorhanden) */}
+            <Button
+              variant="outline"
+              onClick={async () => {
+                const p = mastrUrl.trim() || "/tmp/mastr.zip";
+                try {
+                  const res = await fetch("/api/admin/tools/mastr-backfill", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ localPath: p }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    setMastrJob({ status: "error", message: data.error ?? "Fehler", downloadedMB: 0, totalMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: data.error });
+                    return;
+                  }
+                  setMastrPolling(true);
+                } catch {
+                  setMastrJob({ status: "error", message: "Netzwerkfehler", downloadedMB: 0, totalMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: "Netzwerkfehler" });
+                }
+              }}
+              disabled={mastrPolling}
+              className="gap-2"
+            >
+              Nur verarbeiten (ZIP bereits auf Server)
+            </Button>
+          </div>
+
           <p className="text-xs text-slate-400">
-            Läuft vollständig auf dem Server (~10–20 min). Du kannst die Seite schließen — der Job läuft weiter.
-            Beim Wiederkehren wird der Status automatisch wiederhergestellt.
+            <strong>„Herunterladen &amp; verarbeiten"</strong> lädt via wget direkt auf dem Server (~2 GB, dauert je nach Serverleitung).
+            Seite kann geschlossen werden — Job läuft weiter. Status wird beim Wiederkehren automatisch geladen.
           </p>
         </CardContent>
       </Card>

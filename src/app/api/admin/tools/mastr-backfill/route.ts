@@ -1,13 +1,9 @@
 /**
  * MaStR Backfill — Server-seitiger Solar-Abgleich
  *
- * Vergleicht alle Leads gegen den MaStR-Gesamtdatenexport und markiert
- * Treffer (Solar-Anlage im Umkreis 150m) als existing_solar.
- *
- * GET  — Aktuellen Job-Status abrufen
- * POST — Job starten:
- *   { url: "https://..." }          Download vom MaStR-Server (langsam)
- *   { localPath: "/tmp/mastr.zip" } Lokale Datei (nach SCP hochladen)
+ * GET        — Job-Status abrufen
+ * POST       — Job starten: { localPath } | { url } | {} (auto-detect)
+ * POST wget  — ZIP via wget auf dem Server herunterladen: { action: "wget", url }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,17 +12,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Readable, PassThrough } from "stream";
 import * as fs from "fs";
 import * as path from "path";
+import { spawn } from "child_process";
 import unzipper from "unzipper";
 
-// ── Typen ─────────────────────────────────────────────────────────────────────
+const TMP_ZIP = "/tmp/mastr.zip";
+
+// ── Job-State ─────────────────────────────────────────────────────────────────
 type JobStatus =
-  | "idle" | "fetching_url" | "downloading" | "parsing"
-  | "matching" | "updating" | "done" | "error";
+  | "idle" | "fetching_url" | "wget_download" | "downloading"
+  | "parsing" | "matching" | "updating" | "done" | "error";
 
 interface JobState {
   status: JobStatus;
   message: string;
   downloadedMB: number;
+  totalMB: number;
   parsedUnits: number;
   leadsTotal: number;
   leadsChecked: number;
@@ -39,32 +39,31 @@ interface JobState {
 
 let job: JobState = {
   status: "idle", message: "Kein Job gestartet",
-  downloadedMB: 0, parsedUnits: 0, leadsTotal: 0,
-  leadsChecked: 0, matchesFound: 0, updatedCount: 0,
+  downloadedMB: 0, totalMB: 0, parsedUnits: 0,
+  leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0,
   startedAt: null, finishedAt: null, error: null,
 };
 
-function resetJob(): void {
+function resetJob(status: JobStatus = "idle"): void {
   job = {
-    status: "idle", message: "Job wird gestartet…",
-    downloadedMB: 0, parsedUnits: 0, leadsTotal: 0,
-    leadsChecked: 0, matchesFound: 0, updatedCount: 0,
+    status, message: "Wird gestartet…",
+    downloadedMB: 0, totalMB: 0, parsedUnits: 0,
+    leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0,
     startedAt: new Date().toISOString(), finishedAt: null, error: null,
   };
 }
 
-function isAdmin(user: { user_metadata?: { role?: string } } | null): boolean {
-  return user?.user_metadata?.role === "admin";
+function isAdmin(u: { user_metadata?: { role?: string } } | null) {
+  return u?.user_metadata?.role === "admin";
 }
 
-// ── Räumliche Hilfsfunktionen ─────────────────────────────────────────────────
+// ── Räumlicher Index ──────────────────────────────────────────────────────────
 const EARTH_R = 6_371_000;
 const RADIUS_M = 150;
 const GRID_RES = 100;
 
 function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const phi1 = (lat1 * Math.PI) / 180;
-  const phi2 = (lat2 * Math.PI) / 180;
+  const phi1 = (lat1 * Math.PI) / 180, phi2 = (lat2 * Math.PI) / 180;
   const dPhi = ((lat2 - lat1) * Math.PI) / 180;
   const dLam = ((lng2 - lng1) * Math.PI) / 180;
   const a = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLam / 2) ** 2;
@@ -73,31 +72,63 @@ function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): num
 
 type Grid = Map<string, Array<[number, number]>>;
 
-function addToGrid(grid: Grid, lat: number, lng: number): void {
+function addToGrid(grid: Grid, lat: number, lng: number) {
   const k = `${Math.floor(lat * GRID_RES)}_${Math.floor(lng * GRID_RES)}`;
-  const cell = grid.get(k);
-  if (cell) cell.push([lat, lng]);
-  else grid.set(k, [[lat, lng]]);
+  const c = grid.get(k); if (c) c.push([lat, lng]); else grid.set(k, [[lat, lng]]);
 }
 
 function hasNearby(grid: Grid, lat: number, lng: number): boolean {
-  const latDelta = RADIUS_M / 111_000;
-  const lngDelta = RADIUS_M / (111_000 * Math.cos((lat * Math.PI) / 180));
-  const laMin = Math.floor((lat - latDelta) * GRID_RES);
-  const laMax = Math.floor((lat + latDelta) * GRID_RES);
-  const loMin = Math.floor((lng - lngDelta) * GRID_RES);
-  const loMax = Math.floor((lng + lngDelta) * GRID_RES);
-  for (let la = laMin; la <= laMax; la++) {
+  const latD = RADIUS_M / 111_000;
+  const lngD = RADIUS_M / (111_000 * Math.cos((lat * Math.PI) / 180));
+  const laMin = Math.floor((lat - latD) * GRID_RES), laMax = Math.floor((lat + latD) * GRID_RES);
+  const loMin = Math.floor((lng - lngD) * GRID_RES), loMax = Math.floor((lng + lngD) * GRID_RES);
+  for (let la = laMin; la <= laMax; la++)
     for (let lo = loMin; lo <= loMax; lo++) {
       const cell = grid.get(`${la}_${lo}`);
-      if (cell) {
-        for (const [mlat, mlng] of cell) {
-          if (haversineM(lat, lng, mlat, mlng) <= RADIUS_M) return true;
-        }
-      }
+      if (cell) for (const [mlat, mlng] of cell)
+        if (haversineM(lat, lng, mlat, mlng) <= RADIUS_M) return true;
     }
-  }
   return false;
+}
+
+// ── wget-Download (läuft als Child-Process auf dem Server) ────────────────────
+async function downloadWithWget(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    job.status = "wget_download";
+    job.message = "wget startet…";
+
+    // -c = resume, --progress=dot:mega = MB-Fortschritt in stderr
+    const proc = spawn("wget", ["-c", "--progress=dot:mega", "-O", TMP_ZIP, url], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+
+    proc.stderr.on("data", (data: Buffer) => {
+      const line = data.toString();
+      // wget dot:mega output: "...  17% 98.5M  3.21M/s  eta 3m 12s"
+      const pct = line.match(/(\d+)%/);
+      const mb  = line.match(/([\d.]+)M[ \t]/);
+      const eta = line.match(/eta\s+(.+)/i);
+      if (pct || mb) {
+        job.downloadedMB = mb ? Math.round(parseFloat(mb[1])) : job.downloadedMB;
+        const pctStr = pct ? ` (${pct[1]}%)` : "";
+        const etaStr = eta ? ` — ETA ${eta[1].trim()}` : "";
+        job.message = `wget: ${job.downloadedMB} MB${pctStr}${etaStr}`;
+      }
+    });
+
+    proc.on("close", (code) => {
+      if (code === 0) {
+        const stat = fs.existsSync(TMP_ZIP) ? fs.statSync(TMP_ZIP) : null;
+        job.downloadedMB = stat ? Math.round(stat.size / 1_048_576) : job.downloadedMB;
+        job.totalMB = job.downloadedMB;
+        resolve();
+      } else {
+        reject(new Error(`wget beendet mit Code ${code}`));
+      }
+    });
+
+    proc.on("error", (err) => reject(new Error(`wget nicht verfügbar: ${err.message}`)));
+  });
 }
 
 // ── MaStR URL auto-detect ─────────────────────────────────────────────────────
@@ -109,156 +140,96 @@ async function detectMastrUrl(): Promise<string | null> {
     });
     if (!res.ok) return null;
     const html = await res.text();
-    const match =
-      html.match(/href="(https?:\/\/[^"]*Gesamtdatenexport[^"]*\.zip)"/i) ??
-      html.match(/href="(https?:\/\/download\.marktstammdatenregister\.de\/[^"]+\.zip)"/i);
-    return match?.[1] ?? null;
-  } catch {
-    return null;
-  }
+    const m = html.match(/href="(https?:\/\/[^"]*Gesamtdatenexport[^"]*\.zip)"/i)
+           ?? html.match(/href="(https?:\/\/download\.marktstammdatenregister\.de\/[^"]+\.zip)"/i);
+    return m?.[1] ?? null;
+  } catch { return null; }
 }
 
 // ── Leads laden ───────────────────────────────────────────────────────────────
 async function fetchAllLeads() {
   const supabase = createAdminClient();
   const leads: Array<{ id: string; company_name: string; latitude: number; longitude: number }> = [];
-  const PAGE = 1000;
   let page = 0;
   while (true) {
     const { data, error } = await supabase
       .from("solar_lead_mass")
       .select("id, company_name, latitude, longitude")
-      .not("latitude", "is", null)
-      .not("longitude", "is", null)
+      .not("latitude", "is", null).not("longitude", "is", null)
       .neq("status", "existing_solar")
-      .range(page * PAGE, (page + 1) * PAGE - 1);
+      .range(page * 1000, (page + 1) * 1000 - 1);
     if (error || !data?.length) break;
     leads.push(...(data as typeof leads));
-    if (data.length < PAGE) break;
+    if (data.length < 1000) break;
     page++;
   }
   return leads;
 }
 
-// ── XML parsen aus einem ZIP-Stream ──────────────────────────────────────────
+// ── XML aus ZIP parsen ────────────────────────────────────────────────────────
 function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let foundSolarFile = false;
-
-    zipStream
-      .pipe(unzipper.Parse())
+  return new Promise((resolve, reject) => {
+    let found = false;
+    zipStream.pipe(unzipper.Parse())
       .on("entry", (entry: unzipper.Entry) => {
-        const fileName = entry.path;
-
-        if (fileName.includes("EinheitenSolar") && fileName.endsWith(".xml")) {
-          foundSolarFile = true;
-          job.message = `Parse ${fileName}…`;
-
-          let buf = "";
-          let parsedCount = 0;
-
+        if (entry.path.includes("EinheitenSolar") && entry.path.endsWith(".xml")) {
+          found = true;
+          job.message = `Parse ${entry.path}…`;
+          let buf = "", count = 0;
           entry.on("data", (chunk: Buffer) => {
             buf += chunk.toString("utf8");
-
-            let startIdx: number;
-            while ((startIdx = buf.indexOf("<EinheitSolar>")) !== -1) {
-              const endIdx = buf.indexOf("</EinheitSolar>", startIdx);
-              if (endIdx === -1) break;
-
-              const block = buf.slice(startIdx, endIdx + "</EinheitSolar>".length);
-              buf = buf.slice(endIdx + "</EinheitSolar>".length);
-
-              const latMatch = block.match(/<Breitengrad>([^<]+)<\/Breitengrad>/);
-              const lngMatch = block.match(/<Laengengrad>([^<]+)<\/Laengengrad>/);
-
-              if (latMatch && lngMatch) {
-                const lat = parseFloat(latMatch[1].replace(",", "."));
-                const lng = parseFloat(lngMatch[1].replace(",", "."));
+            let si: number;
+            while ((si = buf.indexOf("<EinheitSolar>")) !== -1) {
+              const ei = buf.indexOf("</EinheitSolar>", si);
+              if (ei === -1) break;
+              const block = buf.slice(si, ei + 15);
+              buf = buf.slice(ei + 15);
+              const latM = block.match(/<Breitengrad>([^<]+)<\/Breitengrad>/);
+              const lngM = block.match(/<Laengengrad>([^<]+)<\/Laengengrad>/);
+              if (latM && lngM) {
+                const lat = parseFloat(latM[1].replace(",", "."));
+                const lng = parseFloat(lngM[1].replace(",", "."));
                 if (!isNaN(lat) && !isNaN(lng) && lat >= 47 && lat <= 55 && lng >= 6 && lng <= 15) {
                   addToGrid(grid, lat, lng);
-                  parsedCount++;
-                  if (parsedCount % 50_000 === 0) {
-                    job.parsedUnits = parsedCount;
-                    job.message = `${parsedCount.toLocaleString("de")} Einheiten geladen…`;
+                  count++;
+                  if (count % 50_000 === 0) {
+                    job.parsedUnits = count;
+                    job.message = `${count.toLocaleString("de")} Einheiten geladen…`;
                   }
                 }
               }
             }
           });
-
-          entry.on("end", () => {
-            job.parsedUnits = parsedCount;
-            job.message = `${parsedCount.toLocaleString("de")} MaStR-Einheiten geladen`;
-          });
-
+          entry.on("end", () => { job.parsedUnits = count; });
           entry.on("error", reject);
         } else {
           entry.autodrain();
         }
       })
-      .on("finish", () => {
-        if (!foundSolarFile) reject(new Error("EinheitenSolar.xml nicht im ZIP gefunden"));
-        else resolve();
-      })
+      .on("finish", () => found ? resolve() : reject(new Error("EinheitenSolar.xml nicht gefunden")))
       .on("error", reject);
   });
 }
 
 // ── Hauptjob ──────────────────────────────────────────────────────────────────
-async function runBackfill(source: { url?: string; localPath?: string }): Promise<void> {
+async function runBackfill(zipPath: string): Promise<void> {
   const supabase = createAdminClient();
-
   try {
+    if (!fs.existsSync(zipPath)) throw new Error(`Datei nicht gefunden: ${zipPath}`);
+    const stat = fs.statSync(zipPath);
+    job.status = "parsing";
+    job.totalMB = job.downloadedMB = Math.round(stat.size / 1_048_576);
+    job.message = `Parse ZIP (${job.totalMB} MB)…`;
+
     const grid: Grid = new Map();
+    await parseZipStream(fs.createReadStream(zipPath), grid);
+    if (grid.size === 0) throw new Error("Keine deutschen MaStR-Koordinaten gefunden");
 
-    if (source.localPath) {
-      // ── Lokale Datei (per SCP hochgeladen) ──────────────────────────────────
-      const absPath = path.resolve(source.localPath);
-      if (!fs.existsSync(absPath)) throw new Error(`Datei nicht gefunden: ${absPath}`);
-      const stat = fs.statSync(absPath);
-      job.status = "parsing";
-      job.downloadedMB = Math.round(stat.size / 1_048_576);
-      job.message = `Lese lokale Datei (${job.downloadedMB} MB)…`;
-      await parseZipStream(fs.createReadStream(absPath), grid);
-
-    } else if (source.url) {
-      // ── Download vom MaStR-Server ────────────────────────────────────────────
-      job.status = "downloading";
-      job.message = `Lade MaStR ZIP…`;
-
-      const response = await fetch(source.url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; SolarLead/1.0)" },
-        signal: AbortSignal.timeout(90 * 60 * 1000),
-      });
-      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status} beim Download`);
-
-      const contentLength = Number(response.headers.get("content-length") ?? 0);
-      let downloaded = 0;
-
-      const nodeStream = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
-      const byteCounter = new PassThrough();
-      byteCounter.on("data", (chunk: Buffer) => {
-        downloaded += chunk.length;
-        job.downloadedMB = Math.round(downloaded / 1_048_576);
-        job.message = `Download: ${job.downloadedMB} MB${contentLength ? ` von ~${Math.round(contentLength / 1_048_576)} MB` : ""}`;
-      });
-      nodeStream.pipe(byteCounter);
-
-      job.status = "parsing";
-      await parseZipStream(byteCounter, grid);
-    } else {
-      throw new Error("Weder URL noch lokaler Pfad angegeben");
-    }
-
-    if (grid.size === 0) throw new Error("Keine MaStR-Koordinaten in Deutschland gefunden");
-
-    // Leads laden
     job.status = "matching";
-    job.message = "Lade Leads aus Datenbank…";
+    job.message = "Lade Leads…";
     const leads = await fetchAllLeads();
     job.leadsTotal = leads.length;
 
-    // Abgleich
     const matchIds: string[] = [];
     for (let i = 0; i < leads.length; i++) {
       if (hasNearby(grid, leads[i].latitude, leads[i].longitude)) matchIds.push(leads[i].id);
@@ -267,15 +238,15 @@ async function runBackfill(source: { url?: string; localPath?: string }): Promis
     }
     job.matchesFound = matchIds.length;
 
-    // DB-Update
     if (matchIds.length > 0) {
       job.status = "updating";
       const now = new Date().toISOString();
       let updated = 0;
       for (let i = 0; i < matchIds.length; i += 200) {
-        const batch = matchIds.slice(i, i + 200);
-        await supabase.from("solar_lead_mass").update({ status: "existing_solar", updated_at: now }).in("id", batch);
-        updated += batch.length;
+        await supabase.from("solar_lead_mass")
+          .update({ status: "existing_solar", updated_at: now })
+          .in("id", matchIds.slice(i, i + 200));
+        updated += Math.min(200, matchIds.length - i);
         job.updatedCount = updated;
       }
     }
@@ -283,15 +254,18 @@ async function runBackfill(source: { url?: string; localPath?: string }): Promis
     job.status = "done";
     job.finishedAt = new Date().toISOString();
     job.message = matchIds.length > 0
-      ? `Fertig! ${matchIds.length} Leads als 'existing_solar' markiert.`
-      : "Fertig! Keine neuen Solar-Treffer gefunden.";
+      ? `Fertig! ${matchIds.length} Leads als existing_solar markiert.`
+      : "Fertig! Keine neuen Treffer.";
+
+    // Temp-Datei aufräumen
+    try { if (zipPath === TMP_ZIP) fs.unlinkSync(zipPath); } catch { /* ignore */ }
 
   } catch (err) {
     job.status = "error";
     job.error = err instanceof Error ? err.message : String(err);
     job.message = `Fehler: ${job.error}`;
     job.finishedAt = new Date().toISOString();
-    console.error("[MaStR-Backfill] Fehler:", err);
+    console.error("[MaStR]", err);
   }
 }
 
@@ -314,35 +288,47 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
+
+  // ── Aktion: wget-Download ────────────────────────────────────────────────────
+  if (body.action === "wget") {
+    let url: string = body.url ?? "";
+    resetJob("wget_download");
+
+    (async () => {
+      if (!url) {
+        job.message = "Erkenne MaStR-URL…";
+        const detected = await detectMastrUrl();
+        if (!detected) {
+          job.status = "error";
+          job.error = "URL nicht erkannt. Bitte manuell eintragen.";
+          job.message = job.error;
+          job.finishedAt = new Date().toISOString();
+          return;
+        }
+        url = detected;
+      }
+      try {
+        await downloadWithWget(url);
+        // Nach Download direkt verarbeiten
+        await runBackfill(TMP_ZIP);
+      } catch (err) {
+        job.status = "error";
+        job.error = err instanceof Error ? err.message : String(err);
+        job.message = `Fehler: ${job.error}`;
+        job.finishedAt = new Date().toISOString();
+      }
+    })();
+
+    return NextResponse.json({ ok: true, message: "wget-Download gestartet" });
+  }
+
+  // ── Aktion: lokale Datei verarbeiten ─────────────────────────────────────────
   const localPath: string = body.localPath ?? "";
-  const zipUrl: string = body.url ?? "";
-
-  resetJob();
-
   if (localPath) {
-    runBackfill({ localPath });
-    return NextResponse.json({ ok: true, message: "Job gestartet (lokale Datei)" });
+    resetJob("parsing");
+    runBackfill(localPath);
+    return NextResponse.json({ ok: true, message: "Verarbeitung gestartet" });
   }
 
-  if (zipUrl) {
-    runBackfill({ url: zipUrl });
-    return NextResponse.json({ ok: true, message: "Job gestartet (Download)" });
-  }
-
-  // Auto-detect URL
-  job.status = "fetching_url";
-  job.message = "Suche aktuelle MaStR-Download-URL…";
-  (async () => {
-    const detected = await detectMastrUrl();
-    if (!detected) {
-      job.status = "error";
-      job.error = "URL konnte nicht erkannt werden. Bitte manuell von marktstammdatenregister.de kopieren oder ZIP per SCP hochladen und localPath angeben.";
-      job.message = job.error;
-      job.finishedAt = new Date().toISOString();
-      return;
-    }
-    await runBackfill({ url: detected });
-  })();
-
-  return NextResponse.json({ ok: true, message: "Job gestartet (URL-Erkennung…)" });
+  return NextResponse.json({ error: "Bitte action=wget oder localPath angeben" }, { status: 400 });
 }
