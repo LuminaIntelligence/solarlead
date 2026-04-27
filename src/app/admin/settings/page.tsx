@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +45,20 @@ export default function AdminSettingsPage() {
   const [backfillRunning, setBackfillRunning] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ fixed?: number; error?: string; message?: string } | null>(null);
 
+  // Backfill contacts tool
+  const [contactBackfillMissing, setContactBackfillMissing] = useState<number | null>(null);
+  const [contactBackfillRunning, setContactBackfillRunning] = useState(false);
+  const [contactBackfillProgress, setContactBackfillProgress] = useState<{ processed: number; found: number; remaining: number } | null>(null);
+  const [contactBackfillDone, setContactBackfillDone] = useState(false);
+
   useEffect(() => {
     fetch("/api/admin/tools/backfill-solar")
       .then((r) => r.json())
       .then(setBackfillStatus)
+      .catch(() => {});
+    fetch("/api/admin/tools/backfill-contacts")
+      .then((r) => r.json())
+      .then((d) => setContactBackfillMissing(d.missing ?? 0))
       .catch(() => {});
   }, []);
 
@@ -148,6 +158,41 @@ export default function AdminSettingsPage() {
   };
 
   const weightsTotal = weights.business + weights.electricity + weights.solar + weights.outreach;
+
+  const handleContactBackfill = async () => {
+    setContactBackfillRunning(true);
+    setContactBackfillDone(false);
+    setContactBackfillProgress(null);
+    let offset = 0;
+    let totalProcessed = 0;
+    let totalFound = 0;
+
+    try {
+      while (true) {
+        const res = await fetch("/api/admin/tools/backfill-contacts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ offset, limit: 20 }),
+        });
+        const data = await res.json();
+        totalProcessed += data.processed ?? 0;
+        totalFound += data.found ?? 0;
+        offset = data.nextOffset ?? offset + 20;
+
+        setContactBackfillProgress({ processed: totalProcessed, found: totalFound, remaining: data.remaining ?? 0 });
+
+        if (!data.remaining || data.remaining === 0 || data.processed === 0) break;
+        // Short pause between batches to avoid overloading
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      setContactBackfillDone(true);
+      setContactBackfillMissing(0);
+    } catch {
+      setContactBackfillProgress((p) => ({ ...(p ?? { processed: 0, found: 0 }), remaining: -1 }));
+    } finally {
+      setContactBackfillRunning(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -424,6 +469,79 @@ export default function AdminSettingsPage() {
           <p className="text-xs text-slate-400">
             Kopiert Dachfläche und Solarqualität aus Discovery-Kampagnen. Detailwerte (Panele, Jahresenergie)
             können danach pro Lead über „Solar-Analyse durchführen" nachgeladen werden.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Contact Backfill Tool */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-500" />
+            Kontakte rückwirkend auffüllen
+          </CardTitle>
+          <CardDescription>
+            Führt die Kontaktsuche (Apollo → Impressum → Hunter → Firecrawl) für alle Leads ohne Kontakte durch
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Counter */}
+          {contactBackfillMissing !== null && (
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+              <div className="text-sm">
+                <span className="font-medium text-slate-900">{contactBackfillMissing}</span>
+                <span className="text-slate-500"> genehmigte Leads ohne Kontaktdaten</span>
+              </div>
+              {contactBackfillMissing === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+            </div>
+          )}
+
+          {/* Live progress */}
+          {contactBackfillProgress && (
+            <div className={`rounded-lg border px-4 py-3 text-sm space-y-1 ${
+              contactBackfillDone ? "bg-green-50 border-green-200 text-green-700" : "bg-blue-50 border-blue-200 text-blue-700"
+            }`}>
+              <div className="flex items-center gap-2">
+                {contactBackfillDone
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                <span className="font-medium">
+                  {contactBackfillDone ? "Abgeschlossen" : "Läuft…"}
+                </span>
+              </div>
+              <div className="flex gap-4 text-xs pl-6">
+                <span>Verarbeitet: <strong>{contactBackfillProgress.processed}</strong></span>
+                <span>Gefunden: <strong>{contactBackfillProgress.found}</strong></span>
+                {!contactBackfillDone && contactBackfillProgress.remaining > 0 && (
+                  <span>Verbleibend: <strong>{contactBackfillProgress.remaining}</strong></span>
+                )}
+              </div>
+              {/* Progress bar */}
+              {!contactBackfillDone && contactBackfillMissing !== null && contactBackfillMissing > 0 && (
+                <div className="mt-2 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round((contactBackfillProgress.processed / contactBackfillMissing) * 100))}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button
+            onClick={handleContactBackfill}
+            disabled={contactBackfillRunning || contactBackfillMissing === 0}
+            className="gap-2"
+          >
+            {contactBackfillRunning ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Läuft… {contactBackfillProgress ? `(${contactBackfillProgress.processed} verarbeitet)` : ""}</>
+            ) : (
+              <><Users className="h-4 w-4" /> Jetzt auffüllen ({contactBackfillMissing ?? "…"} Leads)</>
+            )}
+          </Button>
+          <p className="text-xs text-slate-400">
+            Verarbeitet 20 Leads pro Batch. Läuft automatisch bis alle Leads abgearbeitet sind.
+            Hunter.io-Credits werden nur verbraucht wenn Scraper nichts findet.
           </p>
         </CardContent>
       </Card>
