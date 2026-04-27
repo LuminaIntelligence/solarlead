@@ -82,7 +82,7 @@ export async function getLead(
 
     // Sort assessments: prefer the most complete one (with panel data), then newest
     if ((lead.solar_assessments?.length ?? 0) > 1) {
-      lead.solar_assessments.sort((a, b) => {
+      lead.solar_assessments!.sort((a, b) => {
         const aComplete = a.max_array_panels_count != null ? 1 : 0;
         const bComplete = b.max_array_panels_count != null ? 1 : 0;
         if (bComplete !== aComplete) return bComplete - aComplete;
