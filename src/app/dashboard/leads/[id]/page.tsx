@@ -890,6 +890,7 @@ function RoofSatelliteCard({
     `&size=640x480` +
     `&scale=2` +
     `&maptype=satellite` +
+    `&markers=color:red%7Csize:mid%7C${encodedAddress}` +
     `&key=${apiKey}`;
 
   return (
