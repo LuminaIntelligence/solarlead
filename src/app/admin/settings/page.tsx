@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users } from "lucide-react";
+import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,12 @@ export default function AdminSettingsPage() {
   const [contactBackfillProgress, setContactBackfillProgress] = useState<{ processed: number; found: number; remaining: number } | null>(null);
   const [contactBackfillDone, setContactBackfillDone] = useState(false);
 
+  // Solar detection backfill tool (OSM)
+  const [solarDetectionTotal, setSolarDetectionTotal] = useState<number | null>(null);
+  const [solarDetectionRunning, setSolarDetectionRunning] = useState(false);
+  const [solarDetectionProgress, setSolarDetectionProgress] = useState<{ processed: number; detected: number; remaining: number } | null>(null);
+  const [solarDetectionDone, setSolarDetectionDone] = useState(false);
+
   useEffect(() => {
     fetch("/api/admin/tools/backfill-solar")
       .then((r) => r.json())
@@ -71,6 +77,10 @@ export default function AdminSettingsPage() {
     fetch("/api/admin/tools/backfill-contacts")
       .then((r) => r.json())
       .then((d) => setContactBackfillMissing(d.missing ?? 0))
+      .catch(() => {});
+    fetch("/api/admin/tools/solar-detection-backfill")
+      .then((r) => r.json())
+      .then((d) => setSolarDetectionTotal(d.total ?? 0))
       .catch(() => {});
   }, []);
 
@@ -701,6 +711,129 @@ export default function AdminSettingsPage() {
           <p className="text-xs text-slate-400">
             Verarbeitet 20 Leads pro Batch. Läuft automatisch bis alle Leads abgearbeitet sind.
             Hunter.io-Credits werden nur verbraucht wenn Scraper nichts findet.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Solar Detection Backfill (OSM) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ScanSearch className="h-5 w-5 text-green-600" />
+            Bestehende Solar-Anlagen erkennen (OpenStreetMap)
+          </CardTitle>
+          <CardDescription>
+            Prüft alle Leads via OpenStreetMap ob bereits eine Solar-Anlage auf dem Dach eingetragen ist.
+            Erkannte Leads werden automatisch als &quot;Bereits Solar vorhanden&quot; markiert und aus Kampagnen ausgeschlossen.
+            Kostenlos, kein API-Kontingent.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {solarDetectionTotal !== null && (
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+              <div className="text-sm">
+                <span className="font-medium text-slate-900">{solarDetectionTotal}</span>
+                <span className="text-slate-500"> Leads noch nicht als Solar markiert</span>
+              </div>
+              {solarDetectionTotal === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+            </div>
+          )}
+
+          {solarDetectionProgress && (
+            <div className={`rounded-lg border px-4 py-3 text-sm space-y-1 ${
+              solarDetectionDone ? "bg-green-50 border-green-200 text-green-700" : "bg-blue-50 border-blue-200 text-blue-700"
+            }`}>
+              <div className="flex items-center gap-2">
+                {solarDetectionDone
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                <span className="font-medium">
+                  {solarDetectionDone ? "Abgeschlossen" : "Läuft…"}
+                </span>
+              </div>
+              <div className="flex gap-4 text-xs pl-6">
+                <span>Geprüft: <strong>{solarDetectionProgress.processed}</strong></span>
+                <span>☀️ Erkannt: <strong>{solarDetectionProgress.detected}</strong></span>
+                {!solarDetectionDone && solarDetectionProgress.remaining > 0 && (
+                  <span>Verbleibend: <strong>{solarDetectionProgress.remaining}</strong></span>
+                )}
+              </div>
+              {!solarDetectionDone && solarDetectionTotal !== null && solarDetectionTotal > 0 && (
+                <div className="mt-2 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          (solarDetectionProgress.processed /
+                            Math.max(solarDetectionTotal, 1)) *
+                            100
+                        )
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button
+            onClick={async () => {
+              setSolarDetectionRunning(true);
+              setSolarDetectionDone(false);
+              setSolarDetectionProgress(null);
+              let offset = 0;
+              let totalProcessed = 0;
+              let totalDetected = 0;
+
+              try {
+                while (true) {
+                  const res = await fetch("/api/admin/tools/solar-detection-backfill", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ offset, limit: 20 }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) break;
+
+                  totalProcessed += data.processed ?? 0;
+                  totalDetected += data.detected ?? 0;
+                  offset = data.nextOffset ?? offset + 20;
+
+                  setSolarDetectionProgress({
+                    processed: totalProcessed,
+                    detected: totalDetected,
+                    remaining: data.remaining ?? 0,
+                  });
+
+                  // Done when no more leads returned
+                  if ((data.processed ?? 0) === 0 || (data.remaining ?? 0) === 0) break;
+
+                  // Small pause between batches (Overpass is a public service)
+                  await new Promise((r) => setTimeout(r, 500));
+                }
+                setSolarDetectionDone(true);
+                const status = await fetch("/api/admin/tools/solar-detection-backfill").then((r) => r.json());
+                setSolarDetectionTotal(status.total ?? 0);
+              } catch {
+                // keep progress shown
+              } finally {
+                setSolarDetectionRunning(false);
+              }
+            }}
+            disabled={solarDetectionRunning || solarDetectionTotal === 0}
+            className="gap-2 bg-green-700 hover:bg-green-800 text-white"
+          >
+            {solarDetectionRunning ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Prüfe… ({solarDetectionProgress?.processed ?? 0} geprüft)</>
+            ) : (
+              <><ScanSearch className="h-4 w-4" /> Solar-Erkennung starten ({solarDetectionTotal ?? "…"} Leads)</>
+            )}
+          </Button>
+          <p className="text-xs text-slate-400">
+            Nutzt OpenStreetMap — kostenlos, kein API-Limit. Ca. 20 Leads/Minute (Pause zwischen Anfragen).
+            Neue Leads werden ab sofort automatisch beim Anreichern geprüft.
           </p>
         </CardContent>
       </Card>

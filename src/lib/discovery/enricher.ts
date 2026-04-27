@@ -11,6 +11,7 @@ import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
 import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
 import type { Contact } from "@/lib/providers/contacts/types";
 import { calculateScore } from "@/lib/scoring";
+import { checkExistingSolarOsm } from "@/lib/providers/mastr/overpass";
 
 const MIN_ROOF_AREA_M2 = 500;
 
@@ -77,6 +78,34 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
       .from("discovery_leads")
       .update({ lead_id: leadId })
       .eq("id", discoveryLeadId);
+
+    // 2.5. Check for existing rooftop solar via OpenStreetMap (free, no quota)
+    //      If detected → mark lead as existing_solar and skip full enrichment
+    if (dl.latitude && dl.longitude) {
+      try {
+        const solarCheck = await checkExistingSolarOsm(dl.latitude, dl.longitude);
+        if (solarCheck.hasSolar) {
+          await supabase
+            .from("solar_lead_mass")
+            .update({ status: "existing_solar", updated_at: new Date().toISOString() })
+            .eq("id", leadId);
+          await supabase
+            .from("discovery_leads")
+            .update({
+              status: "insufficient_data",
+              rejection_reason: `Bereits Solar vorhanden (OpenStreetMap, ${solarCheck.count} Einträge)`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", discoveryLeadId);
+          await incrementCampaignCounter(supabase, dl.campaign_id, "total_enriched");
+          console.log(`[Enricher] Existing solar detected via OSM for ${dl.company_name}`);
+          return;
+        }
+      } catch (e) {
+        // Never block enrichment due to OSM check failure
+        console.warn("[Enricher] OSM solar check failed (non-fatal):", e);
+      }
+    }
 
     // 3. Solar assessment
     let solarResult = null;

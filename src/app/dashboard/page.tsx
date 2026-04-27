@@ -14,6 +14,7 @@ const statusColors: Record<LeadStatus, string> = {
   contacted: "bg-purple-100 text-purple-800",
   qualified: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
+  existing_solar: "bg-orange-100 text-orange-800",
 };
 
 const statusBarColors: Record<LeadStatus, string> = {
@@ -22,6 +23,7 @@ const statusBarColors: Record<LeadStatus, string> = {
   contacted: "bg-purple-500",
   qualified: "bg-green-500",
   rejected: "bg-red-400",
+  existing_solar: "bg-orange-400",
 };
 
 const statusLabels: Record<LeadStatus, string> = {
@@ -30,6 +32,7 @@ const statusLabels: Record<LeadStatus, string> = {
   contacted: "Kontaktiert",
   qualified: "Qualifiziert",
   rejected: "Abgelehnt",
+  existing_solar: "☀️ Bereits Solar",
 };
 
 function formatCategory(category: string): string {
