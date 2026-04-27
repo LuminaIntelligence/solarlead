@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch } from "lucide-react";
+import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch, Database } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,31 @@ export default function AdminSettingsPage() {
   const [solarDetectionRunning, setSolarDetectionRunning] = useState(false);
   const [solarDetectionProgress, setSolarDetectionProgress] = useState<{ processed: number; detected: number; remaining: number } | null>(null);
   const [solarDetectionDone, setSolarDetectionDone] = useState(false);
+
+  // MaStR Backfill
+  type MastrStatus = "idle" | "fetching_url" | "downloading" | "parsing" | "matching" | "updating" | "done" | "error";
+  const [mastrJob, setMastrJob] = useState<{
+    status: MastrStatus; message: string; downloadedMB: number;
+    parsedUnits: number; leadsTotal: number; leadsChecked: number;
+    matchesFound: number; updatedCount: number; error: string | null;
+  } | null>(null);
+  const [mastrUrl, setMastrUrl] = useState("");
+  const [mastrPolling, setMastrPolling] = useState(false);
+
+  // Poll MaStR job status while running
+  useEffect(() => {
+    if (!mastrPolling) return;
+    const iv = setInterval(async () => {
+      try {
+        const data = await fetch("/api/admin/tools/mastr-backfill").then((r) => r.json());
+        setMastrJob(data);
+        if (["done", "error", "idle"].includes(data.status)) {
+          setMastrPolling(false);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [mastrPolling]);
 
   useEffect(() => {
     fetch("/api/admin/tools/backfill-solar")
@@ -834,6 +859,136 @@ export default function AdminSettingsPage() {
           <p className="text-xs text-slate-400">
             Nutzt OpenStreetMap — kostenlos, kein API-Limit. Ca. 20 Leads/Minute (Pause zwischen Anfragen).
             Neue Leads werden ab sofort automatisch beim Anreichern geprüft.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* MaStR Backfill (Stufe 3) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-blue-600" />
+            MaStR Backfill — Komplettabgleich (einmalig)
+          </CardTitle>
+          <CardDescription>
+            Lädt den Marktstammdatenregister-Datensatz (~500 MB) direkt auf dem Server herunter und
+            gleicht alle Leads gegen 3+ Mio. registrierte Solar-Anlagen ab. Deutlich vollständiger als OSM.
+            Einmalig ausführen, danach ist die Datenbank bereinigt.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+
+          {/* URL-Eingabe */}
+          <div className="space-y-1.5">
+            <Label htmlFor="mastr-url" className="text-sm">
+              Download-URL (optional — wird automatisch erkannt)
+            </Label>
+            <Input
+              id="mastr-url"
+              placeholder="https://download.marktstammdatenregister.de/Gesamtdatenexport_…zip"
+              value={mastrUrl}
+              onChange={(e) => setMastrUrl(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <p className="text-xs text-slate-400">
+              URL von{" "}
+              <a
+                href="https://www.marktstammdatenregister.de/MaStR/Datendownload"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline"
+              >
+                marktstammdatenregister.de/MaStR/Datendownload
+              </a>
+              {" "}— leer lassen für automatische Erkennung.
+            </p>
+          </div>
+
+          {/* Job-Status */}
+          {mastrJob && mastrJob.status !== "idle" && (
+            <div className={`rounded-lg border px-4 py-3 text-sm space-y-2 ${
+              mastrJob.status === "error"
+                ? "bg-red-50 border-red-200 text-red-700"
+                : mastrJob.status === "done"
+                ? "bg-green-50 border-green-200 text-green-700"
+                : "bg-blue-50 border-blue-200 text-blue-700"
+            }`}>
+              <div className="flex items-center gap-2">
+                {mastrJob.status === "done"
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : mastrJob.status === "error"
+                  ? <AlertCircle className="h-4 w-4 shrink-0" />
+                  : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                <span className="font-medium text-sm">{mastrJob.message}</span>
+              </div>
+
+              {/* Fortschritts-Details */}
+              {["downloading", "parsing", "matching", "updating"].includes(mastrJob.status) && (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs pl-6 text-blue-600">
+                  {mastrJob.downloadedMB > 0 && (
+                    <span>Download: <strong>{mastrJob.downloadedMB} MB</strong></span>
+                  )}
+                  {mastrJob.parsedUnits > 0 && (
+                    <span>MaStR-Einheiten: <strong>{mastrJob.parsedUnits.toLocaleString("de")}</strong></span>
+                  )}
+                  {mastrJob.leadsTotal > 0 && (
+                    <span>Leads geprüft: <strong>{mastrJob.leadsChecked}/{mastrJob.leadsTotal}</strong></span>
+                  )}
+                  {mastrJob.matchesFound > 0 && (
+                    <span>☀️ Treffer: <strong>{mastrJob.matchesFound}</strong></span>
+                  )}
+                </div>
+              )}
+
+              {/* Abschluss-Zusammenfassung */}
+              {mastrJob.status === "done" && (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs pl-6">
+                  <span>MaStR-Einheiten: <strong>{mastrJob.parsedUnits.toLocaleString("de")}</strong></span>
+                  <span>Leads geprüft: <strong>{mastrJob.leadsTotal}</strong></span>
+                  <span>☀️ Neu markiert: <strong>{mastrJob.updatedCount}</strong></span>
+                </div>
+              )}
+
+              {/* Fortschrittsbalken */}
+              {mastrJob.status === "matching" && mastrJob.leadsTotal > 0 && (
+                <div className="mt-1 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((mastrJob.leadsChecked / mastrJob.leadsTotal) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button
+            onClick={async () => {
+              try {
+                const res = await fetch("/api/admin/tools/mastr-backfill", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url: mastrUrl.trim() || undefined }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                  setMastrJob({ status: "error", message: data.error ?? "Unbekannter Fehler", downloadedMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: data.error });
+                  return;
+                }
+                setMastrPolling(true);
+              } catch {
+                setMastrJob({ status: "error", message: "Netzwerkfehler", downloadedMB: 0, parsedUnits: 0, leadsTotal: 0, leadsChecked: 0, matchesFound: 0, updatedCount: 0, error: "Netzwerkfehler" });
+              }
+            }}
+            disabled={mastrPolling}
+            className="gap-2 bg-blue-700 hover:bg-blue-800 text-white"
+          >
+            {mastrPolling
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Läuft auf dem Server…</>
+              : <><Database className="h-4 w-4" /> MaStR Backfill jetzt starten</>}
+          </Button>
+          <p className="text-xs text-slate-400">
+            Läuft vollständig auf dem Server (~10–20 min). Du kannst die Seite schließen — der Job läuft weiter.
+            Beim Wiederkehren wird der Status automatisch wiederhergestellt.
           </p>
         </CardContent>
       </Card>

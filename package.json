@@ -24,6 +24,7 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
     "@types/leaflet": "^1.9.21",
+    "@types/unzipper": "^0.10.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -37,6 +38,7 @@
     "react-leaflet": "^5.0.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "unzipper": "^0.12.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
