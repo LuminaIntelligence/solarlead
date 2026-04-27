@@ -45,6 +45,12 @@ export default function AdminSettingsPage() {
   const [backfillRunning, setBackfillRunning] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ fixed?: number; error?: string; message?: string } | null>(null);
 
+  // Full solar backfill (calls Google Solar API)
+  const [solarFullStatus, setSolarFullStatus] = useState<{ partial?: number; missing?: number; total?: number } | null>(null);
+  const [solarFullRunning, setSolarFullRunning] = useState(false);
+  const [solarFullProgress, setSolarFullProgress] = useState<{ processed: number; failed: number; remaining: number } | null>(null);
+  const [solarFullDone, setSolarFullDone] = useState(false);
+
   // Backfill contacts tool
   const [contactBackfillMissing, setContactBackfillMissing] = useState<number | null>(null);
   const [contactBackfillRunning, setContactBackfillRunning] = useState(false);
@@ -55,6 +61,10 @@ export default function AdminSettingsPage() {
     fetch("/api/admin/tools/backfill-solar")
       .then((r) => r.json())
       .then(setBackfillStatus)
+      .catch(() => {});
+    fetch("/api/admin/tools/backfill-solar-full")
+      .then((r) => r.json())
+      .then(setSolarFullStatus)
       .catch(() => {});
     fetch("/api/admin/tools/backfill-contacts")
       .then((r) => r.json())
@@ -469,6 +479,108 @@ export default function AdminSettingsPage() {
           <p className="text-xs text-slate-400">
             Kopiert Dachfläche und Solarqualität aus Discovery-Kampagnen. Detailwerte (Panele, Jahresenergie)
             können danach pro Lead über „Solar-Analyse durchführen" nachgeladen werden.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Full Solar Backfill Tool (calls Google Solar API) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sun className="h-5 w-5 text-orange-500" />
+            Solar-Detaildaten nachladen (Google Solar API)
+          </CardTitle>
+          <CardDescription>
+            Ruft die Google Solar API für alle Leads auf, denen Detaildaten fehlen (Panele, Jahresenergie, Sonnenstunden). Verbraucht API-Kontingent.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {solarFullStatus && (
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+              <div className="text-sm">
+                <span className="font-medium text-slate-900">{solarFullStatus.total ?? "…"}</span>
+                <span className="text-slate-500"> Leads mit unvollständigen Solar-Daten</span>
+                {(solarFullStatus.partial ?? 0) > 0 && (
+                  <span className="text-slate-400 ml-1">({solarFullStatus.partial} unvollständig, {solarFullStatus.missing} ohne Bewertung)</span>
+                )}
+              </div>
+              {solarFullStatus.total === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+            </div>
+          )}
+
+          {solarFullProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm text-slate-600">
+                <span>{solarFullProgress.processed} verarbeitet · {solarFullProgress.failed} fehlgeschlagen</span>
+                <span>{solarFullProgress.remaining} verbleibend</span>
+              </div>
+              {solarFullProgress.remaining > 0 && (
+                <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div
+                    className="bg-orange-500 h-2 rounded-full transition-all"
+                    style={{
+                      width: `${Math.round(
+                        (solarFullProgress.processed /
+                          Math.max(solarFullProgress.processed + solarFullProgress.remaining, 1)) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {solarFullDone && (
+            <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Alle Solar-Detaildaten wurden erfolgreich geladen.
+            </div>
+          )}
+
+          <Button
+            onClick={async () => {
+              setSolarFullRunning(true);
+              setSolarFullDone(false);
+              setSolarFullProgress(null);
+              let offset = 0;
+              let totalProcessed = 0;
+              let totalFailed = 0;
+              try {
+                while (true) {
+                  const res = await fetch("/api/admin/tools/backfill-solar-full", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ offset }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) break;
+                  totalProcessed += data.processed ?? 0;
+                  totalFailed += data.failed ?? 0;
+                  setSolarFullProgress({ processed: totalProcessed, failed: totalFailed, remaining: data.remaining ?? 0 });
+                  if ((data.remaining ?? 0) === 0 || (data.processed ?? 0) === 0) break;
+                  offset += data.processed;
+                  await new Promise((r) => setTimeout(r, 500));
+                }
+                setSolarFullDone(true);
+                const status = await fetch("/api/admin/tools/backfill-solar-full").then((r) => r.json());
+                setSolarFullStatus(status);
+              } catch {
+                // keep progress shown
+              } finally {
+                setSolarFullRunning(false);
+              }
+            }}
+            disabled={solarFullRunning || solarFullStatus?.total === 0}
+            className="gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+          >
+            {solarFullRunning ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Wird geladen… ({solarFullProgress?.processed ?? 0} fertig)</>
+            ) : (
+              <><Sun className="h-4 w-4" /> Solar-Detaildaten nachladen ({solarFullStatus?.total ?? "…"} Leads)</>
+            )}
+          </Button>
+          <p className="text-xs text-slate-400">
+            Verarbeitet je 10 Leads pro API-Batch. Kann mehrere Minuten dauern je nach Anzahl.
           </p>
         </CardContent>
       </Card>
