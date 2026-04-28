@@ -1,0 +1,28 @@
+name: Solar Detection Cron
+
+on:
+  schedule:
+    # Jeden Tag um 02:00 UTC (03:00 / 04:00 deutsche Zeit)
+    - cron: "0 2 * * *"
+  workflow_dispatch: # Manuell auslösbar aus GitHub UI
+
+jobs:
+  solar-detection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run OSM Solar Detection
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/solar-detection")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Solar detection cron failed with status $HTTP_CODE"
+            exit 1
+          fi
