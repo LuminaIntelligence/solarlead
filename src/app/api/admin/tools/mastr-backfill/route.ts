@@ -4,14 +4,17 @@
  * GET        — Job-Status abrufen
  * POST       — Job starten: { localPath } | { url } | {} (auto-detect)
  * POST wget  — ZIP via wget auf dem Server herunterladen: { action: "wget", url }
+ *
+ * Zweistufige Prüfung:
+ *   1. GPS-Match    — Haversine ≤ 150 m gegen MaStR-Einheiten mit Koordinaten
+ *   2. Adress-Match — PLZ + normalisierter Straßenname gegen alle MaStR-Einheiten
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Readable, PassThrough } from "stream";
+import { PassThrough } from "stream";
 import * as fs from "fs";
-import * as path from "path";
 import { spawn } from "child_process";
 import unzipper from "unzipper";
 
@@ -57,7 +60,7 @@ function isAdmin(u: { user_metadata?: { role?: string } } | null) {
   return u?.user_metadata?.role === "admin";
 }
 
-// ── Räumlicher Index ──────────────────────────────────────────────────────────
+// ── Räumlicher Index (GPS) ────────────────────────────────────────────────────
 const EARTH_R = 6_371_000;
 const RADIUS_M = 150;
 const GRID_RES = 100;
@@ -91,20 +94,54 @@ function hasNearby(grid: Grid, lat: number, lng: number): boolean {
   return false;
 }
 
+// ── Adress-Index (PLZ + Straße) ───────────────────────────────────────────────
+type AddrMap = Map<string, Set<string>>; // PLZ → Set<normalizedStreet>
+
+function normalizeStreet(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/straße\b/gi, "str")
+    .replace(/strasse\b/gi, "str")
+    .replace(/str\.\s*$/i, "str")
+    .replace(/\s+/g, " ");
+}
+
+function extractStreetFromAddress(address: string): string {
+  // "Josefstraße 23" → "Josefstraße"
+  // "Mittelweg 5a, 22145 Braak, Deutschland" → "Mittelweg"
+  const m = address.match(/^([^0-9,]+)/);
+  return m ? normalizeStreet(m[1]) : "";
+}
+
+function addToAddrMap(map: AddrMap, plz: string, street: string): void {
+  const norm = normalizeStreet(street);
+  if (!norm || norm.length < 3) return;
+  const set = map.get(plz);
+  if (set) set.add(norm);
+  else map.set(plz, new Set([norm]));
+}
+
+function hasAddressMatch(map: AddrMap, plz: string, address: string): boolean {
+  const streets = map.get(plz?.trim());
+  if (!streets) return false;
+  const street = extractStreetFromAddress(address);
+  if (!street || street.length < 3) return false;
+  return streets.has(street);
+}
+
 // ── wget-Download (läuft als Child-Process auf dem Server) ────────────────────
 async function downloadWithWget(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     job.status = "wget_download";
     job.message = "wget startet…";
 
-    // -c = resume, --progress=dot:mega = MB-Fortschritt in stderr
     const proc = spawn("wget", ["-c", "--progress=dot:mega", "-O", TMP_ZIP, url], {
       stdio: ["ignore", "ignore", "pipe"],
     });
 
     proc.stderr.on("data", (data: Buffer) => {
       const line = data.toString();
-      // wget dot:mega output: "...  17% 98.5M  3.21M/s  eta 3m 12s"
       const pct = line.match(/(\d+)%/);
       const mb  = line.match(/([\d.]+)M[ \t]/);
       const eta = line.match(/eta\s+(.+)/i);
@@ -147,19 +184,28 @@ async function detectMastrUrl(): Promise<string | null> {
 }
 
 // ── Leads laden ───────────────────────────────────────────────────────────────
-async function fetchAllLeads() {
+type Lead = {
+  id: string;
+  company_name: string;
+  latitude: number | null;
+  longitude: number | null;
+  postal_code: string | null;
+  address: string | null;
+};
+
+async function fetchAllLeads(): Promise<Lead[]> {
   const supabase = createAdminClient();
-  const leads: Array<{ id: string; company_name: string; latitude: number; longitude: number }> = [];
+  const leads: Lead[] = [];
   let page = 0;
   while (true) {
     const { data, error } = await supabase
       .from("solar_lead_mass")
-      .select("id, company_name, latitude, longitude")
-      .not("latitude", "is", null).not("longitude", "is", null)
+      .select("id, company_name, latitude, longitude, postal_code, address")
       .neq("status", "existing_solar")
       .range(page * 1000, (page + 1) * 1000 - 1);
-    if (error || !data?.length) break;
-    leads.push(...(data as typeof leads));
+    if (error) { console.error("[MaStR] fetchAllLeads error:", error.message); break; }
+    if (!data?.length) break;
+    leads.push(...(data as Lead[]));
     if (data.length < 1000) break;
     page++;
   }
@@ -167,9 +213,15 @@ async function fetchAllLeads() {
 }
 
 // ── XML aus ZIP parsen ────────────────────────────────────────────────────────
-function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<void> {
+function parseZipStream(
+  zipStream: NodeJS.ReadableStream,
+  grid: Grid,
+  addrMap: AddrMap,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     let found = false;
+    let totalCount = 0;
+
     zipStream.pipe(unzipper.Parse())
       .on("entry", (entry: unzipper.Entry) => {
         if (entry.path.includes("EinheitenSolar") && entry.path.endsWith(".xml")) {
@@ -178,8 +230,9 @@ function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<v
           let buf = "", count = 0;
           let firstChunk = true;
           let oddByte: Buffer | null = null;
+
           entry.on("data", (chunk: Buffer) => {
-            // MaStR XML ist UTF-16 LE kodiert — korrekt dekodieren
+            // MaStR XML ist UTF-16 LE kodiert
             let data = oddByte ? Buffer.concat([oddByte, chunk]) : chunk;
             oddByte = null;
             // UTF-16 BOM (FF FE) beim ersten Chunk überspringen
@@ -195,12 +248,17 @@ function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<v
               data = data.slice(0, -1);
             }
             buf += data.toString("utf16le");
+
             let si: number;
             while ((si = buf.indexOf("<EinheitSolar>")) !== -1) {
               const ei = buf.indexOf("</EinheitSolar>", si);
               if (ei === -1) break;
               const block = buf.slice(si, ei + 15);
               buf = buf.slice(ei + 15);
+              count++;
+              totalCount++;
+
+              // Stufe 1: GPS-Index
               const latM = block.match(/<Breitengrad>([^<]+)<\/Breitengrad>/);
               const lngM = block.match(/<Laengengrad>([^<]+)<\/Laengengrad>/);
               if (latM && lngM) {
@@ -208,16 +266,23 @@ function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<v
                 const lng = parseFloat(lngM[1].replace(",", "."));
                 if (!isNaN(lat) && !isNaN(lng) && lat >= 47 && lat <= 55 && lng >= 6 && lng <= 15) {
                   addToGrid(grid, lat, lng);
-                  count++;
-                  if (count % 5_000 === 0) {
-                    job.parsedUnits = count;
-                    job.message = `${count.toLocaleString("de")} Einheiten geladen…`;
-                  }
                 }
+              }
+
+              // Stufe 2: Adress-Index (PLZ + Straße)
+              const plzM = block.match(/<Postleitzahl>([^<]+)<\/Postleitzahl>/);
+              const strM = block.match(/<Strasse>([^<]+)<\/Strasse>/);
+              if (plzM && strM) {
+                addToAddrMap(addrMap, plzM[1].trim(), strM[1].trim());
+              }
+
+              if (count % 5_000 === 0) {
+                job.parsedUnits = totalCount;
+                job.message = `${totalCount.toLocaleString("de")} Einheiten geladen…`;
               }
             }
           });
-          entry.on("end", () => { job.parsedUnits = count; });
+          entry.on("end", () => { job.parsedUnits = totalCount; });
           entry.on("error", reject);
         } else {
           entry.autodrain();
@@ -239,19 +304,46 @@ async function runBackfill(zipPath: string): Promise<void> {
     job.message = `Parse ZIP (${job.totalMB} MB)…`;
 
     const grid: Grid = new Map();
-    await parseZipStream(fs.createReadStream(zipPath), grid);
-    if (grid.size === 0) throw new Error("Keine deutschen MaStR-Koordinaten gefunden");
+    const addrMap: AddrMap = new Map();
+    await parseZipStream(fs.createReadStream(zipPath), grid, addrMap);
+
+    if (grid.size === 0 && addrMap.size === 0) {
+      throw new Error("Keine MaStR-Daten gefunden");
+    }
 
     job.status = "matching";
     job.message = "Lade Leads…";
     const leads = await fetchAllLeads();
     job.leadsTotal = leads.length;
 
+    if (leads.length === 0) {
+      job.status = "done";
+      job.finishedAt = new Date().toISOString();
+      job.message = "Fertig! Keine prüfbaren Leads gefunden.";
+      try { if (zipPath === TMP_ZIP) fs.unlinkSync(zipPath); } catch { /* ignore */ }
+      return;
+    }
+
     const matchIds: string[] = [];
     for (let i = 0; i < leads.length; i++) {
-      if (hasNearby(grid, leads[i].latitude, leads[i].longitude)) matchIds.push(leads[i].id);
+      const lead = leads[i];
+      let matched = false;
+
+      // Stufe 1: GPS-Match (150 m Radius)
+      if (!matched && lead.latitude && lead.longitude) {
+        if (hasNearby(grid, lead.latitude, lead.longitude)) matched = true;
+      }
+
+      // Stufe 2: Adress-Match (PLZ + Straße)
+      if (!matched && lead.postal_code && lead.address) {
+        if (hasAddressMatch(addrMap, lead.postal_code, lead.address)) matched = true;
+      }
+
+      if (matched) matchIds.push(lead.id);
       job.leadsChecked = i + 1;
-      if ((i + 1) % 200 === 0) job.message = `${i + 1}/${leads.length} geprüft, ${matchIds.length} Treffer`;
+      if ((i + 1) % 200 === 0) {
+        job.message = `${i + 1}/${leads.length} geprüft, ${matchIds.length} Treffer`;
+      }
     }
     job.matchesFound = matchIds.length;
 
@@ -326,7 +418,6 @@ export async function POST(req: NextRequest) {
       }
       try {
         await downloadWithWget(url);
-        // Nach Download direkt verarbeiten
         await runBackfill(TMP_ZIP);
       } catch (err) {
         job.status = "error";
