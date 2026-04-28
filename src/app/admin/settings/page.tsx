@@ -75,6 +75,19 @@ export default function AdminSettingsPage() {
   const [mastrUrl, setMastrUrl] = useState("");
   const [mastrPolling, setMastrPolling] = useState(false);
 
+  // Beim Laden: prüfen ob MaStR-Job bereits läuft (z.B. nach Seitenreload)
+  useEffect(() => {
+    fetch("/api/admin/tools/mastr-backfill")
+      .then((r) => r.json())
+      .then((data) => {
+        setMastrJob(data);
+        if (!["idle", "done", "error"].includes(data.status)) {
+          setMastrPolling(true); // automatisch Polling starten wenn Job läuft
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Poll MaStR job status while running
   useEffect(() => {
     if (!mastrPolling) return;
