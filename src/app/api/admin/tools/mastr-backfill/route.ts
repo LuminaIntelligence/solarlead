@@ -192,7 +192,7 @@ function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<v
                 if (!isNaN(lat) && !isNaN(lng) && lat >= 47 && lat <= 55 && lng >= 6 && lng <= 15) {
                   addToGrid(grid, lat, lng);
                   count++;
-                  if (count % 50_000 === 0) {
+                  if (count % 5_000 === 0) {
                     job.parsedUnits = count;
                     job.message = `${count.toLocaleString("de")} Einheiten geladen…`;
                   }
