@@ -176,8 +176,25 @@ function parseZipStream(zipStream: NodeJS.ReadableStream, grid: Grid): Promise<v
           found = true;
           job.message = `Parse ${entry.path}…`;
           let buf = "", count = 0;
+          let firstChunk = true;
+          let oddByte: Buffer | null = null;
           entry.on("data", (chunk: Buffer) => {
-            buf += chunk.toString("utf8");
+            // MaStR XML ist UTF-16 LE kodiert — korrekt dekodieren
+            let data = oddByte ? Buffer.concat([oddByte, chunk]) : chunk;
+            oddByte = null;
+            // UTF-16 BOM (FF FE) beim ersten Chunk überspringen
+            if (firstChunk) {
+              firstChunk = false;
+              if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) {
+                data = data.slice(2);
+              }
+            }
+            // UTF-16LE braucht gerade Byte-Anzahl
+            if (data.length % 2 !== 0) {
+              oddByte = data.slice(-1);
+              data = data.slice(0, -1);
+            }
+            buf += data.toString("utf16le");
             let si: number;
             while ((si = buf.indexOf("<EinheitSolar>")) !== -1) {
               const ei = buf.indexOf("</EinheitSolar>", si);
