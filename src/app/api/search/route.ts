@@ -41,27 +41,18 @@ export async function POST(request: NextRequest) {
 
     const query = parsed.data;
 
-    // Get user settings — fall back to system (admin) settings if user has no live key
-    const settings = await getUserSettings();
-    let mode = settings?.provider_mode ?? "mock";
-    let apiKey = settings?.google_places_api_key ?? undefined;
+    // Always use the system (admin) API key for search — users share the central key
+    const adminClient = createAdminClient();
+    const { data: systemSettings } = await adminClient
+      .from("user_settings")
+      .select("provider_mode, google_places_api_key")
+      .eq("provider_mode", "live")
+      .not("google_places_api_key", "is", null)
+      .limit(1)
+      .maybeSingle();
 
-    if (mode !== "live" || !apiKey) {
-      // Try to find any admin/system settings with a live Google Places key
-      const adminClient = createAdminClient();
-      const { data: systemSettings } = await adminClient
-        .from("user_settings")
-        .select("provider_mode, google_places_api_key")
-        .eq("provider_mode", "live")
-        .not("google_places_api_key", "is", null)
-        .limit(1)
-        .maybeSingle();
-
-      if (systemSettings?.google_places_api_key) {
-        mode = "live";
-        apiKey = systemSettings.google_places_api_key;
-      }
-    }
+    const mode = systemSettings?.provider_mode ?? "mock";
+    const apiKey = systemSettings?.google_places_api_key ?? undefined;
 
     // Create search provider and execute search
     const provider = getSearchProvider(mode, apiKey);
