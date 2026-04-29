@@ -36,45 +36,46 @@ export class GoogleSolarProvider implements SolarProvider {
   }
 
   async assess(query: SolarQuery): Promise<SolarResult | null> {
+    const params = new URLSearchParams({
+      "location.latitude": query.latitude.toString(),
+      "location.longitude": query.longitude.toString(),
+      requiredQuality: "LOW",
+      key: this.apiKey,
+    });
+
+    // Separate network errors (return null — transient, retry later) from
+    // HTTP errors (throw — caller decides how to handle each status code).
+    let response: Response;
     try {
-      const params = new URLSearchParams({
-        "location.latitude": query.latitude.toString(),
-        "location.longitude": query.longitude.toString(),
-        requiredQuality: "LOW",
-        key: this.apiKey,
-      });
-
-      const response = await fetch(`${this.baseUrl}?${params.toString()}`, {
+      response = await fetch(`${this.baseUrl}?${params.toString()}`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        // Always throw so the caller can log the exact reason to the DB
-        if (response.status === 404) {
-          throw new Error(`Keine Gebäudedaten für diese Koordinaten (404)`);
-        }
-        if (response.status === 429) {
-          throw new Error(`API-Kontingent erschöpft (429) — bitte Quota erhöhen`);
-        }
-        if (response.status === 403) {
-          throw new Error(`API-Key ungültig oder Solar API nicht aktiviert (403)`);
-        }
-        throw new Error(`Solar API Fehler ${response.status}: ${errorText.slice(0, 200)}`);
-      }
-
-      const data = (await response.json()) as BuildingInsightsResponse;
-      return this.mapToSolarResult(data);
-    } catch (error) {
+    } catch (networkError) {
       console.error(
-        "[GoogleSolarProvider] Failed to assess solar potential:",
-        error instanceof Error ? error.message : error
+        "[GoogleSolarProvider] Network error:",
+        networkError instanceof Error ? networkError.message : networkError
       );
       return null;
     }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      // Throw so the caller can log the exact reason and act accordingly.
+      if (response.status === 404) {
+        throw new Error(`Keine Gebäudedaten für diese Koordinaten (404)`);
+      }
+      if (response.status === 429) {
+        throw new Error(`API-Kontingent erschöpft (429) — bitte Quota erhöhen`);
+      }
+      if (response.status === 403) {
+        throw new Error(`API-Key ungültig oder Solar API nicht aktiviert (403)`);
+      }
+      throw new Error(`Solar API Fehler ${response.status}: ${errorText.slice(0, 200)}`);
+    }
+
+    const data = (await response.json()) as BuildingInsightsResponse;
+    return this.mapToSolarResult(data);
   }
 
   private mapToSolarResult(data: BuildingInsightsResponse): SolarResult {

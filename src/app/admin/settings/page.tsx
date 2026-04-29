@@ -46,10 +46,10 @@ export default function AdminSettingsPage() {
   const [backfillResult, setBackfillResult] = useState<{ fixed?: number; error?: string; message?: string } | null>(null);
 
   // Full solar backfill (calls Google Solar API)
-  const [solarFullStatus, setSolarFullStatus] = useState<{ partial?: number; missing?: number; total?: number } | null>(null);
+  const [solarFullStatus, setSolarFullStatus] = useState<{ partial?: number; missing?: number; total?: number; noCoverage?: number } | null>(null);
   const [solarFullRunning, setSolarFullRunning] = useState(false);
   const [solarFullResetting, setSolarFullResetting] = useState(false);
-  const [solarFullProgress, setSolarFullProgress] = useState<{ processed: number; failed: number; remaining: number } | null>(null);
+  const [solarFullProgress, setSolarFullProgress] = useState<{ processed: number; processedFallback: number; failed: number; noCoverage: number; remaining: number; firstError?: string | null } | null>(null);
   const [solarFullDone, setSolarFullDone] = useState(false);
   const [solarFullRateLimited, setSolarFullRateLimited] = useState(false);
 
@@ -589,11 +589,18 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
           {solarFullStatus && (
             <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
-              <div className="text-sm">
-                <span className="font-medium text-slate-900">{solarFullStatus.total ?? "…"}</span>
-                <span className="text-slate-500"> Leads mit unvollständigen Solar-Daten</span>
-                {(solarFullStatus.partial ?? 0) > 0 && (
-                  <span className="text-slate-400 ml-1">({solarFullStatus.partial} unvollständig, {solarFullStatus.missing} ohne Bewertung)</span>
+              <div className="text-sm space-y-0.5">
+                <div>
+                  <span className="font-medium text-slate-900">{solarFullStatus.total ?? "…"}</span>
+                  <span className="text-slate-500"> Leads noch ausstehend</span>
+                  {(solarFullStatus.partial ?? 0) > 0 && (
+                    <span className="text-slate-400 ml-1">({solarFullStatus.partial} unvollständig, {solarFullStatus.missing} ohne Bewertung)</span>
+                  )}
+                </div>
+                {(solarFullStatus.noCoverage ?? 0) > 0 && (
+                  <div className="text-xs text-amber-600">
+                    {solarFullStatus.noCoverage} Leads dauerhaft ohne Google-Solar-Abdeckung (bereits markiert)
+                  </div>
                 )}
               </div>
               {solarFullStatus.total === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
@@ -602,10 +609,28 @@ export default function AdminSettingsPage() {
 
           {solarFullProgress && (
             <div className="space-y-2">
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{solarFullProgress.processed} verarbeitet · {solarFullProgress.failed} fehlgeschlagen</span>
-                <span>{solarFullProgress.remaining} verbleibend</span>
+              <div className="flex flex-wrap justify-between gap-x-4 text-sm text-slate-600">
+                <span className="flex gap-3 flex-wrap">
+                  {solarFullProgress.processed > 0 && (
+                    <span className="text-green-700 font-medium">✓ {solarFullProgress.processed} Google Solar</span>
+                  )}
+                  {solarFullProgress.processedFallback > 0 && (
+                    <span className="text-blue-700 font-medium">✓ {solarFullProgress.processedFallback} OSM+PVGIS</span>
+                  )}
+                  {solarFullProgress.noCoverage > 0 && (
+                    <span className="text-amber-600">⚠ {solarFullProgress.noCoverage} kein Gebäude</span>
+                  )}
+                  {solarFullProgress.failed > 0 && (
+                    <span className="text-red-600">✗ {solarFullProgress.failed} Fehler</span>
+                  )}
+                </span>
+                <span className="text-slate-400">{solarFullProgress.remaining} verbleibend</span>
               </div>
+              {solarFullProgress.firstError && (
+                <div className="text-xs text-red-600 bg-red-50 rounded px-2 py-1 font-mono truncate" title={solarFullProgress.firstError}>
+                  {solarFullProgress.firstError}
+                </div>
+              )}
               {solarFullProgress.remaining > 0 && (
                 <div className="w-full bg-slate-100 rounded-full h-2">
                   <div
@@ -629,15 +654,23 @@ export default function AdminSettingsPage() {
             </div>
           )}
           {solarFullDone && !solarFullRateLimited && (solarFullProgress?.remaining ?? 1) === 0 && (
-            <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-              Alle Solar-Detaildaten wurden erfolgreich geladen.
+            <div className="flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Fertig!</p>
+                {(solarFullProgress?.noCoverage ?? 0) > 0 && (
+                  <p className="text-xs mt-0.5 text-green-600 opacity-80">
+                    {solarFullProgress!.noCoverage} Leads ohne Google-Solar-Abdeckung dauerhaft markiert — sie erscheinen nicht mehr in der Warteschlange.
+                    Mit „Fehlgeschlagene zurücksetzen" können sie erneut versucht werden.
+                  </p>
+                )}
+              </div>
             </div>
           )}
           {solarFullDone && !solarFullRateLimited && (solarFullProgress?.remaining ?? 0) > 0 && (
-            <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
+            <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {solarFullProgress?.remaining} Leads haben keine Google Solar Abdeckung und können nicht angereichert werden.
+              {solarFullProgress?.remaining} Leads noch ausstehend — möglicherweise vorübergehende API-Fehler. Nochmals starten um es zu versuchen.
             </div>
           )}
 
@@ -649,29 +682,42 @@ export default function AdminSettingsPage() {
                 setSolarFullRateLimited(false);
                 setSolarFullProgress(null);
                 let totalProcessed = 0;
+                let totalFallback = 0;
                 let totalFailed = 0;
-                let consecutiveAllFailed = 0;
+                let totalNoCoverage = 0;
+                let lastFirstError: string | null = null;
+                // Track consecutive batches with zero real work (all no-coverage or network error)
+                let consecutiveEmpty = 0;
                 try {
                   while (true) {
                     const res = await fetch("/api/admin/tools/backfill-solar-full", { method: "POST" });
                     const data = await res.json();
                     if (!res.ok) break;
                     totalProcessed += data.processed ?? 0;
+                    totalFallback += data.processedFallback ?? 0;
                     totalFailed += data.failed ?? 0;
-                    setSolarFullProgress({ processed: totalProcessed, failed: totalFailed, remaining: data.remaining ?? 0 });
+                    totalNoCoverage += data.noCoverage ?? 0;
+                    if (data.firstError) lastFirstError = data.firstError;
+                    setSolarFullProgress({
+                      processed: totalProcessed,
+                      processedFallback: totalFallback,
+                      failed: totalFailed,
+                      noCoverage: totalNoCoverage,
+                      remaining: data.remaining ?? 0,
+                      firstError: lastFirstError,
+                    });
                     // Rate limited — stop immediately
                     if (data.rateLimited) { setSolarFullRateLimited(true); break; }
+                    // All done
                     if ((data.remaining ?? 0) === 0) break;
-                    // No leads found at all — nothing left to process
-                    if ((data.processed ?? 0) === 0 && (data.failed ?? 0) === 0) break;
-                    // Allow up to 5 consecutive all-failed batches before giving up
-                    if ((data.processed ?? 0) === 0) {
-                      consecutiveAllFailed++;
-                      if (consecutiveAllFailed >= 5) break;
+                    // Nothing useful happened in this batch (no work of any kind)
+                    if ((data.processed ?? 0) === 0 && (data.failed ?? 0) === 0 && (data.noCoverage ?? 0) === 0) {
+                      consecutiveEmpty++;
+                      if (consecutiveEmpty >= 3) break;
                     } else {
-                      consecutiveAllFailed = 0;
+                      consecutiveEmpty = 0;
                     }
-                    await new Promise((r) => setTimeout(r, 1000));
+                    await new Promise((r) => setTimeout(r, 800));
                   }
                   setSolarFullDone(true);
                   const status = await fetch("/api/admin/tools/backfill-solar-full").then((r) => r.json());

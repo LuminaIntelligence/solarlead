@@ -5,6 +5,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSolarProvider } from "@/lib/providers/solar";
+import { OsmPvgisProvider } from "@/lib/providers/solar/osmPvgis";
 import { getContactProvider } from "@/lib/providers/contacts";
 import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
 import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
@@ -169,10 +170,62 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
           console.warn(`[Enricher] Solar assessment failed for ${dl.company_name}: ${errMsg}`);
-          // Fehler in DB schreiben — sichtbar im Admin-Panel
-          await supabase.from("discovery_leads")
-            .update({ solar_error: errMsg.slice(0, 500) })
-            .eq("id", discoveryLeadId);
+
+          // Google Solar hat keine Abdeckung (404) → OSM+PVGIS als Fallback
+          if (errMsg.includes("404")) {
+            try {
+              const osmPvgis = new OsmPvgisProvider();
+              const fallbackResult = await osmPvgis.assess({
+                latitude: dl.latitude,
+                longitude: dl.longitude,
+              });
+
+              if (fallbackResult && fallbackResult.max_array_panels_count) {
+                solarResult = fallbackResult;
+                hasSolarData = true;
+                solarQuality = fallbackResult.solar_quality;
+                maxAreaM2 = fallbackResult.max_array_area_m2;
+
+                await supabase.from("solar_assessments").insert({
+                  lead_id: leadId,
+                  provider: "osm_pvgis",
+                  latitude: dl.latitude,
+                  longitude: dl.longitude,
+                  solar_quality: fallbackResult.solar_quality,
+                  max_array_panels_count: fallbackResult.max_array_panels_count,
+                  max_array_area_m2: fallbackResult.max_array_area_m2,
+                  annual_energy_kwh: fallbackResult.annual_energy_kwh,
+                  sunshine_hours: fallbackResult.sunshine_hours,
+                  carbon_offset: fallbackResult.carbon_offset,
+                  segment_count: fallbackResult.segment_count,
+                  panel_capacity_watts: fallbackResult.panel_capacity_watts,
+                  raw_response_json: fallbackResult.raw_response_json,
+                });
+
+                await supabase.from("discovery_leads")
+                  .update({ solar_error: null })
+                  .eq("id", discoveryLeadId);
+
+                console.log(`[Enricher] OSM+PVGIS fallback succeeded for ${dl.company_name}`);
+              } else {
+                // OSM hat auch kein Gebäude — Fehler speichern
+                await supabase.from("discovery_leads")
+                  .update({ solar_error: "Keine Solar-Daten (Google 404, kein Gebäude in OSM)" })
+                  .eq("id", discoveryLeadId);
+              }
+            } catch (fallbackErr) {
+              const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+              console.warn(`[Enricher] OSM+PVGIS fallback failed for ${dl.company_name}:`, fbMsg);
+              await supabase.from("discovery_leads")
+                .update({ solar_error: `Google: keine Abdeckung. OSM-Fallback: ${fbMsg.slice(0, 300)}` })
+                .eq("id", discoveryLeadId);
+            }
+          } else {
+            // Anderer Fehler (429, 403, 5xx) — direkt in DB schreiben
+            await supabase.from("discovery_leads")
+              .update({ solar_error: errMsg.slice(0, 500) })
+              .eq("id", discoveryLeadId);
+          }
         }
       }
     } else {
