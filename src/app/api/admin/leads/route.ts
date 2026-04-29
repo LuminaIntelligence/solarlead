@@ -43,6 +43,12 @@ export async function GET(request: NextRequest) {
       solarCompleteIds = new Set((completeAssessments ?? []).map((a) => a.lead_id));
     }
 
+    // Count archived (existing_solar) leads separately — always, regardless of filters
+    const { count: archivedCount } = await adminClient
+      .from("solar_lead_mass")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "existing_solar");
+
     // Leads abfragen
     let query = adminClient
       .from("solar_lead_mass")
@@ -51,7 +57,11 @@ export async function GET(request: NextRequest) {
       .limit(500);
 
     if (status) {
+      // Explicit status filter — show exactly what was requested (incl. existing_solar)
       query = query.eq("status", status);
+    } else {
+      // Default: hide archived leads from main list
+      query = query.neq("status", "existing_solar");
     }
     if (category) {
       query = query.eq("category", category);
@@ -100,7 +110,7 @@ export async function GET(request: NextRequest) {
       assigned_email: lead.assigned_to ? (emailMap[lead.assigned_to] ?? "Unbekannt") : null,
     }));
 
-    return NextResponse.json({ leads: enrichedLeads });
+    return NextResponse.json({ leads: enrichedLeads, archivedCount: archivedCount ?? 0 });
   } catch (err) {
     console.error("Admin-Leads-API fehlgeschlagen:", err);
     return NextResponse.json(

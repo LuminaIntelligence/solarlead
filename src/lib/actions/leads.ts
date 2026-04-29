@@ -25,6 +25,9 @@ export async function getLeads(filters?: {
 
     if (filters?.status) {
       query = query.eq("status", filters.status);
+    } else {
+      // Never show archived leads (existing_solar) in the default list
+      query = query.neq("status", "existing_solar");
     }
     if (filters?.category) {
       query = query.eq("category", filters.category);

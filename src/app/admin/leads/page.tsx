@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, Search, Sun, X, UserPlus, UserX } from "lucide-react";
+import { Loader2, Search, Sun, X, UserPlus, UserX, Archive } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,7 @@ const statusOptions = [
   { value: "contacted", label: "Kontaktiert" },
   { value: "qualified", label: "Qualifiziert" },
   { value: "rejected", label: "Abgelehnt" },
+  { value: "existing_solar", label: "☀ Solar vorhanden (Archiv)" },
 ];
 
 function formatDate(dateStr: string): string {
@@ -78,6 +79,7 @@ export default function AdminLeadsPage() {
   const [leads, setLeads] = useState<LeadWithOwner[]>([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [archivedCount, setArchivedCount] = useState<number>(0);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,6 +109,7 @@ export default function AdminLeadsPage() {
       if (!res.ok) throw new Error("Fehler beim Laden der Leads");
       const data = await res.json();
       setLeads(data.leads ?? []);
+      setArchivedCount(data.archivedCount ?? 0);
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Fehler beim Laden der Leads:", err);
@@ -214,13 +217,37 @@ export default function AdminLeadsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Alle Leads (systemweit)
-        </h1>
-        <p className="text-muted-foreground">
-          {leads.length} {leads.length === 1 ? "Lead" : "Leads"} gefunden
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Alle Leads (systemweit)
+          </h1>
+          <p className="text-muted-foreground">
+            {leads.length} {leads.length === 1 ? "Lead" : "Leads"} gefunden
+            {statusFilter !== "existing_solar" && archivedCount > 0 && (
+              <span className="text-muted-foreground"> · </span>
+            )}
+          </p>
+        </div>
+        {statusFilter !== "existing_solar" && archivedCount > 0 && (
+          <button
+            onClick={() => setStatusFilter("existing_solar")}
+            className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700 hover:bg-orange-100 transition-colors shrink-0"
+          >
+            <Archive className="h-4 w-4" />
+            <span className="font-medium">{archivedCount}</span>
+            <span>archiviert (Solar vorhanden)</span>
+          </button>
+        )}
+        {statusFilter === "existing_solar" && (
+          <button
+            onClick={() => setStatusFilter("")}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+          >
+            <X className="h-4 w-4" />
+            Zurück zur Hauptliste
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -318,7 +345,13 @@ export default function AdminLeadsPage() {
       )}
 
       {/* Table */}
-      <Card>
+      <Card className={statusFilter === "existing_solar" ? "border-orange-200" : ""}>
+        {statusFilter === "existing_solar" && (
+          <div className="flex items-center gap-2 border-b border-orange-200 bg-orange-50 px-4 py-2 text-sm text-orange-700 rounded-t-lg">
+            <Archive className="h-4 w-4" />
+            Archiv — Leads mit bestehender Solar-Anlage (werden in der normalen Liste nicht angezeigt)
+          </div>
+        )}
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-16">
