@@ -167,6 +167,11 @@ export interface UserSettings {
   google_solar_api_key: string | null;
   provider_mode: "mock" | "live";
   scoring_weights: ScoringWeights;
+  // E-Mail Absender-Profil — wird als From-Header und Signatur in Outreach-E-Mails verwendet
+  email_sender_name: string | null;
+  email_sender_title: string | null;
+  email_sender_email: string | null;
+  email_sender_phone: string | null;
   created_at: string;
   updated_at: string;
 }

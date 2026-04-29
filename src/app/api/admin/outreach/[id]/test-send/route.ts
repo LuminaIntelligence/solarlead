@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { generateOutreachEmail } from "@/lib/providers/email/templates";
-import { sendEmail } from "@/lib/providers/email/mailgun";
+import { sendEmail, type SenderProfile } from "@/lib/providers/email/mailgun";
 
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
@@ -25,6 +26,25 @@ export async function POST(
   const { to, job_id } = body as { to?: string; job_id?: string };
 
   if (!to) return NextResponse.json({ error: "Empfänger-E-Mail fehlt" }, { status: 400 });
+
+  // Absender-Profil laden
+  const adminClient = createAdminClient();
+  let senderProfile: SenderProfile | null = null;
+  if (user) {
+    const { data: settings } = await adminClient
+      .from("user_settings")
+      .select("email_sender_name, email_sender_title, email_sender_email, email_sender_phone")
+      .eq("user_id", user.id)
+      .single();
+    if (settings?.email_sender_name && settings?.email_sender_email) {
+      senderProfile = {
+        name: settings.email_sender_name,
+        title: settings.email_sender_title ?? "",
+        email: settings.email_sender_email,
+        phone: settings.email_sender_phone ?? "",
+      };
+    }
+  }
 
   // Load batch
   const { data: batch } = await supabase
@@ -61,6 +81,7 @@ export async function POST(
     category: job.company_category ?? "",
     roofAreaM2: job.roof_area_m2 ?? null,
     templateType,
+    senderProfile,
   });
 
   // Add TEST banner — match full opening <body ...> tag with regex to preserve its attributes
@@ -72,6 +93,7 @@ export async function POST(
     subject: `[TEST] ${subject}`,
     text: `--- TEST E-MAIL ---\nBatch: ${batch.name}\nLead: ${job.company_name}\n\n${text}`,
     html: testHtml,
+    senderProfile,
   });
 
   if (!ok) return NextResponse.json({ error: "E-Mail-Versand fehlgeschlagen" }, { status: 500 });

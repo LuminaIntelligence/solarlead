@@ -2,11 +2,21 @@ import crypto from "crypto";
 
 const MAILGUN_EU_BASE = "https://api.eu.mailgun.net/v3";
 
+/** Persönliches Absender-Profil eines Nutzers */
+export interface SenderProfile {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+}
+
 export interface MailgunMessage {
   to: string;
   subject: string;
   html: string;
   text: string;
+  /** Wenn gesetzt: E-Mail erscheint als von diesem Nutzer gesendet */
+  senderProfile?: SenderProfile | null;
   replyToJobId?: string;
   "o:tag"?: string[];
   "v:job-id"?: string;
@@ -22,15 +32,22 @@ export async function sendEmail(msg: MailgunMessage): Promise<{ id: string } | n
     return null;
   }
 
+  // From: Nutzerprofil wenn vorhanden, sonst GreenScout-Standard
+  const fromDisplay = msg.senderProfile
+    ? `${msg.senderProfile.name} <${msg.senderProfile.email}>`
+    : `GreenScout e.V. <${fromAddr}>`;
+
   const body = new URLSearchParams({
-    from: `GreenScout e.V. <${fromAddr}>`,
+    from: fromDisplay,
     to: msg.to,
     subject: msg.subject,
     html: msg.html,
     text: msg.text,
   });
 
-  // Reply-To mit Job-ID für automatisches Antwort-Tracking
+  // Reply-To: Job-Tracking-Adresse für automatische Antwort-Erkennung.
+  // Bleibt die Mailgun-Adresse — Antworten werden so weiterhin dem Job zugeordnet.
+  // Die From-Adresse des Nutzers sorgt für die visuelle Maskierung beim Empfänger.
   if (msg.replyToJobId) {
     body.set("h:Reply-To", `reply+${msg.replyToJobId}@${domain}`);
   }

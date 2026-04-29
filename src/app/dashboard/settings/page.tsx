@@ -2,17 +2,29 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Settings, Shield, ExternalLink } from "lucide-react";
+import { Settings, Shield, ExternalLink, Mail, Loader2, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { getUserSettings } from "@/lib/actions/settings";
+import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function SettingsPage() {
+  const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [providerMode, setProviderMode] = useState<string>("mock");
   const [loading, setLoading] = useState(true);
+
+  // E-Mail Signatur
+  const [senderName, setSenderName] = useState("");
+  const [senderTitle, setSenderTitle] = useState("");
+  const [senderEmail, setSenderEmail] = useState("");
+  const [senderPhone, setSenderPhone] = useState("");
+  const [savingSignature, setSavingSignature] = useState(false);
+  const [signatureSaved, setSignatureSaved] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -23,11 +35,39 @@ export default function SettingsPage() {
       const settings = await getUserSettings();
       if (settings) {
         setProviderMode(settings.provider_mode);
+        setSenderName(settings.email_sender_name ?? "");
+        setSenderTitle(settings.email_sender_title ?? "");
+        setSenderEmail(settings.email_sender_email ?? "");
+        setSenderPhone(settings.email_sender_phone ?? "");
       }
       setLoading(false);
     }
     load();
   }, []);
+
+  async function handleSaveSignature() {
+    setSavingSignature(true);
+    setSignatureSaved(false);
+    try {
+      const result = await updateUserSettings({
+        email_sender_name: senderName.trim() || null,
+        email_sender_title: senderTitle.trim() || null,
+        email_sender_email: senderEmail.trim() || null,
+        email_sender_phone: senderPhone.trim() || null,
+      });
+      if (result) {
+        setSignatureSaved(true);
+        toast({ title: "Signatur gespeichert", description: "Wird ab sofort in Ihren E-Mails verwendet." });
+        setTimeout(() => setSignatureSaved(false), 3000);
+      } else {
+        toast({ title: "Fehler", description: "Speichern fehlgeschlagen.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Fehler", description: "Speichern fehlgeschlagen.", variant: "destructive" });
+    } finally {
+      setSavingSignature(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -67,6 +107,80 @@ export default function SettingsPage() {
               {isAdmin ? "Administrator" : "Benutzer"}
             </Badge>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* E-Mail Signatur */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            E-Mail Signatur
+          </CardTitle>
+          <CardDescription>
+            Diese Daten werden in ausgehenden Outreach-E-Mails als Absender verwendet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="senderName">Name</Label>
+              <Input
+                id="senderName"
+                placeholder="z.B. Max Mustermann"
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="senderTitle">Funktion / Titel</Label>
+              <Input
+                id="senderTitle"
+                placeholder="z.B. Vertriebsberater"
+                value={senderTitle}
+                onChange={(e) => setSenderTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="senderEmail">E-Mail-Adresse</Label>
+              <Input
+                id="senderEmail"
+                type="email"
+                placeholder="z.B. max@beispiel.de"
+                value={senderEmail}
+                onChange={(e) => setSenderEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="senderPhone">Telefonnummer</Label>
+              <Input
+                id="senderPhone"
+                placeholder="z.B. +49 123 456789"
+                value={senderPhone}
+                onChange={(e) => setSenderPhone(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Vorschau */}
+          {(senderName || senderTitle || senderEmail || senderPhone) && (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Vorschau Signatur</p>
+              <div className="font-medium">{senderName || "–"}</div>
+              {senderTitle && <div className="text-muted-foreground">{senderTitle}</div>}
+              {senderEmail && <div className="text-muted-foreground">{senderEmail}</div>}
+              {senderPhone && <div className="text-muted-foreground">{senderPhone}</div>}
+            </div>
+          )}
+
+          <Button onClick={handleSaveSignature} disabled={savingSignature} className="gap-2">
+            {savingSignature ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : signatureSaved ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : null}
+            {signatureSaved ? "Gespeichert" : "Speichern"}
+          </Button>
         </CardContent>
       </Card>
 

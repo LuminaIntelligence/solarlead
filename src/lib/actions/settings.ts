@@ -71,6 +71,10 @@ export async function updateUserSettings(
       | "google_solar_api_key"
       | "provider_mode"
       | "scoring_weights"
+      | "email_sender_name"
+      | "email_sender_title"
+      | "email_sender_email"
+      | "email_sender_phone"
     >
   >
 ): Promise<UserSettings | null> {
