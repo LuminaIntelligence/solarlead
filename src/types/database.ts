@@ -31,6 +31,7 @@ export interface Lead {
   deal_value?: number | null;
   next_contact_date?: string | null;
   win_probability?: number | null;
+  assigned_to?: string | null;
   claimed_by?: string | null;
   is_pool_lead?: boolean;
   created_at: string;

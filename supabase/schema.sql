@@ -43,6 +43,8 @@ CREATE TABLE solar_lead_mass (
   notes         text,
   linkedin_url  text,
 
+  assigned_to   uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -156,13 +158,13 @@ ALTER TABLE user_settings      ENABLE ROW LEVEL SECURITY;
 
 -- Solar Lead Mass policies
 CREATE POLICY solar_lead_mass_select ON solar_lead_mass
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (auth.uid() = user_id OR auth.uid() = assigned_to);
 
 CREATE POLICY solar_lead_mass_insert ON solar_lead_mass
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY solar_lead_mass_update ON solar_lead_mass
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id OR auth.uid() = assigned_to);
 
 CREATE POLICY solar_lead_mass_delete ON solar_lead_mass
   FOR DELETE USING (auth.uid() = user_id);

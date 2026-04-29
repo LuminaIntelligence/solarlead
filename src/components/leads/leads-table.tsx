@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal,
-  Eye, Trash2, Download, X, ChevronDown,
+  Eye, Trash2, Download, X, ChevronDown, UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -260,9 +260,17 @@ export function LeadsTable({ leads }: LeadsTableProps) {
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <Link href={`/dashboard/leads/${lead.id}`} className="font-medium text-primary hover:underline">
-                    {lead.company_name}
-                  </Link>
+                  <div className="flex flex-col gap-0.5">
+                    <Link href={`/dashboard/leads/${lead.id}`} className="font-medium text-primary hover:underline">
+                      {lead.company_name}
+                    </Link>
+                    {lead.assigned_to && (
+                      <span className="inline-flex items-center gap-1 text-xs text-indigo-600 font-medium">
+                        <UserPlus className="h-3 w-3" />
+                        Zugewiesen
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatCategory(lead.category)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{lead.city}</td>

@@ -93,10 +93,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Leads mit Besitzer-E-Mail anreichern
+    // Leads mit Besitzer- und Zuweisung-E-Mail anreichern
     const enrichedLeads = (leads ?? []).map((lead) => ({
       ...lead,
       owner_email: emailMap[lead.user_id] ?? "Unbekannt",
+      assigned_email: lead.assigned_to ? (emailMap[lead.assigned_to] ?? "Unbekannt") : null,
     }));
 
     return NextResponse.json({ leads: enrichedLeads });
