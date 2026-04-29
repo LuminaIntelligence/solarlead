@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch, Database } from "lucide-react";
+import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch, Database, FlaskConical } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,26 @@ export default function AdminSettingsPage() {
   const [solarDetectionRunning, setSolarDetectionRunning] = useState(false);
   const [solarDetectionProgress, setSolarDetectionProgress] = useState<{ processed: number; detected: number; remaining: number } | null>(null);
   const [solarDetectionDone, setSolarDetectionDone] = useState(false);
+
+  // Solar API Health Check
+  const [solarTestResult, setSolarTestResult] = useState<{
+    ok: boolean; status: string; message: string; latencyMs?: number; hint?: string;
+  } | null>(null);
+  const [solarTesting, setSolarTesting] = useState(false);
+
+  const handleSolarTest = async () => {
+    setSolarTesting(true);
+    setSolarTestResult(null);
+    try {
+      const res = await fetch("/api/admin/tools/solar-test");
+      const data = await res.json();
+      setSolarTestResult(data);
+    } catch {
+      setSolarTestResult({ ok: false, status: "network_error", message: "Anfrage fehlgeschlagen." });
+    } finally {
+      setSolarTesting(false);
+    }
+  };
 
   // MaStR Backfill
   type MastrStatus = "idle" | "fetching_url" | "wget_download" | "downloading" | "parsing" | "matching" | "updating" | "done" | "error";
@@ -323,6 +343,28 @@ export default function AdminSettingsPage() {
                 {showSolarKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+          </div>
+
+          {/* Solar API Health Check */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button variant="outline" size="sm" onClick={handleSolarTest} disabled={solarTesting}>
+              {solarTesting
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <FlaskConical className="mr-2 h-4 w-4" />}
+              Solar API testen
+            </Button>
+            {solarTestResult && (
+              <div className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm flex-1 min-w-0 ${solarTestResult.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+                {solarTestResult.ok
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                  : <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />}
+                <div>
+                  <p className="font-medium">{solarTestResult.message}</p>
+                  {solarTestResult.hint && <p className="text-xs opacity-80 mt-0.5">{solarTestResult.hint}</p>}
+                  {solarTestResult.latencyMs && <p className="text-xs opacity-60">{solarTestResult.latencyMs} ms</p>}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

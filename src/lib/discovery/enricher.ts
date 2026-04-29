@@ -114,51 +114,72 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
     let maxAreaM2: number | null = null;
 
     if (dl.latitude && dl.longitude) {
-      const solarProvider = getSolarProvider(
-        "live",
-        process.env.GOOGLE_SOLAR_API_KEY
-      );
-      try {
-        solarResult = await solarProvider.assess({
-          latitude: dl.latitude,
-          longitude: dl.longitude,
-          place_id: dl.place_id ?? undefined,
-        });
-
-        if (solarResult) {
-          hasSolarData = true;
-          solarQuality = solarResult.solar_quality;
-          maxAreaM2 = solarResult.max_array_area_m2;
-
-          // Save solar assessment — delete any old partial records first to avoid duplicates
-          await supabase
-            .from("solar_assessments")
-            .delete()
-            .eq("lead_id", leadId)
-            .is("max_array_panels_count", null);
-
-          const { error: solarInsertErr } = await supabase.from("solar_assessments").insert({
-            lead_id: leadId,
-            provider: "google_solar",
+      // Frühzeitige Warnung wenn kein API-Key konfiguriert
+      if (!process.env.GOOGLE_SOLAR_API_KEY) {
+        const noKeyMsg = "GOOGLE_SOLAR_API_KEY nicht konfiguriert — Solar-Einschätzung übersprungen";
+        console.error(`[Enricher] ⚠️ ${noKeyMsg}`);
+        await supabase.from("discovery_leads")
+          .update({ solar_error: noKeyMsg })
+          .eq("id", discoveryLeadId);
+      } else {
+        const solarProvider = getSolarProvider("live", process.env.GOOGLE_SOLAR_API_KEY);
+        try {
+          solarResult = await solarProvider.assess({
             latitude: dl.latitude,
             longitude: dl.longitude,
-            solar_quality: solarResult.solar_quality,
-            max_array_panels_count: solarResult.max_array_panels_count,
-            max_array_area_m2: solarResult.max_array_area_m2,
-            annual_energy_kwh: solarResult.annual_energy_kwh,
-            sunshine_hours: solarResult.sunshine_hours,
-            carbon_offset: solarResult.carbon_offset,
-            segment_count: solarResult.segment_count,
-            panel_capacity_watts: solarResult.panel_capacity_watts,
-            raw_response_json: solarResult.raw_response_json,
+            place_id: dl.place_id ?? undefined,
           });
-          if (solarInsertErr) {
-            console.warn("[Enricher] solar_assessments insert failed:", solarInsertErr.message);
+
+          if (solarResult) {
+            hasSolarData = true;
+            solarQuality = solarResult.solar_quality;
+            maxAreaM2 = solarResult.max_array_area_m2;
+
+            // Save solar assessment — delete any old partial records first to avoid duplicates
+            await supabase
+              .from("solar_assessments")
+              .delete()
+              .eq("lead_id", leadId)
+              .is("max_array_panels_count", null);
+
+            const { error: solarInsertErr } = await supabase.from("solar_assessments").insert({
+              lead_id: leadId,
+              provider: "google_solar",
+              latitude: dl.latitude,
+              longitude: dl.longitude,
+              solar_quality: solarResult.solar_quality,
+              max_array_panels_count: solarResult.max_array_panels_count,
+              max_array_area_m2: solarResult.max_array_area_m2,
+              annual_energy_kwh: solarResult.annual_energy_kwh,
+              sunshine_hours: solarResult.sunshine_hours,
+              carbon_offset: solarResult.carbon_offset,
+              segment_count: solarResult.segment_count,
+              panel_capacity_watts: solarResult.panel_capacity_watts,
+              raw_response_json: solarResult.raw_response_json,
+            });
+            if (solarInsertErr) {
+              console.warn("[Enricher] solar_assessments insert failed:", solarInsertErr.message);
+            }
+
+            // Fehler löschen falls vorheriger Versuch fehlgeschlagen war
+            await supabase.from("discovery_leads")
+              .update({ solar_error: null })
+              .eq("id", discoveryLeadId);
           }
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn(`[Enricher] Solar assessment failed for ${dl.company_name}: ${errMsg}`);
+          // Fehler in DB schreiben — sichtbar im Admin-Panel
+          await supabase.from("discovery_leads")
+            .update({ solar_error: errMsg.slice(0, 500) })
+            .eq("id", discoveryLeadId);
         }
-      } catch (e) {
-        console.warn("[Enricher] Solar assessment failed:", e);
       }
+    } else {
+      // Keine GPS-Koordinaten — Solar-Einschätzung nicht möglich
+      await supabase.from("discovery_leads")
+        .update({ solar_error: "Keine GPS-Koordinaten für Solar-Einschätzung" })
+        .eq("id", discoveryLeadId);
     }
 
     // 4. Check minimum roof area

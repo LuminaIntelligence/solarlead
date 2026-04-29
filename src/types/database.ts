@@ -100,6 +100,7 @@ export interface DiscoveryLead {
   contacts: { name?: string; email?: string; title?: string }[] | null;
   status: DiscoveryLeadStatus;
   rejection_reason: string | null;
+  solar_error: string | null;
   approved_at: string | null;
   approved_by: string | null;
   created_at: string;

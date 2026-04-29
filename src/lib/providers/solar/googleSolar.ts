@@ -52,15 +52,18 @@ export class GoogleSolarProvider implements SolarProvider {
       });
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "Unknown error");
-        console.error(
-          `[GoogleSolarProvider] API returned ${response.status}: ${errorText}`
-        );
-        // Throw on rate limit / quota errors so the caller can stop the batch
-        if (response.status === 429 || response.status === 403) {
-          throw new Error(`API quota/rate-limit: ${response.status} ${errorText}`);
+        const errorText = await response.text().catch(() => "");
+        // Always throw so the caller can log the exact reason to the DB
+        if (response.status === 404) {
+          throw new Error(`Keine Gebäudedaten für diese Koordinaten (404)`);
         }
-        return null;
+        if (response.status === 429) {
+          throw new Error(`API-Kontingent erschöpft (429) — bitte Quota erhöhen`);
+        }
+        if (response.status === 403) {
+          throw new Error(`API-Key ungültig oder Solar API nicht aktiviert (403)`);
+        }
+        throw new Error(`Solar API Fehler ${response.status}: ${errorText.slice(0, 200)}`);
       }
 
       const data = (await response.json()) as BuildingInsightsResponse;

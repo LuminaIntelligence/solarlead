@@ -802,7 +802,19 @@ export default function DiscoveryCampaignDetailPage() {
                         {lead.category?.replace(/_/g, " ") ?? "–"}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
-                        {lead.max_array_area_m2 ? `${Math.round(lead.max_array_area_m2).toLocaleString("de-DE")} m²` : "–"}
+                        {lead.max_array_area_m2
+                          ? `${Math.round(lead.max_array_area_m2).toLocaleString("de-DE")} m²`
+                          : lead.solar_error
+                          ? (
+                            <span
+                              title={lead.solar_error}
+                              className="inline-flex items-center gap-1 text-xs text-red-600 cursor-help"
+                            >
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              <span className="max-w-[120px] truncate">{lead.solar_error}</span>
+                            </span>
+                          )
+                          : "–"}
                       </td>
                       <td className="px-4 py-3">
                         {lead.total_score != null ? (
