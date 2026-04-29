@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getContactProvider } from "@/lib/providers/contacts";
+import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
+import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
+import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
+import type { Contact } from "@/lib/providers/contacts/types";
 
 function extractDomain(input: string): string {
   try {
@@ -59,9 +63,6 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as { limit?: number };
   const batchSize = Math.min(body.limit ?? 10, 20);
 
-  const apolloKey = process.env.APOLLO_API_KEY ?? undefined;
-  const provider = getContactProvider("live", apolloKey);
-
   // Fetch leads with website
   const { data: allLeads } = await supabase
     .from("solar_lead_mass")
@@ -99,49 +100,75 @@ export async function POST(req: NextRequest) {
 
   for (const lead of batch) {
     const domain = extractDomain(lead.website!);
+    const contactQuery = {
+      domain,
+      company_name: lead.company_name,
+      city: lead.city ?? undefined,
+    };
+
+    let contacts: Contact[] = [];
+    let source = "";
 
     try {
-      const result = await provider.findContacts({
-        domain,
-        company_name: lead.company_name,
-        city: lead.city ?? undefined,
-      });
+      // Stage 1: Apollo
+      if (process.env.APOLLO_API_KEY && contacts.length === 0) {
+        const apollo = getContactProvider("live", process.env.APOLLO_API_KEY);
+        const r = await apollo.findContacts(contactQuery).catch(() => ({ contacts: [], company: null }));
+        const valid = r.contacts.filter((c) => c.email);
+        if (valid.length > 0) { contacts = valid; source = "apollo"; }
 
-      if (result.contacts.length > 0) {
-        const rows = result.contacts.map((c) => ({
-          lead_id: lead.id,
-          user_id: user.id,
-          name: c.name,
-          title: c.title,
-          email: c.email,
-          phone: c.phone,
-          linkedin_url: c.linkedin_url,
-          apollo_id: c.apollo_id,
-          seniority: c.seniority,
-          department: c.department,
-          source: provider.name,
-        }));
+        // Firmographics aus Apollo zurückschreiben
+        const updates: Record<string, unknown> = {};
+        if (r.company?.estimated_num_employees) updates.employee_count = r.company.estimated_num_employees;
+        if (r.company?.linkedin_url) updates.linkedin_url = r.company.linkedin_url;
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("solar_lead_mass").update(updates).eq("id", lead.id).eq("user_id", user.id);
+        }
+      }
 
-        await supabase.from("lead_contacts").insert(rows);
+      // Stage 2: Impressum-Scraper (kostenlos, sehr gut für deutsche Unternehmen)
+      if (contacts.length === 0) {
+        const scraper = new ImpressumScraperProvider();
+        const r = await scraper.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const valid = r.contacts.filter((c) => c.email || c.phone);
+        if (valid.length > 0) { contacts = valid; source = "impressum"; }
+      }
+
+      // Stage 3: Hunter.io
+      if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
+        const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
+        const r = await hunter.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const valid = r.contacts.filter((c) => c.email);
+        if (valid.length > 0) { contacts = valid; source = "hunter"; }
+      }
+
+      // Stage 4: Firecrawl
+      if (contacts.length === 0 && process.env.FIRECRAWL_API_KEY) {
+        const firecrawl = new FirecrawlContactProvider(process.env.FIRECRAWL_API_KEY);
+        const r = await firecrawl.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const valid = r.contacts.filter((c) => c.email || c.phone);
+        if (valid.length > 0) { contacts = valid; source = "firecrawl"; }
+      }
+
+      if (contacts.length > 0) {
+        await supabase.from("lead_contacts").insert(
+          contacts.map((c) => ({
+            lead_id: lead.id,
+            user_id: user.id,
+            name: c.name,
+            title: c.title,
+            email: c.email,
+            phone: c.phone,
+            linkedin_url: c.linkedin_url ?? null,
+            apollo_id: c.apollo_id ?? null,
+            seniority: c.seniority,
+            department: c.department ?? null,
+            source,
+          }))
+        );
         found++;
       } else {
         skipped++;
-      }
-
-      // Firmographics zurückschreiben wenn vorhanden
-      const updates: Record<string, unknown> = {};
-      if (result.company?.estimated_num_employees) {
-        updates.employee_count = result.company.estimated_num_employees;
-      }
-      if (result.company?.linkedin_url) {
-        updates.linkedin_url = result.company.linkedin_url;
-      }
-      if (Object.keys(updates).length > 0) {
-        await supabase
-          .from("solar_lead_mass")
-          .update(updates)
-          .eq("id", lead.id)
-          .eq("user_id", user.id);
       }
 
       processed++;
