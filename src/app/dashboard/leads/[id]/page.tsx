@@ -741,12 +741,14 @@ export default async function LeadDetailPage({
             <Card>
               <CardContent className="pt-5">
                 <GreenScoutEmailTemplates
+                  leadId={lead.id}
                   contactName={contactsData[0]?.name ?? null}
                   contactEmail={contactsData[0]?.email ?? null}
                   contactTitle={contactsData[0]?.title ?? null}
                   roofAreaM2={solarData?.max_array_area_m2 ?? null}
                   companyName={lead.company_name}
                   city={lead.city}
+                  category={lead.category}
                 />
               </CardContent>
             </Card>
