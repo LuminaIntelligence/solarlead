@@ -190,9 +190,54 @@ export async function POST(req: NextRequest) {
       });
 
       if (!result || !result.max_array_panels_count) {
-        // Network timeout / no panel data — soft failure, will be retried next run
-        failed++;
-        if (!firstError) firstError = "Keine Paneldaten in API-Antwort";
+        // Google Solar returned null (network error) or no panel data (building found
+        // but no usable solar potential calculated). Try OSM+PVGIS fallback before
+        // giving up — same chain as for 404.
+        let usedFallback = false;
+        try {
+          const fallbackResult = await fallbackProvider.assess({
+            latitude: lead.latitude as number,
+            longitude: lead.longitude as number,
+          });
+          if (fallbackResult && fallbackResult.max_array_panels_count) {
+            await adminSupabase.from("solar_assessments").delete()
+              .eq("lead_id", lead.id).is("max_array_panels_count", null);
+            await adminSupabase.from("solar_assessments").insert({
+              lead_id: lead.id,
+              provider: "osm_pvgis",
+              latitude: lead.latitude ?? 0,
+              longitude: lead.longitude ?? 0,
+              solar_quality: fallbackResult.solar_quality,
+              max_array_panels_count: fallbackResult.max_array_panels_count,
+              max_array_area_m2: fallbackResult.max_array_area_m2,
+              annual_energy_kwh: fallbackResult.annual_energy_kwh,
+              sunshine_hours: fallbackResult.sunshine_hours,
+              carbon_offset: fallbackResult.carbon_offset,
+              segment_count: fallbackResult.segment_count,
+              panel_capacity_watts: fallbackResult.panel_capacity_watts,
+              raw_response_json: fallbackResult.raw_response_json,
+            });
+            processedFallback++;
+            usedFallback = true;
+          }
+        } catch (fe) {
+          console.warn(`[SolarBackfillFull] OSM+PVGIS fallback (no-panels) failed for ${lead.id}:`,
+            fe instanceof Error ? fe.message : fe);
+        }
+        if (!usedFallback) {
+          // Neither source has usable data — mark permanently so it leaves the queue
+          await adminSupabase.from("solar_assessments").delete()
+            .eq("lead_id", lead.id).eq("provider", "no_coverage");
+          await adminSupabase.from("solar_assessments").insert({
+            lead_id: lead.id,
+            provider: "no_coverage",
+            latitude: lead.latitude ?? 0,
+            longitude: lead.longitude ?? 0,
+            solar_quality: "UNKNOWN",
+            max_array_panels_count: null,
+          });
+          noCoverage++;
+        }
         continue;
       }
 
