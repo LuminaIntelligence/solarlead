@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { calculateScore } from "@/lib/scoring";
 import type {
   Lead,
   LeadWithRelations,
@@ -441,6 +443,81 @@ export async function bulkDeleteLeads(ids: string[]): Promise<boolean> {
     return true;
   } catch (error) {
     console.error("Error in bulkDeleteLeads:", error);
+    return false;
+  }
+}
+
+/**
+ * Recalculates solar_score + total_score for a lead based on current
+ * solar_assessments + lead_enrichment data and persists the result.
+ *
+ * Uses admin client so it can be safely called from batch/backfill routes
+ * that have no user session context.
+ *
+ * Returns true on success.
+ */
+export async function recalculateLeadScore(leadId: string): Promise<boolean> {
+  try {
+    const adminClient = createAdminClient();
+
+    // Load lead
+    const { data: lead, error: leadError } = await adminClient
+      .from("solar_lead_mass")
+      .select("id, category, website, phone, email")
+      .eq("id", leadId)
+      .single();
+
+    if (leadError || !lead) {
+      console.error("[recalculateLeadScore] Lead not found:", leadId, leadError);
+      return false;
+    }
+
+    // Load latest solar assessment
+    const { data: solarData } = await adminClient
+      .from("solar_assessments")
+      .select("solar_quality, max_array_panels_count, max_array_area_m2, annual_energy_kwh")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Load latest enrichment
+    const { data: enrichmentData } = await adminClient
+      .from("lead_enrichment")
+      .select("detected_keywords, enrichment_score")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const scoring = calculateScore({
+      category: lead.category,
+      solarData: solarData ?? null,
+      enrichmentData: enrichmentData ?? null,
+      hasWebsite: !!lead.website,
+      hasPhone: !!lead.phone,
+      hasEmail: !!lead.email,
+    });
+
+    const { error: updateError } = await adminClient
+      .from("solar_lead_mass")
+      .update({
+        business_score: scoring.business_score,
+        electricity_score: scoring.electricity_score,
+        outreach_score: scoring.outreach_score,
+        solar_score: scoring.solar_score,
+        total_score: scoring.total_score,
+      })
+      .eq("id", leadId);
+
+    if (updateError) {
+      console.error("[recalculateLeadScore] Update error:", leadId, updateError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[recalculateLeadScore] Unexpected error:", leadId, error);
     return false;
   }
 }

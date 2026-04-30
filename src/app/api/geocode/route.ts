@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getUserSettings } from "@/lib/actions/settings";
+import { getSystemApiKeys } from "@/lib/actions/systemSettings";
 
 // Mock-Daten für den Testmodus
 const MOCK_SUGGESTIONS = [
@@ -99,8 +99,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const settings = await getUserSettings();
-    const mode = settings?.provider_mode ?? "mock";
+    // Immer den System-Key verwenden (Admin-Key), damit alle Nutzer live Daten erhalten
+    const systemKeys = await getSystemApiKeys();
+    const mode = systemKeys.mode;
 
     if (mode === "mock") {
       const lower = q.toLowerCase();
@@ -113,8 +114,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Live: Google Places Autocomplete
-    const apiKey =
-      settings?.google_places_api_key ?? process.env.GOOGLE_PLACES_API_KEY;
+    const apiKey = systemKeys.googlePlacesApiKey ?? process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         { error: "Kein API-Schlüssel konfiguriert" },
@@ -181,8 +181,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const settings = await getUserSettings();
-    const mode = settings?.provider_mode ?? "mock";
+    // Immer den System-Key verwenden (Admin-Key), damit alle Nutzer live Daten erhalten
+    const systemKeys = await getSystemApiKeys();
+    const mode = systemKeys.mode;
 
     if (mode === "mock") {
       const mock =
@@ -191,8 +192,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Live: Google Place Details
-    const apiKey =
-      settings?.google_places_api_key ?? process.env.GOOGLE_PLACES_API_KEY;
+    const apiKey = systemKeys.googlePlacesApiKey ?? process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         { error: "Kein API-Schlüssel konfiguriert" },

@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   let batchId: string;
   const { data: existingBatch } = await supabase
     .from("outreach_batches")
-    .select("id, sent_count")
+    .select("id")
     .eq("created_by", user.id)
     .eq("name", "Direktversand")
     .maybeSingle();
@@ -139,11 +139,16 @@ export async function POST(req: NextRequest) {
     scheduled_for: new Date().toISOString().slice(0, 10),
   });
 
-  // Batch-Zähler hochzählen
-  await supabase
+  // Batch-Zähler hochzählen (frischer Read direkt vor Update, minimiert Race Window)
+  const { data: freshBatch } = await adminClient
+    .from("outreach_batches")
+    .select("sent_count")
+    .eq("id", batchId)
+    .single();
+  await adminClient
     .from("outreach_batches")
     .update({
-      sent_count: (existingBatch?.sent_count ?? 0) + 1,
+      sent_count: (freshBatch?.sent_count ?? 0) + 1,
       updated_at: new Date().toISOString(),
     })
     .eq("id", batchId);

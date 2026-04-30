@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSolarProvider } from "@/lib/providers/solar";
 import { saveSolarAssessment } from "@/lib/actions/leads";
 import { getUserSettings } from "@/lib/actions/settings";
+import { getSystemApiKeys } from "@/lib/actions/systemSettings";
 import { calculateScore } from "@/lib/scoring";
 
 const SolarRequestSchema = z.object({
@@ -99,9 +100,10 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Kein Cache-Hit → API aufrufen ---
-    const settings = await getUserSettings();
-    const mode = settings?.provider_mode ?? "mock";
-    const apiKey = settings?.google_solar_api_key ?? undefined;
+    // Immer den System-Key verwenden (Admin-Key), damit alle Nutzer live Daten erhalten
+    const systemKeys = await getSystemApiKeys();
+    const mode = systemKeys.mode;
+    const apiKey = systemKeys.googleSolarApiKey;
 
     const provider = getSolarProvider(mode, apiKey);
     const solarResult = await provider.assess({ latitude, longitude });

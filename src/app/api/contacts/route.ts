@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUserSettings } from "@/lib/actions/settings";
 import { getContactProvider } from "@/lib/providers/contacts";
+import { recalculateLeadScore } from "@/lib/actions/leads";
 
 const ContactRequestSchema = z.object({
   lead_id: z.string().uuid(),
@@ -60,11 +60,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
     }
 
-    // Settings + Provider
-    const settings = await getUserSettings();
-    const mode = settings?.provider_mode ?? "mock";
+    // Immer live: Apollo-Key kommt aus Env-Vars (kein per-Nutzer Key)
     const apolloKey = process.env.APOLLO_API_KEY ?? undefined;
-    const provider = getContactProvider(mode, apolloKey);
+    const provider = getContactProvider("live", apolloKey);
 
     // Apollo / Mock aufrufen
     const result = await provider.findContacts({
@@ -102,6 +100,9 @@ export async function POST(request: NextRequest) {
 
       if (insertError) {
         console.error("[contacts] Insert error:", insertError);
+      } else {
+        // Recalculate outreach_score now that contact data exists
+        await recalculateLeadScore(lead_id);
       }
     }
 

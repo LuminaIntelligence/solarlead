@@ -4,6 +4,7 @@ import { getContactProvider } from "@/lib/providers/contacts";
 import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
 import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
 import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
+import { recalculateLeadScore } from "@/lib/actions/leads";
 import type { Contact } from "@/lib/providers/contacts/types";
 
 function extractDomain(input: string): string {
@@ -171,6 +172,8 @@ export async function POST(req: NextRequest) {
           skipped++;
         } else {
           found++;
+          // Recalculate outreach_score now that contact data exists
+          await recalculateLeadScore(lead.id);
         }
       } else {
         skipped++;

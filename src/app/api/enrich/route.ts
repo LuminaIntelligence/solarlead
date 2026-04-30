@@ -46,12 +46,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    // Get user settings for provider mode
-    const settings = await getUserSettings();
-    const mode = settings?.provider_mode ?? "mock";
-
-    // Run enrichment
-    const provider = getEnrichmentProvider(mode);
+    // Immer live: Firecrawl/Enrichment-Key kommt aus Env-Vars
+    const provider = getEnrichmentProvider("live");
     const enrichmentResult = await provider.enrich({ website });
 
     if (!enrichmentResult) {
@@ -71,6 +67,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Recalculate and update lead scores
+    const settings = await getUserSettings();
     const weights = settings?.scoring_weights ?? undefined;
 
     // Fetch solar data if it exists
