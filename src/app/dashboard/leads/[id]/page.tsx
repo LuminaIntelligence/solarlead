@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { getLead } from "@/lib/actions/leads";
+import { getUserSettings } from "@/lib/actions/settings";
 import { calculateScore, generateOutreachNotes } from "@/lib/scoring";
 import type { ScoringBreakdown } from "@/lib/scoring/types";
 import type { LeadWithRelations } from "@/types/database";
@@ -233,11 +234,20 @@ export default async function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const lead = await getLead(id);
+  const [lead, userSettings] = await Promise.all([getLead(id), getUserSettings()]);
 
   if (!lead) {
     redirect("/dashboard/leads");
   }
+
+  const senderProfile = (userSettings?.email_sender_name && userSettings?.email_sender_email)
+    ? {
+        name: userSettings.email_sender_name,
+        title: userSettings.email_sender_title ?? "",
+        email: userSettings.email_sender_email,
+        phone: userSettings.email_sender_phone ?? "",
+      }
+    : null;
 
   const solarData = lead.solar_assessments?.[0] ?? null;
   const enrichmentData = lead.lead_enrichment?.[0] ?? null;
@@ -749,6 +759,7 @@ export default async function LeadDetailPage({
                   companyName={lead.company_name}
                   city={lead.city}
                   category={lead.category}
+                  senderProfile={senderProfile}
                 />
               </CardContent>
             </Card>

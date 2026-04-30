@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (contacts.length > 0) {
-        await supabase.from("lead_contacts").insert(
+        const { error: insertError } = await supabase.from("lead_contacts").insert(
           contacts.map((c) => ({
             lead_id: lead.id,
             user_id: user.id,
@@ -166,7 +166,12 @@ export async function POST(req: NextRequest) {
             source,
           }))
         );
-        found++;
+        if (insertError) {
+          console.error(`[backfill-contacts] Insert failed for lead ${lead.id}:`, insertError.message);
+          skipped++;
+        } else {
+          found++;
+        }
       } else {
         skipped++;
       }

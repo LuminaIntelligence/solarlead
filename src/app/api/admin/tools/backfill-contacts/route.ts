@@ -128,7 +128,7 @@ export async function POST(req: Request) {
       }
 
       if (contacts.length > 0 && dl.lead_id) {
-        await adminSupabase.from("lead_contacts").insert(
+        const { error: insertError } = await adminSupabase.from("lead_contacts").insert(
           contacts.map((c) => ({
             lead_id: dl.lead_id as string,
             user_id: userId,
@@ -144,18 +144,22 @@ export async function POST(req: Request) {
           }))
         );
 
-        const emailCount = contacts.filter((c) => c.email).length;
-        await adminSupabase
-          .from("discovery_leads")
-          .update({ has_contacts: emailCount > 0, contact_count: emailCount })
-          .eq("id", dl.id as string);
-
-        found++;
+        if (insertError) {
+          console.error(`[backfill-contacts] Insert failed for lead ${dl.lead_id}:`, insertError.message);
+          errors.push(`${dl.company_name as string}: DB insert fehlgeschlagen — ${insertError.message}`);
+        } else {
+          const emailCount = contacts.filter((c) => c.email).length;
+          await adminSupabase
+            .from("discovery_leads")
+            .update({ has_contacts: emailCount > 0, contact_count: emailCount })
+            .eq("id", dl.id as string);
+          found++;
+        }
       }
 
       processed++;
     } catch (e) {
-      errors.push(`${dl.company_name}: ${e instanceof Error ? e.message : String(e)}`);
+      errors.push(`${dl.company_name as string}: ${e instanceof Error ? e.message : String(e)}`);
       processed++;
     }
   }

@@ -6,6 +6,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { formatLease, formatArea } from "@/lib/utils/lease";
+
+interface SenderProfile {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+}
 
 interface GreenScoutEmailTemplatesProps {
   leadId: string;
@@ -16,6 +24,7 @@ interface GreenScoutEmailTemplatesProps {
   companyName: string;
   city: string;
   category: string;
+  senderProfile?: SenderProfile | null;
 }
 
 function detectSalutation(title: string | null): "Herr" | "Frau" | "Herr/Frau" {
@@ -38,27 +47,27 @@ function getLastName(fullName: string | null): string | null {
   return parts[parts.length - 1];
 }
 
-function formatLease(roofAreaM2: number): string {
-  const raw = roofAreaM2 * 4;
-  const rounded = Math.round(raw / 500) * 500;
-  return rounded.toLocaleString("de-DE");
-}
 
-function formatArea(m2: number): string {
-  return Math.round(m2).toLocaleString("de-DE");
-}
+const DEFAULT_SENDER: SenderProfile = {
+  name: "Sebastian Trautschold",
+  title: "Vorstand",
+  email: "sebastian.trautschold@greenscout-ev.de",
+  phone: "038875 169780",
+};
 
-const SIGNATURE = `Herzliche Grüße
-Sebastian Trautschold
-Vorstand
+function buildSignature(sender: SenderProfile): string {
+  return `Herzliche Grüße
+${sender.name}
+${sender.title}
 
-Telefon: 038875 169780
-E-Mail: sebastian.trautschold@greenscout-ev.de
+Telefon: ${sender.phone}
+E-Mail: ${sender.email}
 Internet: https://www.greenscout-ev.de
 
 GreenScout e.V.
 Utechter Str. 5
 19217 Utecht`;
+}
 
 type TemplateType = "erstkontakt" | "followup" | "finale";
 
@@ -89,12 +98,16 @@ export function GreenScoutEmailTemplates({
   companyName,
   city,
   category,
+  senderProfile,
 }: GreenScoutEmailTemplatesProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState<TemplateType | null>(null);
   const [expanded, setExpanded] = useState<TemplateType>("erstkontakt");
   const [sending, setSending] = useState<TemplateType | null>(null);
   const [sent, setSent] = useState<Set<TemplateType>>(new Set());
+
+  const sender = senderProfile ?? DEFAULT_SENDER;
+  const signature = buildSignature(sender);
 
   const salutation = detectSalutation(contactTitle);
   const lastName = getLastName(contactName);
@@ -107,7 +120,7 @@ export function GreenScoutEmailTemplates({
       subject: `Wir möchten gerne Ihre Dachfläche pachten – keine Werbung!`,
       body: `${salutationLine}
 
-mein Name ist Sebastian Trautschold, ich bin Vorstand der GreenScout e.V. und über einen unserer Mitglieder bin ich auf Ihre Dachfläche aufmerksam gemacht worden.
+mein Name ist ${sender.name}, ich bin ${sender.title} der GreenScout e.V. und über einen unserer Mitglieder bin ich auf Ihre Dachfläche aufmerksam gemacht worden.
 
 Nach meiner Ersteinschätzung wäre Ihre Dachfläche zur Anpachtung geeignet.
 Gern würde ich mich hierzu einmal austauschen. Bei der Dachgröße von ${area} m² würde eine Pacht von rund ${lease} € für Sie zu erzielen sein.
@@ -115,7 +128,7 @@ Gern würde ich mich hierzu einmal austauschen. Bei der Dachgröße von ${area} 
 Wenn das für Sie grundsätzlich interessant ist, erläutere ich Ihnen das gerne in einem kurzen Termin von 15–20 Minuten telefonisch.
 Passt es Ihnen eher Anfang oder Ende der Woche?
 
-${SIGNATURE}`,
+${signature}`,
     },
     followup: {
       subject: `Kurze Nachfrage zu Ihrer Dachfläche`,
@@ -133,7 +146,7 @@ Ich würde mich freuen, wenn wir ins Gespräch kommen, dazu reicht ein Kennenler
 
 Wann würde es bei Ihnen passen?
 
-${SIGNATURE}`,
+${signature}`,
     },
     finale: {
       subject: `Wir haben uns bisher verpasst`,
@@ -147,7 +160,7 @@ Gern würde ich mich hierzu einmal mit Ihnen austauschen. Wenn das für Sie grun
 
 Über Ihr Feedback würde ich mich freuen.
 
-${SIGNATURE}`,
+${signature}`,
     },
   };
 
@@ -222,6 +235,13 @@ ${SIGNATURE}`,
           </span>
         )}
       </div>
+
+      {!senderProfile && (
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Keine persönliche Signatur hinterlegt — E-Mails werden mit dem Standard-Absender (Sebastian Trautschold) versendet.{" "}
+          <a href="/dashboard/settings" className="underline font-medium">Signatur einrichten →</a>
+        </div>
+      )}
 
       {!contactEmail && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

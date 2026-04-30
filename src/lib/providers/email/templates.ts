@@ -1,3 +1,5 @@
+import { formatLease, formatArea } from "@/lib/utils/lease";
+
 export type TemplateType = "erstkontakt" | "followup" | "finale";
 
 export interface SenderProfile {
@@ -39,15 +41,6 @@ function buildGreeting(contactName: string | null, contactTitle: string | null):
   return `Guten Tag ${salutation} ${lastName},`;
 }
 
-/** Pacht = Dachfläche / 5 * 100, gerundet auf 100er */
-function formatLease(roofAreaM2: number): string {
-  const value = Math.round((roofAreaM2 / 5) * 100 / 100) * 100;
-  return value.toLocaleString("de-DE");
-}
-
-function formatArea(m2: number): string {
-  return Math.round(m2).toLocaleString("de-DE");
-}
 
 // ─── Fallback-Signatur (wird verwendet wenn kein Nutzerprofil gesetzt) ────────
 
