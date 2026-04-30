@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Loader2, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, Loader2, CheckCircle2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
@@ -21,13 +21,23 @@ export function BulkContactsButton() {
   const [showStats, setShowStats] = useState(false);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState({ processed: 0, found: 0, skipped: 0 });
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/dashboard/contacts/backfill")
+  function loadPending() {
+    return fetch("/api/dashboard/contacts/backfill")
       .then((r) => r.json())
       .then((d: { pending: number }) => setPending(d.pending))
       .catch(() => setPending(null));
-  }, []);
+  }
+
+  useEffect(() => { loadPending(); }, []);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    setDone(false);
+    await loadPending();
+    setRefreshing(false);
+  }
 
   async function handleStart() {
     if (pending === null || pending === 0) return;
@@ -74,11 +84,11 @@ export function BulkContactsButton() {
     });
   }
 
-  // Nicht anzeigen wenn noch lädt oder keine offenen Leads
+  // Nicht anzeigen solange die initiale Abfrage noch läuft
   if (pending === null) return null;
-  if (pending === 0 && !done) return null;
 
   const progress = total > 0 ? Math.round((stats.processed / total) * 100) : 0;
+  const allDone = (pending === 0 && !running && !done);
 
   return (
     <div className="flex flex-col gap-2">
@@ -88,13 +98,30 @@ export function BulkContactsButton() {
             <CheckCircle2 className="h-4 w-4" />
             Kontaktsuche abgeschlossen
           </Button>
+        ) : allDone ? (
+          <>
+            <Button variant="outline" size="sm" className="gap-2 text-muted-foreground" disabled>
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              Alle Leads haben Kontakte
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              title="Neu prüfen"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            </Button>
+          </>
         ) : (
           <Button
             variant="outline"
             size="sm"
             className="gap-2"
             onClick={handleStart}
-            disabled={running}
+            disabled={running || pending === 0}
           >
             {running ? (
               <Loader2 className="h-4 w-4 animate-spin" />
