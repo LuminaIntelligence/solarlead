@@ -16,6 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleSolarProvider } from "@/lib/providers/solar/googleSolar";
 import { OsmPvgisProvider } from "@/lib/providers/solar/osmPvgis";
+import { calculateScore } from "@/lib/scoring";
+import type { SolarResult } from "@/lib/providers/solar/types";
 
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
@@ -53,11 +55,21 @@ async function fetchAllPages<T>(
  * "Done" = has a complete assessment (non-null panels) OR a no-coverage placeholder
  * (provider = "no_coverage").  Both types leave the queue permanently.
  */
-async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminClient>) {
-  const allLeads = await fetchAllPages<{ id: string; latitude: number; longitude: number }>(
+interface LeadForBackfill {
+  id: string;
+  latitude: number;
+  longitude: number;
+  category: string;
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminClient>): Promise<LeadForBackfill[]> {
+  const allLeads = await fetchAllPages<LeadForBackfill>(
     adminSupabase,
     "solar_lead_mass",
-    "id, latitude, longitude",
+    "id, latitude, longitude, category, website, phone, email",
     (q) => q.not("latitude", "is", null).not("longitude", "is", null)
   );
 
@@ -85,6 +97,75 @@ async function getIncompleteLeads(adminSupabase: ReturnType<typeof createAdminCl
   ]);
 
   return allLeads.filter((l) => !doneIds.has(l.id));
+}
+
+/**
+ * Inserts a solar assessment and updates the lead's solar_score + total_score.
+ * Returns true on success, false on insert error.
+ */
+async function saveSolarAssessment(
+  adminSupabase: ReturnType<typeof createAdminClient>,
+  lead: LeadForBackfill,
+  provider: string,
+  result: SolarResult
+): Promise<boolean> {
+  // Remove any old incomplete/placeholder records for this lead
+  await adminSupabase
+    .from("solar_assessments")
+    .delete()
+    .eq("lead_id", lead.id)
+    .is("max_array_panels_count", null);
+
+  const { error: insertError } = await adminSupabase.from("solar_assessments").insert({
+    lead_id: lead.id,
+    provider,
+    latitude: lead.latitude,
+    longitude: lead.longitude,
+    solar_quality: result.solar_quality,
+    max_array_panels_count: result.max_array_panels_count,
+    max_array_area_m2: result.max_array_area_m2,
+    annual_energy_kwh: result.annual_energy_kwh,
+    sunshine_hours: result.sunshine_hours,
+    carbon_offset: result.carbon_offset,
+    segment_count: result.segment_count,
+    panel_capacity_watts: result.panel_capacity_watts,
+    raw_response_json: result.raw_response_json,
+  });
+
+  if (insertError) {
+    console.error(`[SolarBackfill] Insert failed for lead ${lead.id} (${provider}):`, insertError.message);
+    return false;
+  }
+
+  // Recalculate and persist solar_score + total_score on the lead
+  try {
+    const scoring = calculateScore({
+      category: lead.category,
+      hasWebsite: !!lead.website,
+      hasPhone: !!lead.phone,
+      hasEmail: !!lead.email,
+      solarData: {
+        solar_quality: result.solar_quality,
+        max_array_panels_count: result.max_array_panels_count,
+        max_array_area_m2: result.max_array_area_m2,
+        annual_energy_kwh: result.annual_energy_kwh,
+      },
+    });
+
+    await adminSupabase
+      .from("solar_lead_mass")
+      .update({
+        solar_score: scoring.solar_score,
+        total_score: scoring.total_score,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", lead.id);
+  } catch (scoreErr) {
+    // Score update failure is non-critical — assessment is saved, log and continue
+    console.warn(`[SolarBackfill] Score update failed for lead ${lead.id}:`, scoreErr);
+  }
+
+  return true;
 }
 
 export async function GET() {
@@ -190,9 +271,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (!result || !result.max_array_panels_count) {
-        // Google Solar returned null (network error) or no panel data (building found
-        // but no usable solar potential calculated). Try OSM+PVGIS fallback before
-        // giving up — same chain as for 404.
+        // Google Solar returned null or no panel data — try OSM+PVGIS fallback
         let usedFallback = false;
         try {
           const fallbackResult = await fallbackProvider.assess({
@@ -200,25 +279,8 @@ export async function POST(req: NextRequest) {
             longitude: lead.longitude as number,
           });
           if (fallbackResult && fallbackResult.max_array_panels_count) {
-            await adminSupabase.from("solar_assessments").delete()
-              .eq("lead_id", lead.id).is("max_array_panels_count", null);
-            await adminSupabase.from("solar_assessments").insert({
-              lead_id: lead.id,
-              provider: "osm_pvgis",
-              latitude: lead.latitude ?? 0,
-              longitude: lead.longitude ?? 0,
-              solar_quality: fallbackResult.solar_quality,
-              max_array_panels_count: fallbackResult.max_array_panels_count,
-              max_array_area_m2: fallbackResult.max_array_area_m2,
-              annual_energy_kwh: fallbackResult.annual_energy_kwh,
-              sunshine_hours: fallbackResult.sunshine_hours,
-              carbon_offset: fallbackResult.carbon_offset,
-              segment_count: fallbackResult.segment_count,
-              panel_capacity_watts: fallbackResult.panel_capacity_watts,
-              raw_response_json: fallbackResult.raw_response_json,
-            });
-            processedFallback++;
-            usedFallback = true;
+            const ok = await saveSolarAssessment(adminSupabase, lead, "osm_pvgis", fallbackResult);
+            if (ok) { processedFallback++; usedFallback = true; }
           }
         } catch (fe) {
           console.warn(`[SolarBackfillFull] OSM+PVGIS fallback (no-panels) failed for ${lead.id}:`,
@@ -228,7 +290,7 @@ export async function POST(req: NextRequest) {
           // Neither source has usable data — mark permanently so it leaves the queue
           await adminSupabase.from("solar_assessments").delete()
             .eq("lead_id", lead.id).eq("provider", "no_coverage");
-          await adminSupabase.from("solar_assessments").insert({
+          const { error: ncErr } = await adminSupabase.from("solar_assessments").insert({
             lead_id: lead.id,
             provider: "no_coverage",
             latitude: lead.latitude ?? 0,
@@ -236,35 +298,19 @@ export async function POST(req: NextRequest) {
             solar_quality: "UNKNOWN",
             max_array_panels_count: null,
           });
-          noCoverage++;
+          if (ncErr) console.error(`[SolarBackfill] no_coverage insert failed for ${lead.id}:`, ncErr.message);
+          else noCoverage++;
         }
         continue;
       }
 
-      // Delete any old incomplete records for this lead, then insert the full one
-      await adminSupabase
-        .from("solar_assessments")
-        .delete()
-        .eq("lead_id", lead.id)
-        .is("max_array_panels_count", null);
-
-      await adminSupabase.from("solar_assessments").insert({
-        lead_id: lead.id,
-        provider: "google_solar",
-        latitude: lead.latitude ?? 0,
-        longitude: lead.longitude ?? 0,
-        solar_quality: result.solar_quality,
-        max_array_panels_count: result.max_array_panels_count,
-        max_array_area_m2: result.max_array_area_m2,
-        annual_energy_kwh: result.annual_energy_kwh,
-        sunshine_hours: result.sunshine_hours,
-        carbon_offset: result.carbon_offset,
-        segment_count: result.segment_count,
-        panel_capacity_watts: result.panel_capacity_watts,
-        raw_response_json: result.raw_response_json,
-      });
-
-      processed++;
+      // Google Solar success — save assessment + update scores
+      const ok = await saveSolarAssessment(adminSupabase, lead, "google_solar", result);
+      if (ok) {
+        processed++;
+      } else {
+        failed++;
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.warn(`[SolarBackfillFull] Failed for lead ${lead.id}:`, msg);
@@ -290,33 +336,9 @@ export async function POST(req: NextRequest) {
             latitude: lead.latitude as number,
             longitude: lead.longitude as number,
           });
-
           if (fallbackResult && fallbackResult.max_array_panels_count) {
-            // Clean up any old incomplete records, then save the fallback assessment
-            await adminSupabase
-              .from("solar_assessments")
-              .delete()
-              .eq("lead_id", lead.id)
-              .is("max_array_panels_count", null);
-
-            await adminSupabase.from("solar_assessments").insert({
-              lead_id: lead.id,
-              provider: "osm_pvgis",
-              latitude: lead.latitude ?? 0,
-              longitude: lead.longitude ?? 0,
-              solar_quality: fallbackResult.solar_quality,
-              max_array_panels_count: fallbackResult.max_array_panels_count,
-              max_array_area_m2: fallbackResult.max_array_area_m2,
-              annual_energy_kwh: fallbackResult.annual_energy_kwh,
-              sunshine_hours: fallbackResult.sunshine_hours,
-              carbon_offset: fallbackResult.carbon_offset,
-              segment_count: fallbackResult.segment_count,
-              panel_capacity_watts: fallbackResult.panel_capacity_watts,
-              raw_response_json: fallbackResult.raw_response_json,
-            });
-
-            processedFallback++;
-            usedFallback = true;
+            const ok = await saveSolarAssessment(adminSupabase, lead, "osm_pvgis", fallbackResult);
+            if (ok) { processedFallback++; usedFallback = true; }
           }
         } catch (fallbackErr) {
           console.warn(
@@ -333,7 +355,7 @@ export async function POST(req: NextRequest) {
             .eq("lead_id", lead.id)
             .eq("provider", "no_coverage");
 
-          await adminSupabase.from("solar_assessments").insert({
+          const { error: ncErr } = await adminSupabase.from("solar_assessments").insert({
             lead_id: lead.id,
             provider: "no_coverage",
             latitude: lead.latitude ?? 0,
@@ -341,7 +363,8 @@ export async function POST(req: NextRequest) {
             solar_quality: "UNKNOWN",
             max_array_panels_count: null,
           });
-          noCoverage++;
+          if (ncErr) console.error(`[SolarBackfill] no_coverage (404) insert failed for ${lead.id}:`, ncErr.message);
+          else noCoverage++;
         }
         continue;
       }
