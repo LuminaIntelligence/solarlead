@@ -98,7 +98,7 @@ export async function POST(req: Request) {
    * Process a single lead through the 4-stage contact pipeline.
    * Returns { found: boolean, error?: string }
    */
-  async function processLead(lead: typeof page[number]): Promise<{ found: boolean; error?: string }> {
+  async function processLead(lead: NonNullable<typeof page>[number]): Promise<{ found: boolean; error?: string }> {
     const rawWebsite = lead.website as string;
     const domain = rawWebsite
       .replace(/^https?:\/\//, "")
