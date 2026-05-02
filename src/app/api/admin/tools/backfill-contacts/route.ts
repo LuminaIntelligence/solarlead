@@ -110,6 +110,16 @@ export async function POST(req: Request) {
 
   const nextOffset = offset + page.length;
 
+  /** Wraps a promise with a hard timeout — rejects if not resolved within `ms`. */
+  function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+      ),
+    ]);
+  }
+
   /**
    * Process a single lead through the 4-stage contact pipeline.
    * Returns { found: boolean, error?: string }
@@ -132,10 +142,11 @@ export async function POST(req: Request) {
     let source = "";
 
     try {
-      // Stage 1: Apollo
+      // Stage 1: Apollo (15s timeout)
       if (process.env.APOLLO_API_KEY && contacts.length === 0) {
         const apollo = getContactProvider("live", process.env.APOLLO_API_KEY);
-        const r = await apollo.findContacts(contactQuery).catch(() => ({ contacts: [], company: null }));
+        const r = await withTimeout(apollo.findContacts(contactQuery), 15_000)
+          .catch(() => ({ contacts: [], company: null }));
         const valid = r.contacts.filter((c) => c.email);
         if (valid.length > 0) { contacts = valid; source = "apollo"; }
 
@@ -149,26 +160,29 @@ export async function POST(req: Request) {
         }
       }
 
-      // Stage 2: Impressum-Scraper
+      // Stage 2: Impressum-Scraper (20s timeout)
       if (contacts.length === 0) {
         const scraper = new ImpressumScraperProvider();
-        const r = await scraper.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const r = await withTimeout(scraper.findContacts(contactQuery), 20_000)
+          .catch(() => ({ contacts: [] }));
         const valid = r.contacts.filter((c) => c.email || c.phone);
         if (valid.length > 0) { contacts = valid; source = "impressum"; }
       }
 
-      // Stage 3: Hunter.io
+      // Stage 3: Hunter.io (15s timeout)
       if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
         const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
-        const r = await hunter.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const r = await withTimeout(hunter.findContacts(contactQuery), 15_000)
+          .catch(() => ({ contacts: [] }));
         const valid = r.contacts.filter((c) => c.email);
         if (valid.length > 0) { contacts = valid; source = "hunter"; }
       }
 
-      // Stage 4: Firecrawl
+      // Stage 4: Firecrawl (45s timeout — AI-powered, inherently slower)
       if (contacts.length === 0 && process.env.FIRECRAWL_API_KEY) {
         const firecrawl = new FirecrawlContactProvider(process.env.FIRECRAWL_API_KEY);
-        const r = await firecrawl.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const r = await withTimeout(firecrawl.findContacts(contactQuery), 45_000)
+          .catch(() => ({ contacts: [] }));
         const valid = r.contacts.filter((c) => c.email || c.phone);
         if (valid.length > 0) { contacts = valid; source = "firecrawl"; }
       }
