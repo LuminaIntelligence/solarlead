@@ -5,6 +5,7 @@ import { getContactProvider } from "@/lib/providers/contacts";
 import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
 import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
 import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
+import { recalculateLeadScore } from "@/lib/actions/leads";
 import type { Contact } from "@/lib/providers/contacts/types";
 
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
@@ -13,7 +14,11 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
 
 /**
  * GET /api/admin/tools/backfill-contacts
- * Preview: how many leads are missing contacts.
+ *
+ * Counts ALL solar_lead_mass leads (across all users) that have a website
+ * but no contacts yet in lead_contacts.
+ * This covers leads imported via search, CSV, or address-search —
+ * not just discovery-pipeline leads.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -22,29 +27,35 @@ export async function GET() {
 
   const adminSupabase = createAdminClient();
 
-  // discovery_leads with website, approved/ready status, linked to a lead, no contacts yet.
-  // has_contacts IS NULL (never processed) OR has_contacts = false (explicitly set to no contacts).
-  const { data: candidates } = await adminSupabase
-    .from("discovery_leads")
-    .select("lead_id")
-    .not("lead_id", "is", null)
+  // All leads with a website (system-wide, all users)
+  const { data: leadsWithWebsite } = await adminSupabase
+    .from("solar_lead_mass")
+    .select("id")
     .not("website", "is", null)
-    .or("has_contacts.is.null,has_contacts.eq.false")
-    .in("status", ["approved", "ready"]);
+    .neq("website", "");
 
-  return NextResponse.json({ missing: candidates?.length ?? 0 });
+  if (!leadsWithWebsite?.length) return NextResponse.json({ missing: 0 });
+
+  const allIds = leadsWithWebsite.map((l) => l.id);
+
+  // Which already have at least one contact?
+  const { data: existingContacts } = await adminSupabase
+    .from("lead_contacts")
+    .select("lead_id")
+    .in("lead_id", allIds);
+
+  const withContacts = new Set((existingContacts ?? []).map((c) => c.lead_id));
+  const missing = allIds.filter((id) => !withContacts.has(id)).length;
+
+  return NextResponse.json({ missing });
 }
 
 /**
  * POST /api/admin/tools/backfill-contacts
  *
  * Runs the contact pipeline (Apollo → Impressum → Hunter → Firecrawl)
- * for all discovery_leads that:
- *   - are approved or ready
- *   - have a website
- *   - have NO contacts yet (has_contacts = false)
- *
- * Processes in batches to avoid timeout. Pass { offset: number } to paginate.
+ * for all solar_lead_mass leads that have a website but no contacts yet.
+ * Processes system-wide across all users, in batches of 20.
  */
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -52,44 +63,56 @@ export async function POST(req: Request) {
   if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({})) as { offset?: number; limit?: number };
-  const offset = body.offset ?? 0;
-  const limit = body.limit ?? 20; // 20 per batch (each lead can take ~10s)
+  const limit = Math.min(body.limit ?? 20, 20);
 
   const adminSupabase = createAdminClient();
 
-  // Fetch candidates: has_contacts IS NULL (never processed) OR explicitly false
-  const { data: candidates, error } = await adminSupabase
-    .from("discovery_leads")
-    .select("id, lead_id, website, company_name, city, user_id, discovery_campaigns(created_by)")
-    .not("lead_id", "is", null)
+  // Fetch all leads with websites, ordered by score (highest first)
+  const { data: allLeads, error } = await adminSupabase
+    .from("solar_lead_mass")
+    .select("id, user_id, company_name, website, city")
     .not("website", "is", null)
-    .or("has_contacts.is.null,has_contacts.eq.false")
-    .in("status", ["approved", "ready"])
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .neq("website", "")
+    .order("total_score", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!candidates?.length) {
-    return NextResponse.json({ processed: 0, found: 0, message: "Keine Leads ohne Kontakte gefunden." });
+  if (!allLeads?.length) {
+    return NextResponse.json({ processed: 0, found: 0, remaining: 0, message: "Keine Leads mit Website gefunden." });
   }
+
+  // Find which already have contacts
+  const allIds = allLeads.map((l) => l.id);
+  const { data: existing } = await adminSupabase
+    .from("lead_contacts")
+    .select("lead_id")
+    .in("lead_id", allIds);
+
+  const withContacts = new Set((existing ?? []).map((c) => c.lead_id));
+  const pending = allLeads.filter((l) => !withContacts.has(l.id));
+  const remaining = pending.length;
+
+  if (remaining === 0) {
+    return NextResponse.json({ processed: 0, found: 0, remaining: 0, message: "Alle Leads haben bereits Kontakte." });
+  }
+
+  const batch = pending.slice(0, limit);
 
   let processed = 0;
   let found = 0;
+  let skipped = 0;
   const errors: string[] = [];
 
-  for (const dl of candidates) {
-    const domain = (dl.website as string)
+  for (const lead of batch) {
+    const domain = (lead.website as string)
       .replace(/^https?:\/\//, "")
       .replace(/\/.*$/, "")
+      .replace(/^www\./, "")
       .trim();
 
-    const campaignRaw = dl.discovery_campaigns;
-    const campaign = (Array.isArray(campaignRaw) ? campaignRaw[0] : campaignRaw) as { created_by: string } | null;
-    const userId = campaign?.created_by ?? (dl.user_id as string);
     const contactQuery = {
       domain,
-      company_name: dl.company_name as string,
-      city: (dl.city as string | null) ?? undefined,
+      company_name: lead.company_name as string,
+      city: (lead.city as string | null) ?? undefined,
     };
 
     let contacts: Contact[] = [];
@@ -99,12 +122,24 @@ export async function POST(req: Request) {
       // Stage 1: Apollo
       if (process.env.APOLLO_API_KEY && contacts.length === 0) {
         const apollo = getContactProvider("live", process.env.APOLLO_API_KEY);
-        const r = await apollo.findContacts(contactQuery).catch(() => ({ contacts: [] }));
+        const r = await apollo.findContacts(contactQuery).catch(() => ({ contacts: [], company: null }));
         const valid = r.contacts.filter((c) => c.email);
         if (valid.length > 0) { contacts = valid; source = "apollo"; }
+
+        // Write firmographics back to lead
+        const updates: Record<string, unknown> = {};
+        if ((r as { company?: { estimated_num_employees?: number; linkedin_url?: string } }).company?.estimated_num_employees) {
+          updates.employee_count = (r as { company: { estimated_num_employees: number } }).company.estimated_num_employees;
+        }
+        if ((r as { company?: { linkedin_url?: string } }).company?.linkedin_url) {
+          updates.linkedin_url = (r as { company: { linkedin_url: string } }).company.linkedin_url;
+        }
+        if (Object.keys(updates).length > 0) {
+          await adminSupabase.from("solar_lead_mass").update(updates).eq("id", lead.id);
+        }
       }
 
-      // Stage 2: Impressum-Scraper
+      // Stage 2: Impressum-Scraper (free, very good for German companies)
       if (contacts.length === 0) {
         const scraper = new ImpressumScraperProvider();
         const r = await scraper.findContacts(contactQuery).catch(() => ({ contacts: [] }));
@@ -128,11 +163,11 @@ export async function POST(req: Request) {
         if (valid.length > 0) { contacts = valid; source = "firecrawl"; }
       }
 
-      if (contacts.length > 0 && dl.lead_id) {
+      if (contacts.length > 0) {
         const { error: insertError } = await adminSupabase.from("lead_contacts").insert(
           contacts.map((c) => ({
-            lead_id: dl.lead_id as string,
-            user_id: userId,
+            lead_id: lead.id,
+            user_id: lead.user_id,
             name: c.name,
             title: c.title,
             email: c.email,
@@ -146,40 +181,36 @@ export async function POST(req: Request) {
         );
 
         if (insertError) {
-          console.error(`[backfill-contacts] Insert failed for lead ${dl.lead_id}:`, insertError.message);
-          errors.push(`${dl.company_name as string}: DB insert fehlgeschlagen — ${insertError.message}`);
+          console.error(`[admin/backfill-contacts] Insert failed for lead ${lead.id}:`, insertError.message);
+          errors.push(`${lead.company_name as string}: ${insertError.message}`);
+          skipped++;
         } else {
-          const emailCount = contacts.filter((c) => c.email).length;
-          await adminSupabase
-            .from("discovery_leads")
-            .update({ has_contacts: emailCount > 0, contact_count: emailCount })
-            .eq("id", dl.id as string);
           found++;
+          // Recalculate outreach_score now that contact data exists
+          await recalculateLeadScore(lead.id as string);
         }
+      } else {
+        skipped++;
       }
 
       processed++;
     } catch (e) {
-      errors.push(`${dl.company_name as string}: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${lead.company_name as string}: ${msg}`);
+      skipped++;
       processed++;
     }
-  }
 
-  // Check if more remain (same filter: null or false)
-  const { data: remaining } = await adminSupabase
-    .from("discovery_leads")
-    .select("id", { count: "exact", head: true })
-    .not("lead_id", "is", null)
-    .not("website", "is", null)
-    .or("has_contacts.is.null,has_contacts.eq.false")
-    .in("status", ["approved", "ready"]);
+    // Small pause between requests to avoid rate limits
+    await new Promise((r) => setTimeout(r, 300));
+  }
 
   return NextResponse.json({
     processed,
     found,
-    remaining: (remaining as unknown as { count: number } | null)?.count ?? 0,
-    nextOffset: offset + processed,
+    skipped,
+    remaining: remaining - processed,
     errors: errors.slice(0, 5),
-    message: `${processed} Leads verarbeitet, ${found} Kontakte gefunden.`,
+    message: `${processed} Leads verarbeitet, ${found} Kontakte gefunden, ${skipped} ohne Treffer.`,
   });
 }
