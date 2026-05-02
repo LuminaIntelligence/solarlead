@@ -284,6 +284,26 @@ export async function saveSolarAssessment(
 ): Promise<SolarAssessment | null> {
   try {
     const supabase = await createClient();
+
+    // Idempotency guard: never create a second complete assessment for the same lead.
+    // A complete assessment has non-null max_array_panels_count (i.e. real data).
+    // no_coverage placeholders (null panels) are always replaceable.
+    if (assessment.max_array_panels_count !== null) {
+      const { data: existing } = await supabase
+        .from("solar_assessments")
+        .select("id")
+        .eq("lead_id", assessment.lead_id)
+        .not("max_array_panels_count", "is", null)
+        .maybeSingle();
+
+      if (existing) {
+        console.warn(
+          `[saveSolarAssessment] Lead ${assessment.lead_id} already has a complete assessment — skipping insert.`
+        );
+        return existing as unknown as SolarAssessment;
+      }
+    }
+
     const { data, error } = await supabase
       .from("solar_assessments")
       .insert(assessment)

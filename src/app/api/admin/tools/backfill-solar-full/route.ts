@@ -137,8 +137,18 @@ async function saveSolarAssessment(
     return false;
   }
 
-  // Recalculate and persist solar_score + total_score on the lead
+  // Recalculate and persist ALL 5 scores on the lead
+  // (business, electricity, outreach, solar, total) so no score stays at 0 indefinitely
   try {
+    // Also fetch enrichment data for a complete score calculation
+    const { data: enrichmentData } = await adminSupabase
+      .from("lead_enrichment")
+      .select("detected_keywords, enrichment_score")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const scoring = calculateScore({
       category: lead.category,
       hasWebsite: !!lead.website,
@@ -150,16 +160,24 @@ async function saveSolarAssessment(
         max_array_area_m2: result.max_array_area_m2,
         annual_energy_kwh: result.annual_energy_kwh,
       },
+      enrichmentData: enrichmentData ?? null,
     });
 
-    await adminSupabase
+    const { error: scoreUpdateError } = await adminSupabase
       .from("solar_lead_mass")
       .update({
+        business_score: scoring.business_score,
+        electricity_score: scoring.electricity_score,
+        outreach_score: scoring.outreach_score,
         solar_score: scoring.solar_score,
         total_score: scoring.total_score,
         updated_at: new Date().toISOString(),
       })
       .eq("id", lead.id);
+
+    if (scoreUpdateError) {
+      console.warn(`[SolarBackfill] Score update failed for lead ${lead.id}:`, scoreUpdateError.message);
+    }
   } catch (scoreErr) {
     // Score update failure is non-critical — assessment is saved, log and continue
     console.warn(`[SolarBackfill] Score update failed for lead ${lead.id}:`, scoreErr);

@@ -51,21 +51,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    // --- Prüfe ob es schon ein Assessment für diesen Lead gibt ---
+    // --- Prüfe ob es schon ein vollständiges Assessment für diesen Lead gibt ---
+    // maybeSingle() statt single() — kein Fehler-Log wenn keine Zeile vorhanden
     const { data: existingForLead } = await supabase
       .from("solar_assessments")
       .select("*")
       .eq("lead_id", lead_id)
+      .not("max_array_panels_count", "is", null)   // nur vollständige Assessments zählen
+      .neq("provider", "no_coverage")              // no_coverage-Platzhalter überspringen
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (existingForLead) {
-      // Bereits vorhanden — Scores aktualisieren und zurückgeben, kein neuer API-Call
+      // Vollständiges Assessment bereits vorhanden — Scores aktualisieren, kein API-Call
       return await updateScoresAndRespond(supabase, lead, existingForLead, lead_id);
     }
 
-    // --- Prüfe ob ein anderer Lead bereits Solar-Daten für diese Koordinaten hat ---
+    // --- Prüfe ob ein anderer Lead bereits vollständige Solar-Daten für diese Koordinaten hat ---
+    // Nur Einträge mit echten Panel-Daten als Cache verwenden (keine no_coverage/Platzhalter)
     const { data: nearbyAssessments } = await supabase
       .from("solar_assessments")
       .select("*")
@@ -73,6 +77,8 @@ export async function POST(request: NextRequest) {
       .lte("latitude", latitude + COORD_TOLERANCE)
       .gte("longitude", longitude - COORD_TOLERANCE)
       .lte("longitude", longitude + COORD_TOLERANCE)
+      .not("max_array_panels_count", "is", null)   // nur echte Daten als Cache verwenden
+      .neq("provider", "no_coverage")              // no_coverage nie cachen
       .order("created_at", { ascending: false })
       .limit(1);
 
@@ -196,7 +202,7 @@ async function updateScoresAndRespond(supabase: any, lead: any, solarData: any, 
   );
 
   // Update lead scores
-  await supabase
+  const { error: scoreUpdateError } = await supabase
     .from("solar_lead_mass")
     .update({
       business_score: scoring.business_score,
@@ -206,6 +212,10 @@ async function updateScoresAndRespond(supabase: any, lead: any, solarData: any, 
       total_score: scoring.total_score,
     })
     .eq("id", lead_id);
+
+  if (scoreUpdateError) {
+    console.error("[Solar] Score update failed for lead", lead_id, scoreUpdateError.message);
+  }
 
   return NextResponse.json({
     assessment: solarData,

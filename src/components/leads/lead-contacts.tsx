@@ -126,9 +126,16 @@ export function LeadContacts({
           description: `Für ${domain ?? companyName} wurden keine Ansprechpartner gefunden.`,
         });
       } else {
+        const providerLabel: Record<string, string> = {
+          apollo: "Apollo.io",
+          impressum: "Impressum-Scraper",
+          hunter: "Hunter.io",
+          firecrawl: "Firecrawl",
+          mock: "Mock-Daten",
+        };
         toast({
           title: `${data.contacts.length} Kontakt${data.contacts.length !== 1 ? "e" : ""} gefunden`,
-          description: `Über ${data.provider === "apollo" ? "Apollo.io" : "Mock-Daten"}`,
+          description: `Quelle: ${providerLabel[data.provider] ?? data.provider}`,
         });
       }
     } catch (error) {
