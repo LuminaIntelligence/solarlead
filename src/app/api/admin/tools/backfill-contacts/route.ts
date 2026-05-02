@@ -22,13 +22,14 @@ export async function GET() {
 
   const adminSupabase = createAdminClient();
 
-  // discovery_leads with website, approved/ready status, linked to a lead, no contacts yet
+  // discovery_leads with website, approved/ready status, linked to a lead, no contacts yet.
+  // has_contacts IS NULL (never processed) OR has_contacts = false (explicitly set to no contacts).
   const { data: candidates } = await adminSupabase
     .from("discovery_leads")
     .select("lead_id")
     .not("lead_id", "is", null)
     .not("website", "is", null)
-    .eq("has_contacts", false)
+    .or("has_contacts.is.null,has_contacts.eq.false")
     .in("status", ["approved", "ready"]);
 
   return NextResponse.json({ missing: candidates?.length ?? 0 });
@@ -56,13 +57,13 @@ export async function POST(req: Request) {
 
   const adminSupabase = createAdminClient();
 
-  // Fetch candidates
+  // Fetch candidates: has_contacts IS NULL (never processed) OR explicitly false
   const { data: candidates, error } = await adminSupabase
     .from("discovery_leads")
     .select("id, lead_id, website, company_name, city, user_id, discovery_campaigns(created_by)")
     .not("lead_id", "is", null)
     .not("website", "is", null)
-    .eq("has_contacts", false)
+    .or("has_contacts.is.null,has_contacts.eq.false")
     .in("status", ["approved", "ready"])
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
@@ -164,13 +165,13 @@ export async function POST(req: Request) {
     }
   }
 
-  // Check if more remain
+  // Check if more remain (same filter: null or false)
   const { data: remaining } = await adminSupabase
     .from("discovery_leads")
     .select("id", { count: "exact", head: true })
     .not("lead_id", "is", null)
     .not("website", "is", null)
-    .eq("has_contacts", false)
+    .or("has_contacts.is.null,has_contacts.eq.false")
     .in("status", ["approved", "ready"]);
 
   return NextResponse.json({
