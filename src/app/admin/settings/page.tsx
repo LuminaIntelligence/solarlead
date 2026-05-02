@@ -55,8 +55,14 @@ export default function AdminSettingsPage() {
 
   // Backfill contacts tool
   const [contactBackfillMissing, setContactBackfillMissing] = useState<number | null>(null);
+  const [contactBackfillStats, setContactBackfillStats] = useState<{
+    pending: number; searching: number; found: number; not_found: number; error: number; total: number;
+  } | null>(null);
   const [contactBackfillRunning, setContactBackfillRunning] = useState(false);
-  const [contactBackfillProgress, setContactBackfillProgress] = useState<{ processed: number; found: number; remaining: number } | null>(null);
+  const [contactBackfillProgress, setContactBackfillProgress] = useState<{
+    processed: number; found: number; notFound: number; errors: number;
+    lastActivity: string; recentCompanies: string[]; lastError: string | null;
+  } | null>(null);
   const [contactBackfillDone, setContactBackfillDone] = useState(false);
 
   // Solar detection backfill tool (OSM)
@@ -134,7 +140,10 @@ export default function AdminSettingsPage() {
       .catch(() => {});
     fetch("/api/admin/tools/backfill-contacts")
       .then((r) => r.json())
-      .then((d) => setContactBackfillMissing(d.missing ?? 0))
+      .then((d) => {
+        setContactBackfillMissing(d.missing ?? 0);
+        setContactBackfillStats(d);
+      })
       .catch(() => {});
     fetch("/api/admin/tools/solar-detection-backfill")
       .then((r) => r.json())
@@ -240,89 +249,150 @@ export default function AdminSettingsPage() {
   const weightsTotal = weights.business + weights.electricity + weights.solar + weights.outreach;
 
   /**
-   * Concurrent worker pool for contact backfill.
+   * Contact backfill — simple sequential loop with hard timeouts.
    *
-   * Maintains POOL_SIZE in-flight requests at all times. Each request atomically
-   * picks the next pending lead from DB (server handles locking via status field).
+   * Each POST processes leads server-side for ~50 seconds (parallelism handled
+   * inside the route). Frontend only orchestrates: send request, update UI, repeat.
    *
-   * Safe to refresh page mid-run — DB persists the lead status, so the next
-   * session continues exactly where this one stopped.
+   * Reliability features:
+   *   - AbortController: 90s hard fetch timeout — never hangs forever
+   *   - Backoff on transient errors (network, 5xx)
+   *   - Stuck DB rows auto-reclaimed via GET endpoint (called every 30s)
+   *   - Loop ends only when server reports `idle: true` (queue empty)
+   *   - Page reload safe: status persists in DB
    */
   const handleContactBackfill = async () => {
-    const POOL_SIZE = 5;
     setContactBackfillRunning(true);
     setContactBackfillDone(false);
-    setContactBackfillProgress({ processed: 0, found: 0, remaining: contactBackfillMissing ?? 0 });
+    setContactBackfillProgress({
+      processed: 0, found: 0, notFound: 0, errors: 0,
+      lastActivity: new Date().toLocaleTimeString("de-DE"),
+      recentCompanies: [], lastError: null,
+    });
 
     let totalProcessed = 0;
     let totalFound = 0;
-    let consecutiveIdle = 0; // count idle responses to detect "all done"
-    let stopped = false;
+    let totalNotFound = 0;
+    let totalErrors = 0;
+    let recentCompanies: string[] = [];
+    let lastError: string | null = null;
+    let consecutiveIdleResponses = 0;
+    let consecutiveFailures = 0;
 
-    /** A single worker: keeps picking leads until idle or stopped. */
-    const worker = async () => {
-      while (!stopped) {
+    // Periodically refresh DB stats (and trigger stuck-row reclaim via GET)
+    const statsInterval = setInterval(async () => {
+      try {
+        const r = await fetch("/api/admin/tools/backfill-contacts");
+        const d = await r.json();
+        setContactBackfillStats(d);
+        setContactBackfillMissing(d.missing ?? 0);
+      } catch { /* ignore */ }
+    }, 15_000);
+
+    try {
+      while (true) {
+        // Hard 90s fetch timeout — server budget is 60s, give 30s margin for network
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90_000);
+
+        let data: {
+          idle: boolean;
+          processed: number; found: number; notFound: number; errors: number;
+          recentResults?: Array<{ company: string; outcome: string; source?: string; contactCount?: number }>;
+          errorMessages?: string[];
+          elapsedMs?: number;
+        } | null = null;
+
         try {
           const res = await fetch("/api/admin/tools/backfill-contacts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
 
           if (!res.ok) {
-            console.error("[backfill-contacts] HTTP error:", res.status);
-            // Brief backoff on server errors, don't kill worker
-            await new Promise((r) => setTimeout(r, 1000));
-            continue;
-          }
-
-          const data = await res.json() as {
-            result: "found" | "not_found" | "error" | "idle";
-            company?: string; contactCount?: number; source?: string;
-          };
-
-          if (data.result === "idle") {
-            // No more pending leads — count idle responses across pool
-            consecutiveIdle++;
-            // If all workers report idle, queue is truly empty
-            if (consecutiveIdle >= POOL_SIZE) {
-              stopped = true;
-              return;
+            console.error("[backfill-contacts] HTTP", res.status);
+            consecutiveFailures++;
+            // Exponential backoff up to 30s
+            const wait = Math.min(30_000, 1000 * Math.pow(2, consecutiveFailures));
+            await new Promise((r) => setTimeout(r, wait));
+            if (consecutiveFailures >= 5) {
+              lastError = `${consecutiveFailures} aufeinanderfolgende Server-Fehler (HTTP ${res.status}) — Lauf gestoppt`;
+              break;
             }
-            await new Promise((r) => setTimeout(r, 500));
             continue;
           }
 
-          // Reset idle counter on real work
-          consecutiveIdle = 0;
-          totalProcessed++;
-          if (data.result === "found") totalFound++;
-
-          // Update UI (debounced via React batching)
-          setContactBackfillProgress({
-            processed: totalProcessed,
-            found: totalFound,
-            remaining: Math.max(0, (contactBackfillMissing ?? 0) - totalProcessed),
-          });
+          data = await res.json();
+          consecutiveFailures = 0; // reset on success
         } catch (e) {
-          console.error("[backfill-contacts] Worker error:", e);
+          clearTimeout(timeoutId);
+          const err = e instanceof Error ? e : new Error(String(e));
+          console.warn("[backfill-contacts] Fetch error:", err.message);
+          lastError = err.name === "AbortError"
+            ? "Server hat länger als 90s nicht geantwortet — Versuch neu starten…"
+            : `Netzwerkfehler: ${err.message}`;
+          consecutiveFailures++;
+          if (consecutiveFailures >= 5) {
+            lastError = `${consecutiveFailures} aufeinanderfolgende Netzwerkfehler — Lauf gestoppt`;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+
+        if (!data) continue;
+
+        // Aggregate stats
+        totalProcessed += data.processed ?? 0;
+        totalFound += data.found ?? 0;
+        totalNotFound += data.notFound ?? 0;
+        totalErrors += data.errors ?? 0;
+
+        if (data.recentResults?.length) {
+          const newCompanies = data.recentResults
+            .filter((r) => r.outcome === "found")
+            .map((r) => `${r.company} (${r.contactCount ?? 0} via ${r.source ?? "?"})`);
+          recentCompanies = [...newCompanies, ...recentCompanies].slice(0, 5);
+        }
+        if (data.errorMessages?.length) {
+          lastError = data.errorMessages[data.errorMessages.length - 1];
+        }
+
+        setContactBackfillProgress({
+          processed: totalProcessed,
+          found: totalFound,
+          notFound: totalNotFound,
+          errors: totalErrors,
+          lastActivity: new Date().toLocaleTimeString("de-DE"),
+          recentCompanies: [...recentCompanies],
+          lastError,
+        });
+
+        if (data.idle) {
+          consecutiveIdleResponses++;
+          // Two idle responses in a row = queue truly empty (account for race conditions)
+          if (consecutiveIdleResponses >= 2) break;
           await new Promise((r) => setTimeout(r, 1000));
+        } else {
+          consecutiveIdleResponses = 0;
         }
       }
-    };
-
-    try {
-      // Spin up POOL_SIZE workers, run them all in parallel
-      const workers = Array.from({ length: POOL_SIZE }, () => worker());
-      await Promise.all(workers);
       setContactBackfillDone(true);
     } catch (e) {
-      console.error("[backfill-contacts] Pool error:", e);
+      console.error("[backfill-contacts] Loop error:", e);
+      lastError = e instanceof Error ? e.message : String(e);
     } finally {
+      clearInterval(statsInterval);
       setContactBackfillRunning(false);
-      // Refresh counter from DB
+      // Final stats refresh
       fetch("/api/admin/tools/backfill-contacts")
         .then((r) => r.json())
-        .then((d) => setContactBackfillMissing(d.missing ?? 0))
+        .then((d) => {
+          setContactBackfillMissing(d.missing ?? 0);
+          setContactBackfillStats(d);
+        })
         .catch(() => {});
     }
   };
@@ -833,46 +903,97 @@ export default function AdminSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Counter */}
-          {contactBackfillMissing !== null && (
-            <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
-              <div className="text-sm">
-                <span className="font-medium text-slate-900">{contactBackfillMissing}</span>
-                <span className="text-slate-500"> genehmigte Leads ohne Kontaktdaten</span>
+          {/* DB stats — overall progress */}
+          {contactBackfillStats && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+              <div className="rounded bg-slate-50 border border-slate-200 px-3 py-2">
+                <div className="text-slate-400 uppercase tracking-wide text-[10px]">Insgesamt</div>
+                <div className="font-semibold text-slate-900">{contactBackfillStats.total}</div>
               </div>
-              {contactBackfillMissing === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+              <div className="rounded bg-amber-50 border border-amber-200 px-3 py-2">
+                <div className="text-amber-700 uppercase tracking-wide text-[10px]">Ausstehend</div>
+                <div className="font-semibold text-amber-900">{contactBackfillStats.pending}</div>
+              </div>
+              <div className="rounded bg-green-50 border border-green-200 px-3 py-2">
+                <div className="text-green-700 uppercase tracking-wide text-[10px]">Mit Kontakten</div>
+                <div className="font-semibold text-green-900">{contactBackfillStats.found}</div>
+              </div>
+              <div className="rounded bg-slate-50 border border-slate-200 px-3 py-2">
+                <div className="text-slate-500 uppercase tracking-wide text-[10px]">Nichts gefunden</div>
+                <div className="font-semibold text-slate-700">{contactBackfillStats.not_found}</div>
+              </div>
+              <div className="rounded bg-red-50 border border-red-200 px-3 py-2">
+                <div className="text-red-700 uppercase tracking-wide text-[10px]">Fehler</div>
+                <div className="font-semibold text-red-900">{contactBackfillStats.error}</div>
+              </div>
             </div>
           )}
 
-          {/* Live progress */}
-          {contactBackfillProgress && (
-            <div className={`rounded-lg border px-4 py-3 text-sm space-y-1 ${
+          {contactBackfillMissing !== null && contactBackfillMissing === 0 && (
+            <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-700">
+              <CheckCircle2 className="h-4 w-4" />
+              Alle Leads abgearbeitet.
+            </div>
+          )}
+
+          {/* Live progress during run */}
+          {contactBackfillProgress && (contactBackfillRunning || contactBackfillDone) && (
+            <div className={`rounded-lg border px-4 py-3 text-sm space-y-2 ${
               contactBackfillDone ? "bg-green-50 border-green-200 text-green-700" : "bg-blue-50 border-blue-200 text-blue-700"
             }`}>
-              <div className="flex items-center gap-2">
-                {contactBackfillDone
-                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
-                <span className="font-medium">
-                  {contactBackfillDone ? "Abgeschlossen" : "Läuft…"}
-                </span>
-              </div>
-              <div className="flex gap-4 text-xs pl-6">
-                <span>Geprüft: <strong>{contactBackfillProgress.processed}</strong></span>
-                <span>Kontakte gefunden: <strong>{contactBackfillProgress.found}</strong></span>
-                {!contactBackfillDone && contactBackfillMissing !== null && contactBackfillMissing > 0 && (
-                  <span className="text-blue-500">
-                    {Math.round((contactBackfillProgress.found / contactBackfillMissing) * 100)}% abgedeckt
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {contactBackfillDone
+                    ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                  <span className="font-medium">
+                    {contactBackfillDone ? "Abgeschlossen" : "Läuft…"}
                   </span>
+                </div>
+                <span className="text-[11px] opacity-70">letzte Aktivität: {contactBackfillProgress.lastActivity}</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pl-6">
+                <span>Geprüft (Session): <strong>{contactBackfillProgress.processed}</strong></span>
+                <span className="text-green-700">Gefunden: <strong>{contactBackfillProgress.found}</strong></span>
+                <span className="text-slate-600">Leer: <strong>{contactBackfillProgress.notFound}</strong></span>
+                {contactBackfillProgress.errors > 0 && (
+                  <span className="text-red-700">Fehler: <strong>{contactBackfillProgress.errors}</strong></span>
                 )}
               </div>
-              {/* Progress bar based on found / total-missing */}
-              {!contactBackfillDone && contactBackfillMissing !== null && contactBackfillMissing > 0 && (
-                <div className="mt-2 h-1.5 bg-blue-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.round((contactBackfillProgress.found / contactBackfillMissing) * 100))}%` }}
-                  />
+
+              {/* Progress bar based on overall DB stats */}
+              {contactBackfillStats && contactBackfillStats.total > 0 && (
+                <div>
+                  <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, Math.round(((contactBackfillStats.found + contactBackfillStats.not_found) / contactBackfillStats.total) * 100))}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-blue-600 mt-1 pl-1">
+                    {Math.round(((contactBackfillStats.found + contactBackfillStats.not_found) / contactBackfillStats.total) * 100)}% verarbeitet
+                    ({contactBackfillStats.found + contactBackfillStats.not_found} / {contactBackfillStats.total})
+                  </div>
+                </div>
+              )}
+
+              {/* Recent finds */}
+              {contactBackfillProgress.recentCompanies.length > 0 && (
+                <div className="pl-6 pt-1">
+                  <div className="text-[11px] text-slate-500 uppercase tracking-wide mb-1">Zuletzt gefunden</div>
+                  <ul className="text-[11px] space-y-0.5 text-slate-700">
+                    {contactBackfillProgress.recentCompanies.map((c, i) => (
+                      <li key={i} className="truncate">✓ {c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Last error */}
+              {contactBackfillProgress.lastError && (
+                <div className="pl-6 pt-1 text-[11px] text-red-600 bg-red-50 rounded px-2 py-1 truncate" title={contactBackfillProgress.lastError}>
+                  ⚠ {contactBackfillProgress.lastError}
                 </div>
               )}
             </div>
