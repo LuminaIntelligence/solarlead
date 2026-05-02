@@ -277,8 +277,10 @@ export default function AdminSettingsPage() {
           remaining: data.remaining ?? 0,
         });
 
-        // Stop when server signals done, no more leads, or no progress
-        if (data.done || data.remaining === 0 || (data.processed === 0 && data.skipped === 0)) break;
+        // Stop only when server signals done or no leads remain beyond this offset
+        if (data.done || data.remaining === 0) break;
+        // Safety: if offset didn't advance (should never happen), stop to avoid infinite loop
+        if (data.nextOffset <= offset) break;
 
         // Small pause between batches
         await new Promise((r) => setTimeout(r, 300));

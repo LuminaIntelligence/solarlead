@@ -215,8 +215,9 @@ export async function POST(req: Request) {
     skipped,
     remaining,
     nextOffset,
-    done: remaining === 0,
+    // done only when there truly are no more leads at higher offsets
+    done: page.length < batchSize || remaining === 0,
     errors: errors.slice(0, 5),
-    message: `${processed} verarbeitet (${page.length - toProcess.length} übersprungen — bereits Kontakte), ${found} Kontakte gefunden.`,
+    message: `${processed} verarbeitet, ${page.length - toProcess.length} bereits Kontakte, ${found} neu gefunden.`,
   });
 }
