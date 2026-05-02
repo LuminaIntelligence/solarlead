@@ -252,7 +252,7 @@ export default function AdminSettingsPage() {
         const res = await fetch("/api/admin/tools/backfill-contacts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset, limit: 5 }),
+          body: JSON.stringify({ offset, limit: 10 }),
         });
 
         if (!res.ok) {
@@ -268,8 +268,9 @@ export default function AdminSettingsPage() {
         totalProcessed += data.processed ?? 0;
         totalFound += data.found ?? 0;
 
+        const prevOffset = offset;
         // Advance to next page using the returned offset
-        offset = data.nextOffset ?? offset + 5;
+        offset = data.nextOffset ?? offset + 10;
 
         setContactBackfillProgress({
           processed: totalProcessed,
@@ -279,11 +280,11 @@ export default function AdminSettingsPage() {
 
         // Stop only when server signals done or no leads remain beyond this offset
         if (data.done || data.remaining === 0) break;
-        // Safety: if offset didn't advance (should never happen), stop to avoid infinite loop
-        if (data.nextOffset <= offset) break;
+        // Safety: if offset didn't advance, stop to avoid infinite loop
+        if ((data.nextOffset ?? 0) <= prevOffset) break;
 
         // Small pause between batches
-        await new Promise((r) => setTimeout(r, 300));
+        await new Promise((r) => setTimeout(r, 200));
       }
       setContactBackfillDone(true);
     } catch (e) {
@@ -860,8 +861,8 @@ export default function AdminSettingsPage() {
             )}
           </Button>
           <p className="text-xs text-slate-400">
-            Verarbeitet 20 Leads pro Batch. Läuft automatisch bis alle Leads abgearbeitet sind.
-            Hunter.io-Credits werden nur verbraucht wenn Scraper nichts findet.
+            Verarbeitet 10 Leads gleichzeitig (parallel). Läuft automatisch bis alle Leads abgearbeitet sind.
+            Hunter.io-Credits werden nur verbraucht wenn Apollo und Impressum-Scraper nichts finden.
           </p>
         </CardContent>
       </Card>

@@ -15,7 +15,6 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
 /**
  * GET /api/admin/tools/backfill-contacts
  * Returns total count of solar_lead_mass leads with a website (= processable).
- * Uses two small queries instead of a large .in() to avoid URL length limits.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -24,20 +23,16 @@ export async function GET() {
 
   const adminSupabase = createAdminClient();
 
-  // Count total leads with a website
   const { count: total } = await adminSupabase
     .from("solar_lead_mass")
     .select("id", { count: "exact", head: true })
     .not("website", "is", null)
     .neq("website", "");
 
-  // Count leads that already have at least one contact (distinct lead_ids)
-  // Use a small page-by-page approach to avoid huge IN queries
   const { count: withContacts } = await adminSupabase
     .from("lead_contacts")
     .select("lead_id", { count: "exact", head: true });
 
-  // "missing" is approximate — exact number shown during processing
   const missing = Math.max(0, (total ?? 0) - (withContacts ?? 0));
 
   return NextResponse.json({ missing, total: total ?? 0 });
@@ -47,12 +42,12 @@ export async function GET() {
  * POST /api/admin/tools/backfill-contacts
  *
  * Offset-based pagination — advances linearly through all leads.
- * Each call fetches a small PAGE of leads starting at `offset`,
- * skips leads that already have contacts (fast DB check), and runs
- * the 4-stage pipeline for those that don't.
+ * Leads in each batch are processed IN PARALLEL (Promise.allSettled) to
+ * avoid sequential API latency stacking up (Impressum scraper + Firecrawl
+ * can each take 5-30s per lead — sequential = batchSize × that).
  *
- * This prevents re-processing the same "unfindable" leads on every call.
- * The frontend increments offset using the returned `nextOffset`.
+ * Batch size: 10 leads processed concurrently.
+ * Expected time per batch: ~15-30s (slowest lead, not sum of all leads).
  */
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -61,12 +56,12 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({})) as { offset?: number; limit?: number };
   const offset = body.offset ?? 0;
-  // 5 leads per batch: conservative to stay within Vercel function timeout
-  const batchSize = Math.min(body.limit ?? 5, 5);
+  // 10 leads processed in parallel — faster than sequential while staying within timeout
+  const batchSize = Math.min(body.limit ?? 10, 10);
 
   const adminSupabase = createAdminClient();
 
-  // Fetch a small page of leads starting at offset
+  // Fetch a page of leads starting at offset
   const { data: page, error } = await adminSupabase
     .from("solar_lead_mass")
     .select("id, user_id, company_name, website, city")
@@ -87,23 +82,23 @@ export async function POST(req: Request) {
     });
   }
 
-  // Check which of these leads already have contacts (small .in() ≤ 5 IDs)
+  // Check which of these leads already have contacts (small .in() ≤ 10 IDs)
   const pageIds = page.map((l) => l.id as string);
   const { data: existingContacts } = await adminSupabase
     .from("lead_contacts")
     .select("lead_id")
     .in("lead_id", pageIds);
 
-  const withContacts = new Set((existingContacts ?? []).map((c) => c.lead_id as string));
-  const toProcess = page.filter((l) => !withContacts.has(l.id as string));
+  const withContactsSet = new Set((existingContacts ?? []).map((c) => c.lead_id as string));
+  const toProcess = page.filter((l) => !withContactsSet.has(l.id as string));
 
   const nextOffset = offset + page.length;
-  let processed = 0;
-  let found = 0;
-  let skipped = 0;
-  const errors: string[] = [];
 
-  for (const lead of toProcess) {
+  /**
+   * Process a single lead through the 4-stage contact pipeline.
+   * Returns { found: boolean, error?: string }
+   */
+  async function processLead(lead: typeof page[number]): Promise<{ found: boolean; error?: string }> {
     const rawWebsite = lead.website as string;
     const domain = rawWebsite
       .replace(/^https?:\/\//, "")
@@ -181,22 +176,41 @@ export async function POST(req: Request) {
 
         if (insertError) {
           console.error(`[admin/backfill-contacts] Insert failed for ${lead.id}:`, insertError.message);
-          errors.push(`${lead.company_name as string}: ${insertError.message}`);
-          skipped++;
-        } else {
-          found++;
-          await recalculateLeadScore(lead.id as string);
+          return { found: false, error: `${lead.company_name as string}: ${insertError.message}` };
         }
-      } else {
-        skipped++;
+
+        await recalculateLeadScore(lead.id as string);
+        return { found: true };
       }
 
-      processed++;
+      return { found: false };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`${lead.company_name as string}: ${msg}`);
+      return { found: false, error: `${lead.company_name as string}: ${msg}` };
+    }
+  }
+
+  // Process all leads in this batch IN PARALLEL — key performance improvement.
+  // Sequential: batchSize × avg_lead_time. Parallel: max(lead_times) ≈ same as 1 lead.
+  const results = await Promise.allSettled(toProcess.map((lead) => processLead(lead)));
+
+  let processed = 0;
+  let found = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const result of results) {
+    processed++;
+    if (result.status === "fulfilled") {
+      if (result.value.found) {
+        found++;
+      } else {
+        skipped++;
+        if (result.value.error) errors.push(result.value.error);
+      }
+    } else {
       skipped++;
-      processed++;
+      errors.push(String(result.reason));
     }
   }
 
@@ -215,7 +229,6 @@ export async function POST(req: Request) {
     skipped,
     remaining,
     nextOffset,
-    // done only when there truly are no more leads at higher offsets
     done: page.length < batchSize || remaining === 0,
     errors: errors.slice(0, 5),
     message: `${processed} verarbeitet, ${page.length - toProcess.length} bereits Kontakte, ${found} neu gefunden.`,
