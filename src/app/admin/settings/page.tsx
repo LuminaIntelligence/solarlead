@@ -278,8 +278,8 @@ export default function AdminSettingsPage() {
           remaining: data.remaining ?? 0,
         });
 
-        // Stop only when server signals done or no leads remain beyond this offset
-        if (data.done || data.remaining === 0) break;
+        // Stop only when server signals done (no more pages to scan)
+        if (data.done) break;
         // Safety: if offset didn't advance, stop to avoid infinite loop
         if ((data.nextOffset ?? 0) <= prevOffset) break;
 
@@ -831,18 +831,20 @@ export default function AdminSettingsPage() {
                 </span>
               </div>
               <div className="flex gap-4 text-xs pl-6">
-                <span>Verarbeitet: <strong>{contactBackfillProgress.processed}</strong></span>
-                <span>Gefunden: <strong>{contactBackfillProgress.found}</strong></span>
-                {!contactBackfillDone && contactBackfillProgress.remaining > 0 && (
-                  <span>Verbleibend: <strong>{contactBackfillProgress.remaining}</strong></span>
+                <span>Geprüft: <strong>{contactBackfillProgress.processed}</strong></span>
+                <span>Kontakte gefunden: <strong>{contactBackfillProgress.found}</strong></span>
+                {!contactBackfillDone && contactBackfillMissing !== null && contactBackfillMissing > 0 && (
+                  <span className="text-blue-500">
+                    {Math.round((contactBackfillProgress.found / contactBackfillMissing) * 100)}% abgedeckt
+                  </span>
                 )}
               </div>
-              {/* Progress bar */}
+              {/* Progress bar based on found / total-missing */}
               {!contactBackfillDone && contactBackfillMissing !== null && contactBackfillMissing > 0 && (
                 <div className="mt-2 h-1.5 bg-blue-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.round((contactBackfillProgress.processed / contactBackfillMissing) * 100))}%` }}
+                    style={{ width: `${Math.min(100, Math.round((contactBackfillProgress.found / contactBackfillMissing) * 100))}%` }}
                   />
                 </div>
               )}
