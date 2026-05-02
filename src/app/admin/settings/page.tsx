@@ -242,7 +242,7 @@ export default function AdminSettingsPage() {
   const handleContactBackfill = async () => {
     setContactBackfillRunning(true);
     setContactBackfillDone(false);
-    setContactBackfillProgress(null);
+    setContactBackfillProgress({ processed: 0, found: 0, remaining: contactBackfillMissing ?? 0 });
     let offset = 0;
     let totalProcessed = 0;
     let totalFound = 0;
@@ -252,25 +252,48 @@ export default function AdminSettingsPage() {
         const res = await fetch("/api/admin/tools/backfill-contacts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset, limit: 20 }),
+          body: JSON.stringify({ offset, limit: 5 }),
         });
-        const data = await res.json();
+
+        if (!res.ok) {
+          console.error("[backfill-contacts] HTTP error:", res.status);
+          break;
+        }
+
+        const data = await res.json() as {
+          processed: number; found: number; skipped: number;
+          remaining: number; nextOffset: number; done?: boolean;
+        };
+
         totalProcessed += data.processed ?? 0;
         totalFound += data.found ?? 0;
-        offset = data.nextOffset ?? offset + 20;
 
-        setContactBackfillProgress({ processed: totalProcessed, found: totalFound, remaining: data.remaining ?? 0 });
+        // Advance to next page using the returned offset
+        offset = data.nextOffset ?? offset + 5;
 
-        if (!data.remaining || data.remaining === 0 || data.processed === 0) break;
-        // Short pause between batches to avoid overloading
-        await new Promise((r) => setTimeout(r, 500));
+        setContactBackfillProgress({
+          processed: totalProcessed,
+          found: totalFound,
+          remaining: data.remaining ?? 0,
+        });
+
+        // Stop when server signals done, no more leads, or no progress
+        if (data.done || data.remaining === 0 || (data.processed === 0 && data.skipped === 0)) break;
+
+        // Small pause between batches
+        await new Promise((r) => setTimeout(r, 300));
       }
       setContactBackfillDone(true);
-      setContactBackfillMissing(0);
-    } catch {
+    } catch (e) {
+      console.error("[backfill-contacts] Loop error:", e);
       setContactBackfillProgress((p) => ({ ...(p ?? { processed: 0, found: 0 }), remaining: -1 }));
     } finally {
       setContactBackfillRunning(false);
+      // Refresh the missing count
+      fetch("/api/admin/tools/backfill-contacts")
+        .then((r) => r.json())
+        .then((d) => setContactBackfillMissing(d.missing ?? 0))
+        .catch(() => {});
     }
   };
 
