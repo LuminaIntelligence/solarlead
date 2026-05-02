@@ -103,36 +103,67 @@ export async function POST() {
 
   const adminSupabase = createAdminClient();
 
-  // Step 1: Atomically claim the next pending lead.
-  // Uses a SELECT ... FOR UPDATE pattern emulated via UPDATE ... WHERE ... RETURNING.
-  // Picks one pending lead with website (highest score first), marks it 'searching'.
-  // Note: PostgREST doesn't expose row-level locking, but we mitigate races by
-  // selecting WHERE status='pending' in the UPDATE — only one writer wins per row.
-  const { data: claimed, error: claimError } = await adminSupabase
-    .from("solar_lead_mass")
-    .update({
-      contact_search_status: "searching",
-      contact_search_at: new Date().toISOString(),
-    })
-    .eq("contact_search_status", "pending")
-    .not("website", "is", null)
-    .neq("website", "")
-    .neq("status", "existing_solar")
-    .order("total_score", { ascending: false })
-    .limit(1)
-    .select("id, user_id, company_name, website, city")
-    .maybeSingle();
+  // Step 1: SELECT the next pending lead (highest score first).
+  // Step 2: Conditionally UPDATE it to 'searching' — only succeeds if still pending
+  //          (race-safe: another worker that picked the same row will get 0 rows).
+  // Step 3: If UPDATE returns 0 rows, retry up to 3 times (race with parallel workers).
+  let lead: { id: string; user_id: string; company_name: string; website: string; city: string | null } | null = null;
 
-  if (claimError) {
-    return NextResponse.json({ error: claimError.message }, { status: 500 });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: candidate, error: selectError } = await adminSupabase
+      .from("solar_lead_mass")
+      .select("id, user_id, company_name, website, city")
+      .eq("contact_search_status", "pending")
+      .not("website", "is", null)
+      .neq("website", "")
+      .neq("status", "existing_solar")
+      .order("total_score", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (selectError) {
+      return NextResponse.json({ error: `select: ${selectError.message}` }, { status: 500 });
+    }
+
+    if (!candidate) {
+      return NextResponse.json({ result: "idle", message: "Keine Leads in der Warteschlange." });
+    }
+
+    // Conditional claim — only updates if status is still 'pending'
+    const { data: claimed, error: updateError } = await adminSupabase
+      .from("solar_lead_mass")
+      .update({
+        contact_search_status: "searching",
+        contact_search_at: new Date().toISOString(),
+      })
+      .eq("id", candidate.id)
+      .eq("contact_search_status", "pending")
+      .select("id, user_id, company_name, website, city")
+      .maybeSingle();
+
+    if (updateError) {
+      return NextResponse.json({ error: `claim: ${updateError.message}` }, { status: 500 });
+    }
+
+    if (claimed) {
+      lead = {
+        id: claimed.id as string,
+        user_id: claimed.user_id as string,
+        company_name: claimed.company_name as string,
+        website: claimed.website as string,
+        city: (claimed.city as string | null) ?? null,
+      };
+      break;
+    }
+    // Lost the race — another worker grabbed it. Loop tries the next pending lead.
   }
 
-  if (!claimed) {
-    return NextResponse.json({ result: "idle", message: "Keine Leads in der Warteschlange." });
+  if (!lead) {
+    // Couldn't claim anything after 3 attempts (high contention or empty queue)
+    return NextResponse.json({ result: "idle", message: "Keine Leads claim-bar." });
   }
 
-  const lead = claimed;
-  const leadId = lead.id as string;
+  const leadId = lead.id;
 
   try {
     const rawWebsite = lead.website as string;
