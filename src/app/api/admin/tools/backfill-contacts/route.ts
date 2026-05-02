@@ -1,3 +1,18 @@
+/**
+ * Contact backfill — single-lead pick-and-lock architecture.
+ *
+ * Each POST request:
+ *   1. Atomically picks the next 'pending' lead and marks it 'searching' (DB lock).
+ *   2. Runs the 4-stage pipeline (Apollo → Impressum → Hunter → Firecrawl) with timeouts.
+ *   3. Marks the lead 'found' / 'not_found' / 'error' based on outcome.
+ *   4. Returns immediately so the next request can pick another lead.
+ *
+ * The frontend keeps N concurrent requests in flight at all times — true parallelism
+ * via DB locking, no risk of duplicates, fully resumable across page reloads.
+ *
+ * Stuck 'searching' rows (Vercel timeout, browser crash) are auto-reclaimed if older
+ * than 5 minutes via the GET endpoint's reset query.
+ */
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -12,9 +27,18 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
 }
 
+/** Wraps a promise with a hard timeout. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 /**
- * GET /api/admin/tools/backfill-contacts
- * Returns total count of solar_lead_mass leads with a website (= processable).
+ * GET — returns counts by status. Also reclaims stuck 'searching' rows older than 5min.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -23,108 +47,94 @@ export async function GET() {
 
   const adminSupabase = createAdminClient();
 
-  // Count processable leads: has website, not already marked as existing_solar
-  const { count: total } = await adminSupabase
+  // Reclaim stuck rows (status=searching but no progress in 5 min)
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  await adminSupabase
     .from("solar_lead_mass")
-    .select("id", { count: "exact", head: true })
-    .not("website", "is", null)
-    .neq("website", "")
-    .neq("status", "existing_solar");
+    .update({ contact_search_status: "pending" })
+    .eq("contact_search_status", "searching")
+    .lt("contact_search_at", fiveMinAgo);
 
-  // Count leads that already have contacts — page through to get distinct lead_ids
-  // (a single COUNT would double-count leads with multiple contacts)
-  const PAGE = 1000;
-  const distinctLeadIds = new Set<string>();
-  let lcOffset = 0;
-  while (true) {
-    const { data } = await adminSupabase
-      .from("lead_contacts")
-      .select("lead_id")
-      .range(lcOffset, lcOffset + PAGE - 1);
-    if (!data?.length) break;
-    for (const row of data) distinctLeadIds.add(row.lead_id as string);
-    if (data.length < PAGE) break;
-    lcOffset += PAGE;
-  }
+  // Count each status (only leads with website, not existing_solar)
+  const baseQuery = () =>
+    adminSupabase
+      .from("solar_lead_mass")
+      .select("id", { count: "exact", head: true })
+      .not("website", "is", null)
+      .neq("website", "")
+      .neq("status", "existing_solar");
 
-  const missing = Math.max(0, (total ?? 0) - distinctLeadIds.size);
+  const [pendingRes, searchingRes, foundRes, notFoundRes, errorRes, totalRes] = await Promise.all([
+    baseQuery().eq("contact_search_status", "pending"),
+    baseQuery().eq("contact_search_status", "searching"),
+    baseQuery().eq("contact_search_status", "found"),
+    baseQuery().eq("contact_search_status", "not_found"),
+    baseQuery().eq("contact_search_status", "error"),
+    baseQuery(),
+  ]);
 
-  return NextResponse.json({ missing, total: total ?? 0 });
+  const pending = pendingRes.count ?? 0;
+  const searching = searchingRes.count ?? 0;
+  const found = foundRes.count ?? 0;
+  const not_found = notFoundRes.count ?? 0;
+  const error_count = errorRes.count ?? 0;
+  const total = totalRes.count ?? 0;
+
+  return NextResponse.json({
+    total,
+    pending,
+    searching,
+    found,
+    not_found,
+    error: error_count,
+    // "missing" = pending + error (work still to do)
+    missing: pending + error_count,
+  });
 }
 
 /**
- * POST /api/admin/tools/backfill-contacts
- *
- * Offset-based pagination — advances linearly through all leads.
- * Leads in each batch are processed IN PARALLEL (Promise.allSettled) to
- * avoid sequential API latency stacking up (Impressum scraper + Firecrawl
- * can each take 5-30s per lead — sequential = batchSize × that).
- *
- * Batch size: 10 leads processed concurrently.
- * Expected time per batch: ~15-30s (slowest lead, not sum of all leads).
+ * POST — atomically pick next pending lead, process, mark final status.
+ * Returns { result: 'found' | 'not_found' | 'error' | 'idle', leadId?, ... }
  */
-export async function POST(req: Request) {
+export async function POST() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({})) as { offset?: number; limit?: number };
-  const offset = body.offset ?? 0;
-  // 10 leads processed in parallel — faster than sequential while staying within timeout
-  const batchSize = Math.min(body.limit ?? 10, 10);
-
   const adminSupabase = createAdminClient();
 
-  // Fetch a page of leads starting at offset
-  // Skip leads already marked as existing_solar — no need to find contacts for them
-  const { data: page, error } = await adminSupabase
+  // Step 1: Atomically claim the next pending lead.
+  // Uses a SELECT ... FOR UPDATE pattern emulated via UPDATE ... WHERE ... RETURNING.
+  // Picks one pending lead with website (highest score first), marks it 'searching'.
+  // Note: PostgREST doesn't expose row-level locking, but we mitigate races by
+  // selecting WHERE status='pending' in the UPDATE — only one writer wins per row.
+  const { data: claimed, error: claimError } = await adminSupabase
     .from("solar_lead_mass")
-    .select("id, user_id, company_name, website, city")
+    .update({
+      contact_search_status: "searching",
+      contact_search_at: new Date().toISOString(),
+    })
+    .eq("contact_search_status", "pending")
     .not("website", "is", null)
     .neq("website", "")
     .neq("status", "existing_solar")
     .order("total_score", { ascending: false })
-    .range(offset, offset + batchSize - 1);
+    .limit(1)
+    .select("id, user_id, company_name, website, city")
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // No more leads at this offset → done
-  if (!page?.length) {
-    return NextResponse.json({
-      processed: 0, found: 0, skipped: 0,
-      remaining: 0, nextOffset: offset,
-      done: true,
-      message: "Alle Leads wurden verarbeitet.",
-    });
+  if (claimError) {
+    return NextResponse.json({ error: claimError.message }, { status: 500 });
   }
 
-  // Check which of these leads already have contacts (small .in() ≤ 10 IDs)
-  const pageIds = page.map((l) => l.id as string);
-  const { data: existingContacts } = await adminSupabase
-    .from("lead_contacts")
-    .select("lead_id")
-    .in("lead_id", pageIds);
-
-  const withContactsSet = new Set((existingContacts ?? []).map((c) => c.lead_id as string));
-  const toProcess = page.filter((l) => !withContactsSet.has(l.id as string));
-
-  const nextOffset = offset + page.length;
-
-  /** Wraps a promise with a hard timeout — rejects if not resolved within `ms`. */
-  function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
-      ),
-    ]);
+  if (!claimed) {
+    return NextResponse.json({ result: "idle", message: "Keine Leads in der Warteschlange." });
   }
 
-  /**
-   * Process a single lead through the 4-stage contact pipeline.
-   * Returns { found: boolean, error?: string }
-   */
-  async function processLead(lead: NonNullable<typeof page>[number]): Promise<{ found: boolean; error?: string }> {
+  const lead = claimed;
+  const leadId = lead.id as string;
+
+  try {
     const rawWebsite = lead.website as string;
     const domain = rawWebsite
       .replace(/^https?:\/\//, "")
@@ -141,127 +151,131 @@ export async function POST(req: Request) {
     let contacts: Contact[] = [];
     let source = "";
 
-    try {
-      // Stage 1: Apollo (15s timeout)
-      if (process.env.APOLLO_API_KEY && contacts.length === 0) {
-        const apollo = getContactProvider("live", process.env.APOLLO_API_KEY);
-        const r = await withTimeout(apollo.findContacts(contactQuery), 15_000)
-          .catch(() => ({ contacts: [], company: null }));
-        const valid = r.contacts.filter((c) => c.email);
-        if (valid.length > 0) { contacts = valid; source = "apollo"; }
+    // Stage 1: Apollo (15s)
+    if (process.env.APOLLO_API_KEY && contacts.length === 0) {
+      const apollo = getContactProvider("live", process.env.APOLLO_API_KEY);
+      const r = await withTimeout(apollo.findContacts(contactQuery), 15_000)
+        .catch(() => ({ contacts: [], company: null }));
+      const valid = r.contacts.filter((c) => c.email);
+      if (valid.length > 0) { contacts = valid; source = "apollo"; }
 
-        // Write firmographics back
-        const updates: Record<string, unknown> = {};
-        const company = (r as { company?: { estimated_num_employees?: number; linkedin_url?: string } }).company;
-        if (company?.estimated_num_employees) updates.employee_count = company.estimated_num_employees;
-        if (company?.linkedin_url) updates.linkedin_url = company.linkedin_url;
-        if (Object.keys(updates).length > 0) {
-          await adminSupabase.from("solar_lead_mass").update(updates).eq("id", lead.id);
-        }
+      // Save firmographics
+      const updates: Record<string, unknown> = {};
+      const company = (r as { company?: { estimated_num_employees?: number; linkedin_url?: string } }).company;
+      if (company?.estimated_num_employees) updates.employee_count = company.estimated_num_employees;
+      if (company?.linkedin_url) updates.linkedin_url = company.linkedin_url;
+      if (Object.keys(updates).length > 0) {
+        await adminSupabase.from("solar_lead_mass").update(updates).eq("id", leadId);
       }
-
-      // Stage 2: Impressum-Scraper (20s timeout)
-      if (contacts.length === 0) {
-        const scraper = new ImpressumScraperProvider();
-        const r = await withTimeout(scraper.findContacts(contactQuery), 20_000)
-          .catch(() => ({ contacts: [] }));
-        const valid = r.contacts.filter((c) => c.email || c.phone);
-        if (valid.length > 0) { contacts = valid; source = "impressum"; }
-      }
-
-      // Stage 3: Hunter.io (15s timeout)
-      if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
-        const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
-        const r = await withTimeout(hunter.findContacts(contactQuery), 15_000)
-          .catch(() => ({ contacts: [] }));
-        const valid = r.contacts.filter((c) => c.email);
-        if (valid.length > 0) { contacts = valid; source = "hunter"; }
-      }
-
-      // Stage 4: Firecrawl (45s timeout — AI-powered, inherently slower)
-      if (contacts.length === 0 && process.env.FIRECRAWL_API_KEY) {
-        const firecrawl = new FirecrawlContactProvider(process.env.FIRECRAWL_API_KEY);
-        const r = await withTimeout(firecrawl.findContacts(contactQuery), 45_000)
-          .catch(() => ({ contacts: [] }));
-        const valid = r.contacts.filter((c) => c.email || c.phone);
-        if (valid.length > 0) { contacts = valid; source = "firecrawl"; }
-      }
-
-      if (contacts.length > 0) {
-        const { error: insertError } = await adminSupabase.from("lead_contacts").insert(
-          contacts.map((c) => ({
-            lead_id: lead.id,
-            user_id: lead.user_id,
-            name: c.name,
-            title: c.title,
-            email: c.email,
-            phone: c.phone,
-            linkedin_url: c.linkedin_url ?? null,
-            apollo_id: c.apollo_id ?? null,
-            seniority: c.seniority,
-            department: c.department ?? null,
-            source,
-          }))
-        );
-
-        if (insertError) {
-          console.error(`[admin/backfill-contacts] Insert failed for ${lead.id}:`, insertError.message);
-          return { found: false, error: `${lead.company_name as string}: ${insertError.message}` };
-        }
-
-        await recalculateLeadScore(lead.id as string);
-        return { found: true };
-      }
-
-      return { found: false };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { found: false, error: `${lead.company_name as string}: ${msg}` };
     }
-  }
 
-  // Process all leads in this batch IN PARALLEL — key performance improvement.
-  // Sequential: batchSize × avg_lead_time. Parallel: max(lead_times) ≈ same as 1 lead.
-  const results = await Promise.allSettled(toProcess.map((lead) => processLead(lead)));
+    // Stage 2: Impressum (20s)
+    if (contacts.length === 0) {
+      const scraper = new ImpressumScraperProvider();
+      const r = await withTimeout(scraper.findContacts(contactQuery), 20_000)
+        .catch(() => ({ contacts: [] }));
+      const valid = r.contacts.filter((c) => c.email || c.phone);
+      if (valid.length > 0) { contacts = valid; source = "impressum"; }
+    }
 
-  let processed = 0;
-  let found = 0;
-  let skipped = 0;
-  const errors: string[] = [];
+    // Stage 3: Hunter (15s)
+    if (contacts.length === 0 && process.env.HUNTER_API_KEY) {
+      const hunter = new HunterContactProvider(process.env.HUNTER_API_KEY);
+      const r = await withTimeout(hunter.findContacts(contactQuery), 15_000)
+        .catch(() => ({ contacts: [] }));
+      const valid = r.contacts.filter((c) => c.email);
+      if (valid.length > 0) { contacts = valid; source = "hunter"; }
+    }
 
-  for (const result of results) {
-    processed++;
-    if (result.status === "fulfilled") {
-      if (result.value.found) {
-        found++;
-      } else {
-        skipped++;
-        if (result.value.error) errors.push(result.value.error);
+    // Stage 4: Firecrawl (45s)
+    if (contacts.length === 0 && process.env.FIRECRAWL_API_KEY) {
+      const firecrawl = new FirecrawlContactProvider(process.env.FIRECRAWL_API_KEY);
+      const r = await withTimeout(firecrawl.findContacts(contactQuery), 45_000)
+        .catch(() => ({ contacts: [] }));
+      const valid = r.contacts.filter((c) => c.email || c.phone);
+      if (valid.length > 0) { contacts = valid; source = "firecrawl"; }
+    }
+
+    // Persist result
+    if (contacts.length > 0) {
+      const { error: insertError } = await adminSupabase.from("lead_contacts").insert(
+        contacts.map((c) => ({
+          lead_id: leadId,
+          user_id: lead.user_id,
+          name: c.name,
+          title: c.title,
+          email: c.email,
+          phone: c.phone,
+          linkedin_url: c.linkedin_url ?? null,
+          apollo_id: c.apollo_id ?? null,
+          seniority: c.seniority,
+          department: c.department ?? null,
+          source,
+        }))
+      );
+
+      if (insertError) {
+        console.error(`[backfill-contacts] Insert failed for ${leadId}:`, insertError.message);
+        await adminSupabase
+          .from("solar_lead_mass")
+          .update({ contact_search_status: "error", contact_search_at: new Date().toISOString() })
+          .eq("id", leadId);
+        return NextResponse.json({
+          result: "error", leadId, company: lead.company_name,
+          error: insertError.message,
+        });
       }
+
+      await adminSupabase
+        .from("solar_lead_mass")
+        .update({ contact_search_status: "found", contact_search_at: new Date().toISOString() })
+        .eq("id", leadId);
+
+      // Recalc scores after success
+      try { await recalculateLeadScore(leadId); } catch { /* non-critical */ }
+
+      return NextResponse.json({
+        result: "found", leadId, company: lead.company_name,
+        contactCount: contacts.length, source,
+      });
     } else {
-      skipped++;
-      errors.push(String(result.reason));
+      // All 4 stages ran, nothing found — mark not_found so we don't retry
+      await adminSupabase
+        .from("solar_lead_mass")
+        .update({ contact_search_status: "not_found", contact_search_at: new Date().toISOString() })
+        .eq("id", leadId);
+
+      return NextResponse.json({
+        result: "not_found", leadId, company: lead.company_name,
+      });
     }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[backfill-contacts] Pipeline error for ${leadId}:`, msg);
+    await adminSupabase
+      .from("solar_lead_mass")
+      .update({ contact_search_status: "error", contact_search_at: new Date().toISOString() })
+      .eq("id", leadId);
+    return NextResponse.json({
+      result: "error", leadId, company: lead.company_name, error: msg,
+    });
   }
+}
 
-  // Count how many processable leads remain beyond this offset (approximate)
-  const { count: totalWithWebsite } = await adminSupabase
+/**
+ * DELETE — reset 'error' rows back to 'pending' so they can be retried.
+ */
+export async function DELETE() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const adminSupabase = createAdminClient();
+  const { error, count } = await adminSupabase
     .from("solar_lead_mass")
-    .select("id", { count: "exact", head: true })
-    .not("website", "is", null)
-    .neq("website", "")
-    .neq("status", "existing_solar");
+    .update({ contact_search_status: "pending" }, { count: "exact" })
+    .eq("contact_search_status", "error");
 
-  const remaining = Math.max(0, (totalWithWebsite ?? 0) - nextOffset);
-
-  return NextResponse.json({
-    processed,
-    found,
-    skipped,
-    remaining,
-    nextOffset,
-    done: page.length < batchSize || remaining === 0,
-    errors: errors.slice(0, 5),
-    message: `${processed} verarbeitet, ${page.length - toProcess.length} bereits Kontakte, ${found} neu gefunden.`,
-  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ reset: count ?? 0 });
 }

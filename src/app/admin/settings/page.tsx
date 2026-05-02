@@ -239,60 +239,87 @@ export default function AdminSettingsPage() {
 
   const weightsTotal = weights.business + weights.electricity + weights.solar + weights.outreach;
 
+  /**
+   * Concurrent worker pool for contact backfill.
+   *
+   * Maintains POOL_SIZE in-flight requests at all times. Each request atomically
+   * picks the next pending lead from DB (server handles locking via status field).
+   *
+   * Safe to refresh page mid-run — DB persists the lead status, so the next
+   * session continues exactly where this one stopped.
+   */
   const handleContactBackfill = async () => {
+    const POOL_SIZE = 5;
     setContactBackfillRunning(true);
     setContactBackfillDone(false);
     setContactBackfillProgress({ processed: 0, found: 0, remaining: contactBackfillMissing ?? 0 });
-    let offset = 0;
+
     let totalProcessed = 0;
     let totalFound = 0;
+    let consecutiveIdle = 0; // count idle responses to detect "all done"
+    let stopped = false;
+
+    /** A single worker: keeps picking leads until idle or stopped. */
+    const worker = async () => {
+      while (!stopped) {
+        try {
+          const res = await fetch("/api/admin/tools/backfill-contacts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          });
+
+          if (!res.ok) {
+            console.error("[backfill-contacts] HTTP error:", res.status);
+            // Brief backoff on server errors, don't kill worker
+            await new Promise((r) => setTimeout(r, 1000));
+            continue;
+          }
+
+          const data = await res.json() as {
+            result: "found" | "not_found" | "error" | "idle";
+            company?: string; contactCount?: number; source?: string;
+          };
+
+          if (data.result === "idle") {
+            // No more pending leads — count idle responses across pool
+            consecutiveIdle++;
+            // If all workers report idle, queue is truly empty
+            if (consecutiveIdle >= POOL_SIZE) {
+              stopped = true;
+              return;
+            }
+            await new Promise((r) => setTimeout(r, 500));
+            continue;
+          }
+
+          // Reset idle counter on real work
+          consecutiveIdle = 0;
+          totalProcessed++;
+          if (data.result === "found") totalFound++;
+
+          // Update UI (debounced via React batching)
+          setContactBackfillProgress({
+            processed: totalProcessed,
+            found: totalFound,
+            remaining: Math.max(0, (contactBackfillMissing ?? 0) - totalProcessed),
+          });
+        } catch (e) {
+          console.error("[backfill-contacts] Worker error:", e);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    };
 
     try {
-      while (true) {
-        const res = await fetch("/api/admin/tools/backfill-contacts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset, limit: 10 }),
-        });
-
-        if (!res.ok) {
-          console.error("[backfill-contacts] HTTP error:", res.status);
-          break;
-        }
-
-        const data = await res.json() as {
-          processed: number; found: number; skipped: number;
-          remaining: number; nextOffset: number; done?: boolean;
-        };
-
-        totalProcessed += data.processed ?? 0;
-        totalFound += data.found ?? 0;
-
-        const prevOffset = offset;
-        // Advance to next page using the returned offset
-        offset = data.nextOffset ?? offset + 10;
-
-        setContactBackfillProgress({
-          processed: totalProcessed,
-          found: totalFound,
-          remaining: data.remaining ?? 0,
-        });
-
-        // Stop only when server signals done (no more pages to scan)
-        if (data.done) break;
-        // Safety: if offset didn't advance, stop to avoid infinite loop
-        if ((data.nextOffset ?? 0) <= prevOffset) break;
-
-        // Small pause between batches
-        await new Promise((r) => setTimeout(r, 200));
-      }
+      // Spin up POOL_SIZE workers, run them all in parallel
+      const workers = Array.from({ length: POOL_SIZE }, () => worker());
+      await Promise.all(workers);
       setContactBackfillDone(true);
     } catch (e) {
-      console.error("[backfill-contacts] Loop error:", e);
-      setContactBackfillProgress((p) => ({ ...(p ?? { processed: 0, found: 0 }), remaining: -1 }));
+      console.error("[backfill-contacts] Pool error:", e);
     } finally {
       setContactBackfillRunning(false);
-      // Refresh the missing count
+      // Refresh counter from DB
       fetch("/api/admin/tools/backfill-contacts")
         .then((r) => r.json())
         .then((d) => setContactBackfillMissing(d.missing ?? 0))
@@ -863,8 +890,8 @@ export default function AdminSettingsPage() {
             )}
           </Button>
           <p className="text-xs text-slate-400">
-            Verarbeitet 10 Leads gleichzeitig (parallel). Läuft automatisch bis alle Leads abgearbeitet sind.
-            Hunter.io-Credits werden nur verbraucht wenn Apollo und Impressum-Scraper nichts finden.
+            5 Leads gleichzeitig (Pool). Status wird in der DB gespeichert — Seite kann bedenkenlos neu geladen werden,
+            der Lauf wird genau dort fortgesetzt wo er stand. Bereits durchsuchte Leads werden nie doppelt versucht.
           </p>
         </CardContent>
       </Card>
