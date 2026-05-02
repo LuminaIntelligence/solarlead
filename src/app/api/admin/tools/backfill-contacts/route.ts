@@ -23,17 +23,31 @@ export async function GET() {
 
   const adminSupabase = createAdminClient();
 
+  // Count processable leads: has website, not already marked as existing_solar
   const { count: total } = await adminSupabase
     .from("solar_lead_mass")
     .select("id", { count: "exact", head: true })
     .not("website", "is", null)
-    .neq("website", "");
+    .neq("website", "")
+    .neq("status", "existing_solar");
 
-  const { count: withContacts } = await adminSupabase
-    .from("lead_contacts")
-    .select("lead_id", { count: "exact", head: true });
+  // Count leads that already have contacts — page through to get distinct lead_ids
+  // (a single COUNT would double-count leads with multiple contacts)
+  const PAGE = 1000;
+  const distinctLeadIds = new Set<string>();
+  let lcOffset = 0;
+  while (true) {
+    const { data } = await adminSupabase
+      .from("lead_contacts")
+      .select("lead_id")
+      .range(lcOffset, lcOffset + PAGE - 1);
+    if (!data?.length) break;
+    for (const row of data) distinctLeadIds.add(row.lead_id as string);
+    if (data.length < PAGE) break;
+    lcOffset += PAGE;
+  }
 
-  const missing = Math.max(0, (total ?? 0) - (withContacts ?? 0));
+  const missing = Math.max(0, (total ?? 0) - distinctLeadIds.size);
 
   return NextResponse.json({ missing, total: total ?? 0 });
 }
@@ -62,11 +76,13 @@ export async function POST(req: Request) {
   const adminSupabase = createAdminClient();
 
   // Fetch a page of leads starting at offset
+  // Skip leads already marked as existing_solar — no need to find contacts for them
   const { data: page, error } = await adminSupabase
     .from("solar_lead_mass")
     .select("id, user_id, company_name, website, city")
     .not("website", "is", null)
     .neq("website", "")
+    .neq("status", "existing_solar")
     .order("total_score", { ascending: false })
     .range(offset, offset + batchSize - 1);
 
@@ -214,12 +230,13 @@ export async function POST(req: Request) {
     }
   }
 
-  // Count how many leads with website remain beyond this offset (approximate)
+  // Count how many processable leads remain beyond this offset (approximate)
   const { count: totalWithWebsite } = await adminSupabase
     .from("solar_lead_mass")
     .select("id", { count: "exact", head: true })
     .not("website", "is", null)
-    .neq("website", "");
+    .neq("website", "")
+    .neq("status", "existing_solar");
 
   const remaining = Math.max(0, (totalWithWebsite ?? 0) - nextOffset);
 
