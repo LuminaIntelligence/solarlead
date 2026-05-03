@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
 }
@@ -17,10 +18,10 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
  * No Google Solar API calls — uses already-fetched discovery data only.
  * Safe to run multiple times (INSERT … WHERE NOT EXISTS).
  */
-export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const adminSupabase = createAdminClient();
 
@@ -98,9 +99,9 @@ export async function POST() {
  * Returns how many leads are missing solar assessments (preview before running).
  */
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const adminSupabase = createAdminClient();
 

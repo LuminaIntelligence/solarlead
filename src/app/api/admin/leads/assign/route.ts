@@ -9,15 +9,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-function isAdmin(u: { user_metadata?: { role?: string } } | null) {
-  return u?.user_metadata?.role === "admin";
-}
 
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user))
-    return NextResponse.json({ error: "Keine Admin-Berechtigung" }, { status: 403 });
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const body = await req.json().catch(() => null);
   const leadIds: string[] = body?.leadIds ?? [];

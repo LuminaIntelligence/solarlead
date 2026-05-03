@@ -18,6 +18,7 @@ import * as fs from "fs";
 import { spawn } from "child_process";
 import unzipper from "unzipper";
 
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 const TMP_ZIP = "/tmp/mastr.zip";
 
 // ── Job-State ─────────────────────────────────────────────────────────────────
@@ -380,17 +381,17 @@ async function runBackfill(zipPath: string): Promise<void> {
 
 // ── GET ───────────────────────────────────────────────────────────────────────
 export async function GET(_req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
   return NextResponse.json(job);
 }
 
 // ── POST ──────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   if (!["idle", "done", "error"].includes(job.status)) {
     return NextResponse.json({ error: "Job läuft bereits" }, { status: 409 });

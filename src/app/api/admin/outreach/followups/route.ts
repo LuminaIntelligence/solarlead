@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+import { requireAdmin } from "@/lib/auth/admin-gate";
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
 }
@@ -11,9 +12,9 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
  * Grouped into: due today/overdue, upcoming (next 14 days).
  */
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const today = new Date().toISOString().slice(0, 10);
   const in14Days = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);

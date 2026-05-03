@@ -19,6 +19,7 @@ import { OsmPvgisProvider } from "@/lib/providers/solar/osmPvgis";
 import { calculateScore } from "@/lib/scoring";
 import type { SolarResult } from "@/lib/providers/solar/types";
 
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
 }
@@ -187,9 +188,9 @@ async function saveSolarAssessment(
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const adminSupabase = createAdminClient();
 
@@ -229,10 +230,10 @@ export async function GET() {
  * DELETE — clears all placeholder records (null panels + no-coverage markers)
  * so they re-enter the queue for a full retry.
  */
-export async function DELETE() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function DELETE(req: Request) {
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const adminSupabase = createAdminClient();
   const { error, count } = await adminSupabase
@@ -245,9 +246,9 @@ export async function DELETE() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY;
   if (!apiKey) {

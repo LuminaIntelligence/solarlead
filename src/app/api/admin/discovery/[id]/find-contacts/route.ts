@@ -17,6 +17,7 @@ import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
 import { getContactProvider } from "@/lib/providers/contacts";
 import type { Contact } from "@/lib/providers/contacts/types";
 
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
 }
@@ -25,9 +26,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const { lead_id } = await req.json() as { lead_id: string };
   if (!lead_id) return NextResponse.json({ error: "lead_id required" }, { status: 400 });

@@ -1,4 +1,5 @@
 import type { EnrichmentProvider, EnrichmentQuery, EnrichmentResult } from "./types";
+import { safeFetch } from "@/lib/security/url-guard";
 
 const TARGET_KEYWORDS = [
   "production",
@@ -52,33 +53,6 @@ function normalizeUrl(url: string): string {
     normalized = `https://${normalized}`;
   }
   return normalized;
-}
-
-/**
- * SSRF-Schutz: Blockt interne IP-Ranges und Cloud-Metadata-Endpoints
- */
-function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-
-  // Localhost + loopback
-  if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h.startsWith("127.")) return true;
-
-  // Private IP-Ranges (RFC 1918)
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return true;
-
-  // Link-local / Cloud metadata
-  if (/^169\.254\./.test(h)) return true; // AWS/GCP/Azure metadata
-  if (h === "metadata.google.internal") return true;
-
-  // IPv6 private
-  if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80:")) return true;
-
-  // Docker/internal network
-  if (/^172\.17\./.test(h)) return true;
-
-  return false;
 }
 
 function extractTitle(html: string): string | null {
@@ -141,39 +115,22 @@ export class WebsiteEnrichmentProvider implements EnrichmentProvider {
   async enrich(query: EnrichmentQuery): Promise<EnrichmentResult | null> {
     const url = normalizeUrl(query.website);
 
-    // SSRF-Schutz: interne Netze blockieren
-    try {
-      const parsed = new URL(url);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        console.warn(`[WebsiteEnrichmentProvider] Invalid protocol: ${parsed.protocol}`);
-        return null;
-      }
-      if (isBlockedHost(parsed.hostname)) {
-        console.warn(`[WebsiteEnrichmentProvider] Blocked internal host: ${parsed.hostname}`);
-        return null;
-      }
-    } catch {
-      return null;
-    }
+    // SSRF-safe fetch: rejects internal/loopback hosts via DNS resolution,
+    // streams body with hard size cap, applies timeout.
+    const response = await safeFetch(url, {
+      timeoutMs: 5000,
+      maxBytes: 2_000_000,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; SolarLeadBot/1.0; +https://solarlead.ai)",
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+      },
+    });
+
+    if (!response) return null;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (compatible; SolarLeadBot/1.0; +https://solarlead.ai)",
-          Accept: "text/html,application/xhtml+xml",
-          "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-        },
-        signal: controller.signal,
-        redirect: "follow",
-      });
-
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         console.error(
           `[WebsiteEnrichmentProvider] HTTP ${response.status} for ${url}`
@@ -189,7 +146,7 @@ export class WebsiteEnrichmentProvider implements EnrichmentProvider {
         return null;
       }
 
-      const html = await response.text();
+      const html = response.text;
 
       const title = extractTitle(html);
       const metaDescription = extractMetaDescription(html);

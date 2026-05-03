@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 import { PIPELINE_STAGES } from "@/lib/constants/pipeline";
-
-function isAdmin(user: { user_metadata?: { role?: string } } | null) {
-  return user?.user_metadata?.role === "admin";
-}
 
 /**
  * PATCH /api/admin/outreach/pipeline-stage
@@ -12,11 +8,9 @@ function isAdmin(user: { user_metadata?: { role?: string } } | null) {
  * Updates pipeline_stage on the outreach_job.
  */
 export async function PATCH(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { supabase } = gate;
 
   const body = await req.json();
   const { job_id, stage } = body as { job_id: string; stage: string | null };

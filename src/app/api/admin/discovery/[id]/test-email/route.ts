@@ -4,6 +4,7 @@ import { generateOutreachEmail } from "@/lib/providers/email/templates";
 import { sendEmail } from "@/lib/providers/email/mailgun";
 import type { TemplateType } from "@/lib/providers/email/templates";
 
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 function isAdmin(user: { user_metadata?: { role?: string } } | null) {
   return user?.user_metadata?.role === "admin";
 }
@@ -14,9 +15,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const { id: campaignId } = await params;
   const body = await req.json();

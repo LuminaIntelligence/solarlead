@@ -7,15 +7,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-function isAdmin(u: { user_metadata?: { role?: string } } | null) {
-  return u?.user_metadata?.role === "admin";
-}
 
+import { requireAdmin } from "@/lib/auth/admin-gate";
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user))
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY;
 

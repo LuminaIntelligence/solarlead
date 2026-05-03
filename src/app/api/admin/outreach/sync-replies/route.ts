@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 import { ImapFlow } from "imapflow";
-
-function isAdmin(user: { user_metadata?: { role?: string } } | null) {
-  return user?.user_metadata?.role === "admin";
-}
 
 const OPT_OUT_KEYWORDS = [
   "abmelden", "abbestellen", "austragen", "kein interesse",
@@ -44,12 +40,10 @@ function extractBodyText(rawEmail: string): string {
  * Polls configured IMAP inbox for unseen messages, matches senders against
  * outreach_jobs.contact_email, and marks jobs as replied or opted_out.
  */
-export async function POST() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { supabase } = gate;
 
   const host = process.env.IMAP_HOST;
   const port = parseInt(process.env.IMAP_PORT ?? "993");
@@ -174,11 +168,8 @@ export async function POST() {
  * Returns IMAP configuration status (without credentials).
  */
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
 
   return NextResponse.json({
     configured: !!(process.env.IMAP_HOST && process.env.IMAP_USER && process.env.IMAP_PASS),

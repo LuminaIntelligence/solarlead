@@ -7,12 +7,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { requireAdmin } from "@/lib/auth/admin-gate";
 export async function GET(_req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user || user.user_metadata?.role !== "admin")
-    return NextResponse.json({ error: "Keine Admin-Berechtigung" }, { status: 403 });
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { user, supabase } = gate;
 
   const admin = createAdminClient();
   const { data: { users }, error } = await admin.auth.admin.listUsers();

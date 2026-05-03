@@ -32,6 +32,7 @@ import type { User } from "@supabase/supabase-js";
 interface GateSuccess {
   error: null;
   user: User;
+  supabase: Awaited<ReturnType<typeof createClient>>;
   adminSupabase: ReturnType<typeof createAdminClient>;
 }
 interface GateFailure {
@@ -106,7 +107,7 @@ export async function requireAdmin(): Promise<GateResult> {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
 
-  return { error: null, user, adminSupabase };
+  return { error: null, user, supabase, adminSupabase };
 }
 
 /**

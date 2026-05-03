@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 
 // GET: list all outreach_batches ordered by created_at desc
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || user.user_metadata?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Keine Admin-Berechtigung" },
-        { status: 401 }
-      );
-    }
+    const gate = await requireAdmin();
+    if (gate.error) return gate.error;
+    const { supabase } = gate;
 
     const { data: batches, error } = await supabase
       .from("outreach_batches")
@@ -54,17 +46,9 @@ export async function GET() {
 // POST: create a new batch with jobs
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || user.user_metadata?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Keine Admin-Berechtigung" },
-        { status: 401 }
-      );
-    }
+    const gate = await requireAdminAndOrigin(request);
+    if (gate.error) return gate.error;
+    const { user, supabase } = gate;
 
     const body = await request.json();
     const {
