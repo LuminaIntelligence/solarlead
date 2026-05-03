@@ -307,7 +307,14 @@ export async function POST() {
   const recentResults: Array<{ company: string; outcome: string; source?: string; contactCount?: number }> = [];
   const errorMessages: string[] = [];
 
-  while (Date.now() - startTime < TIME_BUDGET_MS) {
+  while (true) {
+    // Headroom check: a batch can take up to PER_LEAD_TIMEOUT_MS wall-clock.
+    // If less time remains than that, claiming new leads risks exceeding
+    // maxDuration and stranding them in 'searching' (until 5min reclaim).
+    // Exit cleanly so the frontend issues a fresh request.
+    const remainingBudget = TIME_BUDGET_MS - (Date.now() - startTime);
+    if (remainingBudget < PER_LEAD_TIMEOUT_MS) break;
+
     // Claim a small batch of leads (up to PARALLELISM)
     const claims: Lead[] = [];
     for (let i = 0; i < PARALLELISM; i++) {
