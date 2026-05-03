@@ -187,6 +187,22 @@ async function processLead(
     }
 
     if (contacts.length > 0) {
+      // Ownership check: before inserting, verify we still hold the claim.
+      // If the outer (caller-side) timeout already fired, the lead was marked
+      // 'error' externally and we MUST NOT insert contacts for an abandoned claim.
+      // Otherwise a future retry (after DELETE→pending) could double-insert.
+      const { data: stillOwned } = await adminSupabase
+        .from("solar_lead_mass")
+        .select("id")
+        .eq("id", leadId)
+        .eq("contact_search_status", "searching")
+        .maybeSingle();
+
+      if (!stillOwned) {
+        // Claim was revoked externally (likely outer timeout). Abandon silently.
+        return { ...result, outcome: "error", error: "Claim revoked (outer timeout)" };
+      }
+
       const { error: insertError } = await adminSupabase.from("lead_contacts").insert(
         contacts.map((c) => ({
           lead_id: leadId,
@@ -205,17 +221,24 @@ async function processLead(
 
       if (insertError) {
         console.error(`[backfill-contacts] Insert failed for ${leadId}:`, insertError.message);
+        // Guarded: only flips 'searching' → 'error'. If outer already finalized,
+        // status is no longer 'searching' and this is a no-op (correct).
         await adminSupabase
           .from("solar_lead_mass")
           .update({ contact_search_status: "error", contact_search_at: new Date().toISOString() })
-          .eq("id", leadId);
+          .eq("id", leadId)
+          .eq("contact_search_status", "searching");
         return { ...result, outcome: "error", error: insertError.message };
       }
 
+      // Guarded final transition. If outer timeout fired between insert and now,
+      // the UPDATE no-ops — the lead stays 'error' (caller's view), but contacts
+      // are saved. The ownership check above prevents this in practice.
       await adminSupabase
         .from("solar_lead_mass")
         .update({ contact_search_status: "found", contact_search_at: new Date().toISOString() })
-        .eq("id", leadId);
+        .eq("id", leadId)
+        .eq("contact_search_status", "searching");
 
       // Recalc scores after success — non-critical, swallow errors
       try { await recalculateLeadScore(leadId); } catch { /* ignore */ }
@@ -224,19 +247,24 @@ async function processLead(
     }
 
     // No contacts found in any of the 4 stages — mark not_found permanently
+    // Guarded: only flips 'searching' → 'not_found'.
     await adminSupabase
       .from("solar_lead_mass")
       .update({ contact_search_status: "not_found", contact_search_at: new Date().toISOString() })
-      .eq("id", leadId);
+      .eq("id", leadId)
+      .eq("contact_search_status", "searching");
 
     return { ...result, outcome: "not_found" };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[backfill-contacts] Pipeline error for ${leadId}:`, msg);
+    // Guarded: only flips 'searching' → 'error'. If outer already finalized
+    // (e.g., its own timeout write), this no-ops and we keep the outer's verdict.
     await adminSupabase
       .from("solar_lead_mass")
       .update({ contact_search_status: "error", contact_search_at: new Date().toISOString() })
-      .eq("id", leadId);
+      .eq("id", leadId)
+      .eq("contact_search_status", "searching");
     return { ...result, outcome: "error", error: msg };
   }
 }
