@@ -11,6 +11,7 @@
  */
 
 import type { ContactProvider, ContactQuery, ContactResult } from "./types";
+import { safeFetch } from "@/lib/security/url-guard";
 
 export interface ScraperDebugLog {
   tried_urls: string[];
@@ -207,29 +208,23 @@ function extractName(html: string, email: string): string | null {
 }
 
 async function fetchPage(url: string, timeoutMs = 5000): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "de-DE,de;q=0.9,en;q=0.5",
-        "Cache-Control": "no-cache",
-      },
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("text/html") && !ct.includes("text/plain")) return null;
-    const text = await res.text();
-    return text.length > 10 ? text : null;
-  } catch {
-    return null;
-  }
+  // SSRF-safe: assertPublicHttpUrl rejects private/loopback/metadata hosts;
+  // body is streamed with a 2 MB cap to prevent memory exhaustion via giant pages.
+  const res = await safeFetch(url, {
+    timeoutMs,
+    maxBytes: 2_000_000,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "de-DE,de;q=0.9,en;q=0.5",
+      "Cache-Control": "no-cache",
+    },
+  });
+  if (!res || !res.ok) return null;
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("text/html") && !ct.includes("text/plain")) return null;
+  return res.text.length > 10 ? res.text : null;
 }
 
 async function fetchPageWithFallback(url: string): Promise<{ html: string; finalUrl: string } | null> {

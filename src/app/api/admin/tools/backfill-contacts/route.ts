@@ -17,8 +17,8 @@
  *   - Frontend can keep retrying — duplicates are impossible (status lock).
  */
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 import { getContactProvider } from "@/lib/providers/contacts";
 import { ImpressumScraperProvider } from "@/lib/providers/contacts/impressum";
 import { HunterContactProvider } from "@/lib/providers/contacts/hunter";
@@ -40,10 +40,6 @@ const STAGE_TIMEOUT_APOLLO_MS = 10_000;
 const STAGE_TIMEOUT_IMPRESSUM_MS = 12_000;
 const STAGE_TIMEOUT_HUNTER_MS = 8_000;
 const STAGE_TIMEOUT_FIRECRAWL_MS = 25_000;
-
-function isAdmin(user: { user_metadata?: { role?: string } } | null) {
-  return user?.user_metadata?.role === "admin";
-}
 
 /** Wraps a promise with a hard timeout. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label = "operation"): Promise<T> {
@@ -271,13 +267,15 @@ async function processLead(
 
 /**
  * GET — returns counts by status. Auto-reclaims stuck 'searching' rows >5min old.
+ *
+ * No CSRF check on GET (idempotent-ish read), but the reclaim side-effect is the
+ * reason this endpoint isn't fully cacheable. We accept that prefetchers may
+ * occasionally trigger reclaim — it's bounded and recoverable.
  */
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const adminSupabase = createAdminClient();
+  const gate = await requireAdmin();
+  if (gate.error) return gate.error;
+  const { adminSupabase } = gate;
 
   // Reclaim stuck rows
   const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -319,13 +317,13 @@ export async function GET() {
  * POST — process leads continuously until time budget runs out OR queue is empty.
  *
  * Returns aggregate stats. Frontend just keeps calling this until `idle: true`.
+ * Same-origin enforced to block CSRF: an attacker page cannot trigger costly
+ * provider work via the admin's session cookie.
  */
-export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const adminSupabase = createAdminClient();
+export async function POST(req: Request) {
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { adminSupabase } = gate;
   const startTime = Date.now();
 
   let processed = 0;
@@ -409,13 +407,12 @@ export async function POST() {
 
 /**
  * DELETE — reset 'error' rows to 'pending' so they can be retried.
+ * Same-origin enforced to block CSRF.
  */
-export async function DELETE() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!isAdmin(user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const adminSupabase = createAdminClient();
+export async function DELETE(req: Request) {
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+  const { adminSupabase } = gate;
   const { error, count } = await adminSupabase
     .from("solar_lead_mass")
     .update({ contact_search_status: "pending" }, { count: "exact" })
