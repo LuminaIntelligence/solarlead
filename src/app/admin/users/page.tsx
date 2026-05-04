@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { MoreHorizontal, Shield, User, Loader2 } from "lucide-react";
+import { MoreHorizontal, Shield, User, Loader2, Phone, Crown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,17 @@ import {
   updateUserRole,
   banUser,
   unbanUser,
+  type AppRole,
 } from "@/lib/actions/admin";
+
+const ROLE_META: Record<AppRole, { label: string; emoji: string; color: string; description: string }> = {
+  user:             { label: "Standard-Nutzer", emoji: "👤", color: "bg-blue-100 text-blue-800", description: "Sieht eigene Leads im Dashboard" },
+  reply_specialist: { label: "Reply-Specialist", emoji: "📞", color: "bg-indigo-100 text-indigo-800", description: "Bearbeitet zugewiesene Replies + kann aus Pool ziehen" },
+  team_lead:        { label: "Team-Lead",        emoji: "👑", color: "bg-purple-100 text-purple-800", description: "Sieht alle Replies, kann zuweisen, Reply-Management-Dashboard" },
+  admin:            { label: "Admin",            emoji: "🛡️", color: "bg-red-100 text-red-800", description: "Vollzugriff auf alles" },
+};
+
+const ROLE_OPTIONS: AppRole[] = ["user", "reply_specialist", "team_lead", "admin"];
 
 interface AdminUser {
   id: string;
@@ -57,6 +67,7 @@ export default function UsersPage() {
     "role" | "ban" | "unban" | null
   >(null);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [pendingRole, setPendingRole] = useState<AppRole | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -74,9 +85,17 @@ export default function UsersPage() {
     loadUsers();
   }, [loadUsers]);
 
-  function openDialog(action: "role" | "ban" | "unban", user: AdminUser) {
+  function openDialog(action: "ban" | "unban", user: AdminUser) {
     setSelectedUser(user);
     setDialogAction(action);
+    setDialogOpen(true);
+  }
+
+  function openRoleDialog(user: AdminUser, role: AppRole) {
+    if (user.role === role) return; // no-op
+    setSelectedUser(user);
+    setPendingRole(role);
+    setDialogAction("role");
     setDialogOpen(true);
   }
 
@@ -85,9 +104,8 @@ export default function UsersPage() {
 
     setActionLoading(true);
     try {
-      if (dialogAction === "role") {
-        const newRole = selectedUser.role === "admin" ? "user" : "admin";
-        await updateUserRole(selectedUser.id, newRole);
+      if (dialogAction === "role" && pendingRole) {
+        await updateUserRole(selectedUser.id, pendingRole);
       } else if (dialogAction === "ban") {
         await banUser(selectedUser.id);
       } else if (dialogAction === "unban") {
@@ -101,6 +119,7 @@ export default function UsersPage() {
       setDialogOpen(false);
       setSelectedUser(null);
       setDialogAction(null);
+      setPendingRole(null);
     }
   }
 
@@ -110,11 +129,12 @@ export default function UsersPage() {
 
     switch (dialogAction) {
       case "role": {
-        const newRole = selectedUser.role === "admin" ? "User" : "Admin";
+        if (!pendingRole) return { title: "", description: "", confirm: "" };
+        const meta = ROLE_META[pendingRole];
         return {
           title: "Rolle ändern",
-          description: `Soll die Rolle von "${selectedUser.email}" auf "${newRole}" geändert werden?`,
-          confirm: `Zu ${newRole} ändern`,
+          description: `Soll "${selectedUser.email}" zur Rolle "${meta.emoji} ${meta.label}" gesetzt werden?\n\n${meta.description}`,
+          confirm: `Zu ${meta.label} setzen`,
         };
       }
       case "ban":
@@ -184,26 +204,17 @@ export default function UsersPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge
-                          variant="secondary"
-                          className={
-                            u.role === "admin"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-blue-100 text-blue-800"
-                          }
-                        >
-                          {u.role === "admin" ? (
-                            <span className="flex items-center gap-1">
-                              <Shield className="h-3 w-3" />
-                              Admin
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              User
-                            </span>
-                          )}
-                        </Badge>
+                        {(() => {
+                          const meta = ROLE_META[(u.role as AppRole)] ?? ROLE_META.user;
+                          return (
+                            <Badge variant="secondary" className={meta.color}>
+                              <span className="flex items-center gap-1">
+                                <span>{meta.emoji}</span>
+                                {meta.label}
+                              </span>
+                            </Badge>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {u.lead_count}
@@ -233,12 +244,27 @@ export default function UsersPage() {
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => openDialog("role", u)}
-                            >
-                              Rolle ändern
-                            </DropdownMenuItem>
+                          <DropdownMenuContent align="end" className="min-w-[260px]">
+                            <div className="px-2 pt-1.5 pb-1 text-[10px] uppercase tracking-wide text-slate-400">
+                              Rolle setzen
+                            </div>
+                            {ROLE_OPTIONS.map((role) => {
+                              const meta = ROLE_META[role];
+                              const isCurrent = u.role === role;
+                              return (
+                                <DropdownMenuItem
+                                  key={role}
+                                  disabled={isCurrent}
+                                  onClick={() => openRoleDialog(u, role)}
+                                  className={isCurrent ? "opacity-60" : ""}
+                                >
+                                  <span className="mr-2">{meta.emoji}</span>
+                                  <span className="flex-1">{meta.label}</span>
+                                  {isCurrent && <span className="text-xs text-slate-400 ml-2">aktuell</span>}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                            <div className="my-1 border-t border-slate-100" />
                             {u.is_banned ? (
                               <DropdownMenuItem
                                 onClick={() => openDialog("unban", u)}

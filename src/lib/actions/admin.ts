@@ -39,8 +39,19 @@ async function requireAdmin(): Promise<string> {
   } = await supabase.auth.getUser();
 
   if (!user) throw new Error("Nicht authentifiziert");
-  if (user.user_metadata?.role !== "admin")
-    throw new Error("Keine Admin-Berechtigung");
+
+  // DB-backed role check (server-controlled, immutable by user).
+  // user_metadata.role is kept as a fallback for legacy admins whose
+  // user_settings row hasn't been seeded yet.
+  const adminClient = createAdminClient();
+  const { data: profile } = await adminClient
+    .from("user_settings")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const role = (profile?.role as string | undefined) ?? user.user_metadata?.role;
+  if (role !== "admin") throw new Error("Keine Admin-Berechtigung");
 
   return user.id;
 }
@@ -80,12 +91,22 @@ export async function getAllUsers(): Promise<AdminUser[]> {
       }
     }
 
+    // Pull DB-backed roles in one batch
+    const { data: settingsRows } = await adminClient
+      .from("user_settings")
+      .select("user_id, role");
+    const roleMap: Record<string, string> = {};
+    for (const r of settingsRows ?? []) {
+      roleMap[r.user_id as string] = r.role as string;
+    }
+
     return users.map((u) => ({
       id: u.id,
       email: u.email ?? "",
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
-      role: (u.user_metadata?.role as string) ?? "user",
+      // DB-backed first, legacy user_metadata fallback (so unmigrated users still appear)
+      role: roleMap[u.id] ?? (u.user_metadata?.role as string) ?? "user",
       lead_count: countMap[u.id] ?? 0,
       is_banned: !!u.banned_until,
     }));
@@ -290,21 +311,37 @@ export async function getSystemStats(): Promise<SystemStats> {
 // Benutzer-Rolle aktualisieren
 // ---------------------------------------------------------------------------
 
+export type AppRole = "user" | "reply_specialist" | "team_lead" | "admin";
+
 export async function updateUserRole(
   userId: string,
-  role: "admin" | "user"
+  role: AppRole
 ): Promise<boolean> {
   try {
     await requireAdmin();
     const adminClient = createAdminClient();
 
-    const { error } = await adminClient.auth.admin.updateUserById(userId, {
-      user_metadata: { role },
-    });
-
-    if (error) {
-      console.error("Fehler beim Aktualisieren der Rolle:", error.message);
+    // Source of truth: user_settings.role (DB-backed, server-controlled).
+    // We upsert the row so users without a settings row get one.
+    const { error: settingsErr } = await adminClient
+      .from("user_settings")
+      .upsert(
+        { user_id: userId, role },
+        { onConflict: "user_id" }
+      );
+    if (settingsErr) {
+      console.error("Fehler beim Aktualisieren von user_settings.role:", settingsErr.message);
       return false;
+    }
+
+    // Best-effort: keep user_metadata.role in sync for legacy code paths still
+    // reading from there. Failures are non-fatal.
+    try {
+      await adminClient.auth.admin.updateUserById(userId, {
+        user_metadata: { role },
+      });
+    } catch (e) {
+      console.warn("[updateUserRole] could not sync user_metadata:", e);
     }
 
     return true;
