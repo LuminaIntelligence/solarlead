@@ -111,6 +111,56 @@ export async function requireAdmin(): Promise<GateResult> {
 }
 
 /**
+ * Gate for the reply-team workflow.
+ *
+ * Allows: admin, team_lead, reply_specialist.
+ * The returned `role` lets callers branch behavior (e.g. specialists see only
+ * their assigned + pool, team_leads see everything).
+ */
+export interface TeamGateSuccess {
+  error: null;
+  user: User;
+  role: "admin" | "team_lead" | "reply_specialist";
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  adminSupabase: ReturnType<typeof createAdminClient>;
+}
+export type TeamGateResult = TeamGateSuccess | GateFailure;
+
+export async function requireTeamMember(): Promise<TeamGateResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  const adminSupabase = createAdminClient();
+  const { data: profile, error } = await adminSupabase
+    .from("user_settings")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error) {
+    console.error("[admin-gate] role lookup failed:", error.message);
+    return { error: NextResponse.json({ error: "Auth check failed" }, { status: 500 }) };
+  }
+  const role = profile?.role as string | undefined;
+  if (role !== "admin" && role !== "team_lead" && role !== "reply_specialist") {
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return { error: null, user, role: role as "admin" | "team_lead" | "reply_specialist", supabase, adminSupabase };
+}
+
+export async function requireTeamMemberAndOrigin(req: Request): Promise<TeamGateResult> {
+  const csrfErr = requireSameOrigin(req);
+  if (csrfErr) return { error: csrfErr };
+  return requireTeamMember();
+}
+
+/** True if the role can see all replies (lead or admin). */
+export function canSeeAllReplies(role: string): boolean {
+  return role === "admin" || role === "team_lead";
+}
+
+/**
  * One-call combined gate: same-origin check + admin role check.
  * Returns either { error: NextResponse } or { user, adminSupabase }.
  */

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { autoAssignJob } from "@/lib/team/auto-assign";
 import { ImapFlow } from "imapflow";
 
 const OPT_OUT_KEYWORDS = [
@@ -115,13 +117,17 @@ export async function POST(req: Request) {
           const isOptOut = detectOptOut(bodyText);
           const newStatus = isOptOut ? "opted_out" : "replied";
 
-          // Update job status
+          // Update job status. Set outcome='new' so the team inbox picks it up.
+          const repliedAt = new Date().toISOString();
           await supabase
             .from("outreach_jobs")
             .update({
               status: newStatus,
-              replied_at: new Date().toISOString(),
+              replied_at: repliedAt,
               reply_content: bodyText.slice(0, 1000),
+              outcome: isOptOut ? "not_interested" : "new",
+              outcome_at: repliedAt,
+              last_activity_at: repliedAt,
               // Cancel pending follow-up — no point following up on a reply
               followup_status:
                 job.followup_status === "pending" ? "skipped" : job.followup_status,
@@ -130,6 +136,17 @@ export async function POST(req: Request) {
 
           // Mark email as seen in IMAP
           await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
+
+          // Auto-assign non-opt-out replies to a specialist via round-robin.
+          // Best-effort: if no specialist exists, the reply stays in the pool.
+          if (!isOptOut) {
+            try {
+              const adminSb = createAdminClient();
+              await autoAssignJob(adminSb, job.id as string);
+            } catch (e) {
+              console.warn("[sync-replies] auto-assign failed for", job.id, e);
+            }
+          }
 
           if (isOptOut) optedOutFound++;
           else repliesFound++;

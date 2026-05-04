@@ -166,7 +166,7 @@ export interface SearchRun {
 export interface UserSettings {
   id: string;
   user_id: string;
-  role: "user" | "admin";
+  role: "user" | "reply_specialist" | "team_lead" | "admin";
   google_places_api_key: string | null;
   google_solar_api_key: string | null;
   provider_mode: "mock" | "live";
@@ -266,13 +266,53 @@ export interface OutreachJob {
   replied_at: string | null;
   reply_content: string | null;
   assigned_to: string | null;
+  assigned_at: string | null;
   scheduled_for: string | null;
   // Follow-up
   followup_scheduled_for: string | null;
   followup_sent_at: string | null;
   followup_status: FollowupStatus;
-  // Pipeline
+  // Pipeline (Outreach-Funnel) — used by admin replies inbox
   pipeline_stage: PipelineStage;
+  // Team-Workflow — granular reply lifecycle
+  outcome: ReplyOutcome;
+  outcome_at: string | null;
+  next_action_at: string | null;
+  next_action_note: string | null;
+  closed_value_eur: number | null;
+  last_activity_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ReplyOutcome =
+  | "new"                 // reply landed, nobody touched it
+  | "in_progress"         // specialist actively working
+  | "appointment_set"     // meeting confirmed
+  | "callback_requested"  // customer wants a callback
+  | "not_reached"         // multiple failed attempts
+  | "not_interested"      // politely declined
+  | "closed_won"          // deal signed
+  | "closed_lost"         // lost
+  | "on_hold";            // paused (e.g. customer on vacation)
+
+export type ActivityKind =
+  | "call_attempted"
+  | "call_connected"
+  | "email_sent"
+  | "note"
+  | "stage_changed"
+  | "outcome_changed"
+  | "reminder_set"
+  | "reassigned"
+  | "claimed";
+
+export interface OutreachActivity {
+  id: string;
+  job_id: string;
+  user_id: string;
+  kind: ActivityKind;
+  content: string | null;
+  context: Record<string, unknown> | null;
+  created_at: string;
 }
