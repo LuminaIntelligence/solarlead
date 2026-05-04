@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { OUTCOME_OPTIONS, outcomeMeta, ACTIVITY_KIND_LABELS } from "@/lib/constants/reply-outcomes";
+import { ReassignDropdown } from "@/components/team/reassign-dropdown";
 import type { ReplyOutcome, OutreachJob, OutreachActivity, LeadContact, ActivityKind } from "@/types/database";
 
 interface DetailData {
@@ -229,7 +230,15 @@ export default function TeamReplyDetailPage() {
             <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
               {job.company_city && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{job.company_city}</span>}
               {batch && <span>Batch: {batch.name}</span>}
-              {assignee ? (
+              {(data.role === "team_lead" || data.role === "admin") ? (
+                <ReassignDropdown
+                  jobId={job.id}
+                  currentAssigneeId={job.assigned_to}
+                  currentAssigneeEmail={assignee?.email}
+                  onChange={fetchData}
+                  size="sm"
+                />
+              ) : assignee ? (
                 <span className="inline-flex items-center gap-1"><UserCheck className="h-3.5 w-3.5" />{assignee.email}</span>
               ) : (
                 <span className="text-amber-600">unzugewiesen</span>
@@ -238,7 +247,7 @@ export default function TeamReplyDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {!job.assigned_to && (
+          {!job.assigned_to && data.role === "reply_specialist" && (
             <Button onClick={handleClaim} disabled={savingForm}>
               <Hand className="h-4 w-4 mr-1.5" /> Übernehmen
             </Button>

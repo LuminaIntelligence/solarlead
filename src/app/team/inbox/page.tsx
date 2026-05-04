@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, Clock, Inbox as InboxIcon, Loader2, RefreshCw,
-  AlertCircle, CheckCircle2, MapPin, Mail, ChevronRight, Hand,
+  AlertCircle, CheckCircle2, MapPin, Mail, ChevronRight, Hand, Search, X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { OUTCOME_OPTIONS, outcomeMeta, SLA } from "@/lib/constants/reply-outcomes";
+import { ReassignDropdown } from "@/components/team/reassign-dropdown";
 import type { ReplyOutcome } from "@/types/database";
 
 interface JobCard {
@@ -60,12 +62,14 @@ function timeUntil(iso: string | null): string {
 }
 
 function JobRow({
-  job, assignees, onClaim, claiming,
+  job, assignees, onClaim, claiming, canReassign, onReassigned,
 }: {
   job: JobCard;
   assignees: Record<string, { email: string }>;
   onClaim?: (id: string) => void;
   claiming?: string | null;
+  canReassign?: boolean;
+  onReassigned?: () => void;
 }) {
   const meta = outcomeMeta(job.outcome);
   const assignee = job.assigned_to ? assignees[job.assigned_to] : null;
@@ -99,12 +103,21 @@ function JobRow({
           {job.next_action_note && (
             <span className="text-slate-400 truncate max-w-[300px]">„{job.next_action_note}"</span>
           )}
-          {assignee && (
+          {assignee && !canReassign && (
             <span className="ml-auto text-slate-400">→ {assignee.email}</span>
           )}
         </div>
       </div>
-      {onClaim && !job.assigned_to && (
+      {canReassign && (
+        <ReassignDropdown
+          jobId={job.id}
+          currentAssigneeId={job.assigned_to}
+          currentAssigneeEmail={assignee?.email}
+          onChange={onReassigned}
+          size="sm"
+        />
+      )}
+      {onClaim && !job.assigned_to && !canReassign && (
         <Button
           size="sm"
           variant="outline"
@@ -125,7 +138,7 @@ function JobRow({
 }
 
 function Section({
-  title, icon, color, jobs, empty, assignees, onClaim, claiming,
+  title, icon, color, jobs, empty, assignees, onClaim, claiming, canReassign, onReassigned,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -135,6 +148,8 @@ function Section({
   assignees: Record<string, { email: string }>;
   onClaim?: (id: string) => void;
   claiming?: string | null;
+  canReassign?: boolean;
+  onReassigned?: () => void;
 }) {
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -148,7 +163,15 @@ function Section({
       {jobs.length > 0 ? (
         <div>
           {jobs.map((j) => (
-            <JobRow key={j.id} job={j} assignees={assignees} onClaim={onClaim} claiming={claiming} />
+            <JobRow
+              key={j.id}
+              job={j}
+              assignees={assignees}
+              onClaim={onClaim}
+              claiming={claiming}
+              canReassign={canReassign}
+              onReassigned={onReassigned}
+            />
           ))}
         </div>
       ) : (
@@ -166,6 +189,7 @@ export default function TeamInboxPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   async function fetchData(showSpinner = false) {
     if (showSpinner) setRefreshing(true);
@@ -217,6 +241,19 @@ export default function TeamInboxPage() {
   }
 
   const isLead = data.canSeeAll;
+  const q = search.trim().toLowerCase();
+  const filterFn = (rows: JobCard[]) => {
+    if (!q) return rows;
+    return rows.filter((j) => {
+      return (
+        (j.company_name ?? "").toLowerCase().includes(q) ||
+        (j.company_city ?? "").toLowerCase().includes(q) ||
+        (j.contact_name ?? "").toLowerCase().includes(q) ||
+        (j.contact_email ?? "").toLowerCase().includes(q) ||
+        (j.next_action_note ?? "").toLowerCase().includes(q)
+      );
+    });
+  };
 
   return (
     <div className="space-y-5">
@@ -232,6 +269,22 @@ export default function TeamInboxPage() {
         <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={refreshing}>
           <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
         </Button>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Firma, Kontakt, Stadt oder Notiz suchen…"
+          className="pl-10 pr-10"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Counter chips */}
@@ -267,34 +320,40 @@ export default function TeamInboxPage() {
         title="Überfällig"
         icon={<AlertCircle className="h-4 w-4 text-red-600" />}
         color="bg-red-50/50 text-red-900"
-        jobs={data.overdue}
+        jobs={filterFn(data.overdue)}
         empty="Keine überfälligen Tasks 🎉"
         assignees={data.assignees}
+        canReassign={isLead}
+        onReassigned={() => fetchData()}
       />
 
       <Section
         title="Heute fällig"
         icon={<Clock className="h-4 w-4 text-amber-600" />}
         color="bg-amber-50/50 text-amber-900"
-        jobs={data.today}
+        jobs={filterFn(data.today)}
         empty="Keine Reminder für heute."
         assignees={data.assignees}
+        canReassign={isLead}
+        onReassigned={() => fetchData()}
       />
 
       <Section
         title={isLead ? "Aktive (alle)" : "Meine offenen Replies"}
         icon={<InboxIcon className="h-4 w-4 text-blue-600" />}
         color="bg-blue-50/50 text-blue-900"
-        jobs={data.mine}
+        jobs={filterFn(data.mine)}
         empty="Keine offenen Replies."
         assignees={data.assignees}
+        canReassign={isLead}
+        onReassigned={() => fetchData()}
       />
 
       <Section
         title="Pool — frei zum Übernehmen"
         icon={<Hand className="h-4 w-4 text-slate-600" />}
         color="bg-slate-50 text-slate-700"
-        jobs={data.pool}
+        jobs={filterFn(data.pool)}
         empty="Pool ist leer — alles zugewiesen!"
         assignees={data.assignees}
         onClaim={!isLead || data.role === "team_lead" ? handleClaim : undefined}
@@ -308,6 +367,8 @@ export default function TeamInboxPage() {
           color="bg-red-50 text-red-900"
           jobs={data.sla_response}
           assignees={data.assignees}
+          canReassign={isLead}
+          onReassigned={() => fetchData()}
         />
       )}
     </div>

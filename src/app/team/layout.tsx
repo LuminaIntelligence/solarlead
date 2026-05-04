@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Inbox, User, BarChart3, Crown, Mail } from "lucide-react";
+import { Inbox, User, BarChart3, Crown, Mail, LayoutGrid } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LogoutButton } from "@/components/dashboard/logout-button";
@@ -49,6 +49,12 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
             <Inbox className="h-4 w-4" /> Inbox
           </Link>
           <Link
+            href="/team/board"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-100"
+          >
+            <LayoutGrid className="h-4 w-4" /> Kanban-Board
+          </Link>
+          <Link
             href="/team/me"
             className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-100"
           >
@@ -61,16 +67,16 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
                   Team-Lead
                 </p>
                 <Link
-                  href="/team/inbox?view=all"
+                  href="/admin/reply-management"
                   className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-100"
                 >
-                  <BarChart3 className="h-4 w-4" /> Alle Replies
+                  <BarChart3 className="h-4 w-4" /> Reply-Management
                 </Link>
                 <Link
                   href="/admin/outreach/replies"
                   className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-100"
                 >
-                  <Mail className="h-4 w-4" /> Klassische Replies-Inbox
+                  <Mail className="h-4 w-4" /> Klassische Inbox
                 </Link>
               </div>
             </>
