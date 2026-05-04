@@ -6,6 +6,7 @@ import { getSearchProvider } from "@/lib/providers/search";
 import { saveSearchRun, saveLead, saveLeads } from "@/lib/actions/leads";
 import { getUserSettings } from "@/lib/actions/settings";
 import { calculateScore } from "@/lib/scoring";
+import { recordApiCalls, PROVIDER_PLACES_MANUAL } from "@/lib/discovery/cost-tracker";
 import type { SearchResult } from "@/lib/providers/search/types";
 import type { Lead } from "@/types/database";
 
@@ -54,9 +55,23 @@ export async function POST(request: NextRequest) {
     const mode = systemSettings?.provider_mode ?? "mock";
     const apiKey = systemSettings?.google_places_api_key ?? undefined;
 
-    // Create search provider and execute search
+    // Create search provider and execute search.
+    // NOTE: manual searches are NEVER blocked by the discovery automation budget.
+    // We track them under a separate provider key (google_places_manual) so the
+    // health dashboard can show ad-hoc cost separately from automation cost,
+    // but checkBudgetOk() ignores this bucket entirely.
     const provider = getSearchProvider(mode, apiKey);
     const results = await provider.search(query);
+
+    // Track API usage for visibility only — not enforced. Estimate ~12 calls
+    // per category (4 search terms × 3 pages, same as cell-runner).
+    if (mode === "live") {
+      try {
+        await recordApiCalls(adminClient, PROVIDER_PLACES_MANUAL, query.categories.length * 12);
+      } catch (e) {
+        console.warn("[search] failed to record manual API calls:", e);
+      }
+    }
 
     // Save search run record
     await saveSearchRun(

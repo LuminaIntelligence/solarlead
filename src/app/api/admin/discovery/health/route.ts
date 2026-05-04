@@ -56,7 +56,11 @@ export async function GET() {
     errorsByKind[k] = (errorsByKind[k] || 0) + 1;
   }
 
-  const todayUsage = await getTodayUsage(adminSupabase, "google_places");
+  // Auto = budgeted + capped. Manual = ad-hoc, never capped, just visibility.
+  const [todayUsageAuto, todayUsageManual] = await Promise.all([
+    getTodayUsage(adminSupabase, "google_places"),
+    getTodayUsage(adminSupabase, "google_places_manual"),
+  ]);
 
   // Configured budget
   const { data: settings } = await adminSupabase
@@ -122,8 +126,12 @@ export async function GET() {
     budget: {
       configuredEur: Number(settings?.places_daily_budget_eur ?? 0),
       alertEmail: settings?.alert_email ?? null,
-      todayCalls: todayUsage?.calls ?? 0,
-      todayCostEur: Number(todayUsage?.estimated_cost_eur ?? 0),
+      // Automation only — these are the numbers that count against the cap
+      todayCalls: todayUsageAuto?.calls ?? 0,
+      todayCostEur: Number(todayUsageAuto?.estimated_cost_eur ?? 0),
+      // Manual searches: tracked for visibility, NEVER capped
+      manualCalls: todayUsageManual?.calls ?? 0,
+      manualCostEur: Number(todayUsageManual?.estimated_cost_eur ?? 0),
     },
     alerts: {
       last24h: alertsLast24h ?? 0,

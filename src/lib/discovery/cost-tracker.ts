@@ -1,10 +1,27 @@
 /**
  * Cost Tracker — daily API usage + budget enforcement.
  *
- * Each search_cell triggers ~12 Google Places API calls (~€0.35 per cell).
- * The daily budget cap (configurable in user_settings.places_daily_budget_eur)
- * prevents runaway costs from misconfigured automation.
+ * Each automated search_cell triggers ~12 Google Places API calls (~€0.35 per cell).
+ * The daily budget cap (user_settings.places_daily_budget_eur) prevents runaway
+ * costs from misconfigured automation.
+ *
+ * Provider keys (separate buckets in daily_api_usage):
+ *   - "google_places"        → automated cron + boost runs. Counted AND capped.
+ *   - "google_places_manual" → user-triggered searches (/dashboard/search,
+ *                              /dashboard/address-search). Counted for visibility,
+ *                              NEVER capped.
+ *   - "google_places_total"  → derived sum, only used for display, never written.
+ *
+ * Why split? Users need to be able to do ad-hoc searches (e.g. checking if a
+ * specific company exists) regardless of whether the automation budget is
+ * exhausted. Otherwise a user couldn't validate a referral at 23:59 just because
+ * the cron used all today's budget.
+ *
+ * Manual contact creation does NOT touch Google Places — it's a pure DB insert
+ * via /api/leads/[id]/contacts. Same for inline-edit of company fields.
  */
+export const PROVIDER_PLACES_AUTO = "google_places";
+export const PROVIDER_PLACES_MANUAL = "google_places_manual";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const PLACES_COST_PER_CALL_EUR = 0.032 * 0.92; // ~€0.029
@@ -100,9 +117,10 @@ export async function recordApiCalls(
  * Returns true if today's spend on `provider` is below the user-configured
  * daily budget. Budget = 0 means "unlimited / disabled".
  *
- * The budget is read from the user_settings of the campaign creator (we look
- * up the first admin's setting as a system-wide default for now; this can be
- * refined per-campaign later).
+ * IMPORTANT: this function intentionally checks ONLY the bucket passed as
+ * `provider` (default "google_places", i.e. the automation bucket). Manual
+ * searches under "google_places_manual" are NEVER part of the cap — that's
+ * by design so users can always do ad-hoc work even when the cron is paused.
  */
 export async function checkBudgetOk(
   adminSupabase: ReturnType<typeof createAdminClient>,

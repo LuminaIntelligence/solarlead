@@ -52,6 +52,8 @@ interface HealthData {
     alertEmail: string | null;
     todayCalls: number;
     todayCostEur: number;
+    manualCalls: number;
+    manualCostEur: number;
   };
   alerts: { last24h: number };
   recentEvents: Array<{
@@ -258,21 +260,26 @@ export default function DiscoveryHealthPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Euro className="h-5 w-5 text-amber-600" /> Tagesbudget
+            <Euro className="h-5 w-5 text-amber-600" /> Tagesbudget Google Places
           </CardTitle>
           <CardDescription>
-            Google Places API · Today: {data.budget.todayCalls} Calls
+            Heutige Nutzung · Automatisierung wird gekappt, manuelle Suchen laufen frei
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {data.budget.configuredEur > 0 ? (
-            <>
-              <div className="flex items-baseline gap-2 mb-2">
-                <span className="text-2xl font-bold">€{data.budget.todayCostEur.toFixed(2)}</span>
-                <span className="text-sm text-muted-foreground">
-                  von €{data.budget.configuredEur.toFixed(2)}
-                </span>
+        <CardContent className="space-y-4">
+          {/* Automation budget — capped */}
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs uppercase tracking-wide text-slate-500">Automatisierung</span>
+                <span className="text-lg font-bold">€{data.budget.todayCostEur.toFixed(2)}</span>
+                {data.budget.configuredEur > 0 && (
+                  <span className="text-sm text-muted-foreground">von €{data.budget.configuredEur.toFixed(2)}</span>
+                )}
               </div>
+              <span className="text-xs text-slate-400">{data.budget.todayCalls} Calls</span>
+            </div>
+            {data.budget.configuredEur > 0 ? (
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div
                   className={`h-full transition-all ${
@@ -290,12 +297,33 @@ export default function DiscoveryHealthPage() {
                   }}
                 />
               </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Kein Budget gesetzt — System wird unbegrenzt API-Calls machen.
+            ) : (
+              <p className="text-xs text-slate-500">Kein Budget gesetzt — Cron läuft unbegrenzt.</p>
+            )}
+          </div>
+
+          {/* Manual usage — never capped, just visibility */}
+          <div className="pt-3 border-t border-slate-100">
+            <div className="flex items-baseline justify-between">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs uppercase tracking-wide text-slate-500">Manuelle Suchen</span>
+                <span className="text-lg font-bold text-blue-700">€{data.budget.manualCostEur.toFixed(2)}</span>
+              </div>
+              <span className="text-xs text-slate-400">{data.budget.manualCalls} Calls</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Über <code>/dashboard/search</code> ausgelöst. Wird <strong>nicht</strong> vom Tagesbudget gekappt — Nutzer können jederzeit ad-hoc suchen.
             </p>
-          )}
+          </div>
+
+          {/* Total */}
+          <div className="pt-3 border-t border-slate-100 flex items-baseline justify-between">
+            <span className="text-xs uppercase tracking-wide text-slate-500">Gesamt heute</span>
+            <span className="text-base font-semibold text-slate-700">
+              €{(data.budget.todayCostEur + data.budget.manualCostEur).toFixed(2)}
+              <span className="text-xs text-slate-400 ml-2">({data.budget.todayCalls + data.budget.manualCalls} Calls)</span>
+            </span>
+          </div>
         </CardContent>
       </Card>
 
