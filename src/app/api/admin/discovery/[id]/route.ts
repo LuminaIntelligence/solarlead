@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
 import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
-function isAdmin(user: { user_metadata?: { role?: string } } | null) {
-  return user?.user_metadata?.role === "admin";
-}
 
 // GET /api/admin/discovery/[id] — campaign detail + paginated leads
 export async function GET(
@@ -73,24 +68,59 @@ export async function GET(
     leadsQuery = leadsQuery.in("lead_id", ids);
   }
 
-  // Count leads still waiting for enrichment (background progress indicator)
-  const [leadsResult, pendingResult, enrichingResult] = await Promise.all([
+  // Count leads still waiting for enrichment + per-cell-status breakdown
+  const cellStatusQuery = (status: string) =>
+    supabase
+      .from("search_cells")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", id)
+      .eq("status", status);
+
+  const [
+    leadsResult, pendingResult, enrichingResult,
+    cellPending, cellSearching, cellDone, cellNoResults, cellError, cellPaused,
+    lastTickResult,
+  ] = await Promise.all([
     leadsQuery,
-    supabase
-      .from("discovery_leads")
-      .select("id", { count: "exact", head: true })
+    supabase.from("discovery_leads").select("id", { count: "exact", head: true })
+      .eq("campaign_id", id).eq("status", "pending_enrichment"),
+    supabase.from("discovery_leads").select("id", { count: "exact", head: true })
+      .eq("campaign_id", id).eq("status", "enriching"),
+    cellStatusQuery("pending"),
+    cellStatusQuery("searching"),
+    cellStatusQuery("done"),
+    cellStatusQuery("no_results"),
+    cellStatusQuery("error"),
+    cellStatusQuery("paused"),
+    // Most recent search_cell activity for THIS campaign
+    supabase.from("search_cells")
+      .select("last_attempt_at, area_label, category, status, error_message")
       .eq("campaign_id", id)
-      .eq("status", "pending_enrichment"),
-    supabase
-      .from("discovery_leads")
-      .select("id", { count: "exact", head: true })
-      .eq("campaign_id", id)
-      .eq("status", "enriching"),
+      .not("last_attempt_at", "is", null)
+      .order("last_attempt_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (leadsResult.error) return NextResponse.json({ error: leadsResult.error.message }, { status: 500 });
 
   const enrichmentPending = (pendingResult.count ?? 0) + (enrichingResult.count ?? 0);
+
+  const cellStats = {
+    pending: cellPending.count ?? 0,
+    searching: cellSearching.count ?? 0,
+    done: cellDone.count ?? 0,
+    no_results: cellNoResults.count ?? 0,
+    error: cellError.count ?? 0,
+    paused: cellPaused.count ?? 0,
+    total:
+      (cellPending.count ?? 0) +
+      (cellSearching.count ?? 0) +
+      (cellDone.count ?? 0) +
+      (cellNoResults.count ?? 0) +
+      (cellError.count ?? 0) +
+      (cellPaused.count ?? 0),
+  };
 
   return NextResponse.json({
     campaign,
@@ -99,6 +129,8 @@ export async function GET(
     page,
     pageSize,
     enrichmentPending,
+    cellStats,
+    lastCellActivity: lastTickResult.data ?? null,
   });
 }
 

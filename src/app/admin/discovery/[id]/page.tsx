@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Radar, ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, PauseCircle,
   RefreshCw, Play, Pause, ChevronLeft, ChevronRight, AlertTriangle,
-  Mail, X, UserSearch, Sun,
+  Mail, X, UserSearch, Sun, Activity, Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -189,6 +189,24 @@ function TestEmailModal({
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface CellStats {
+  total: number;
+  pending: number;
+  searching: number;
+  done: number;
+  no_results: number;
+  error: number;
+  paused: number;
+}
+
+interface LastCellActivity {
+  last_attempt_at: string;
+  area_label: string;
+  category: string;
+  status: string;
+  error_message: string | null;
+}
+
 interface ApiResponse {
   campaign: DiscoveryCampaign;
   leads: DiscoveryLead[];
@@ -196,6 +214,8 @@ interface ApiResponse {
   page: number;
   pageSize: number;
   enrichmentPending: number;
+  cellStats?: CellStats;
+  lastCellActivity?: LastCellActivity | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -506,6 +526,14 @@ export default function DiscoveryCampaignDetailPage() {
 
         {/* Campaign actions */}
         <div className="flex items-center gap-2">
+          <Link
+            href="/admin/discovery/health"
+            className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+            title="Globaler System-Status (Heartbeat, Budget, Fehler, Alerts)"
+          >
+            <Activity className="h-3.5 w-3.5" />
+            System-Status
+          </Link>
           <Button
             variant="outline"
             size="sm"
@@ -609,6 +637,102 @@ export default function DiscoveryCampaignDetailPage() {
           </Card>
         ))}
       </div>
+
+      {/* Such-Cells progress — the new automation visibility */}
+      {data.cellStats && data.cellStats.total > 0 && (
+        <Card className="bg-white border-slate-200">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Radar className="h-4 w-4 text-[#B2D082]" />
+                <span className="text-sm font-medium text-slate-900">Such-Cells</span>
+                <span className="text-xs text-slate-500">
+                  Automatisch alle 5 Min · {data.cellStats.total} insgesamt
+                </span>
+              </div>
+              <Link
+                href="/admin/discovery/health"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+              >
+                <Zap className="h-3 w-3" /> Boost im System-Status
+              </Link>
+            </div>
+
+            {/* Progress bar — segmented */}
+            {(() => {
+              const cs = data.cellStats!;
+              const seg = (n: number) => `${(n / cs.total) * 100}%`;
+              return (
+                <div className="space-y-1">
+                  <div className="flex h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="bg-green-500 transition-all" style={{ width: seg(cs.done) }} title={`${cs.done} erfolgreich`} />
+                    <div className="bg-slate-300 transition-all" style={{ width: seg(cs.no_results) }} title={`${cs.no_results} ohne Treffer`} />
+                    <div className="bg-red-500 transition-all" style={{ width: seg(cs.error) }} title={`${cs.error} Fehler`} />
+                    <div className="bg-blue-400 animate-pulse transition-all" style={{ width: seg(cs.searching) }} title={`${cs.searching} in Bearbeitung`} />
+                    <div className="bg-yellow-400 transition-all" style={{ width: seg(cs.paused) }} title={`${cs.paused} pausiert`} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 pt-1">
+                    {cs.searching > 0 && (
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" /> {cs.searching} in Bearbeitung
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1.5 text-amber-700">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" /> {cs.pending} ausstehend
+                    </span>
+                    <span className="flex items-center gap-1.5 text-green-700">
+                      <span className="h-2 w-2 rounded-full bg-green-500" /> {cs.done} fertig
+                    </span>
+                    {cs.no_results > 0 && (
+                      <span className="flex items-center gap-1.5 text-slate-600">
+                        <span className="h-2 w-2 rounded-full bg-slate-300" /> {cs.no_results} ohne Treffer
+                      </span>
+                    )}
+                    {cs.error > 0 && (
+                      <span className="flex items-center gap-1.5 text-red-700">
+                        <span className="h-2 w-2 rounded-full bg-red-500" /> {cs.error} Fehler
+                      </span>
+                    )}
+                    {cs.paused > 0 && (
+                      <span className="flex items-center gap-1.5 text-yellow-700">
+                        <span className="h-2 w-2 rounded-full bg-yellow-400" /> {cs.paused} pausiert
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Last activity hint */}
+            {data.lastCellActivity && (
+              <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                <span className="text-slate-400">Letzte Aktivität:</span>{" "}
+                <span className="font-medium text-slate-700">
+                  {data.lastCellActivity.area_label} / {data.lastCellActivity.category}
+                </span>{" "}
+                <span className="text-slate-400">
+                  ({data.lastCellActivity.status}) ·{" "}
+                  {new Date(data.lastCellActivity.last_attempt_at).toLocaleString("de-DE", {
+                    hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit",
+                  })}
+                </span>
+                {data.lastCellActivity.error_message && (
+                  <span className="block mt-1 text-red-600 truncate" title={data.lastCellActivity.error_message}>
+                    ⚠ {data.lastCellActivity.error_message}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Idle hint */}
+            {data.cellStats.pending === 0 && data.cellStats.searching === 0 && data.cellStats.error === 0 && (
+              <p className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                ✓ Alle Cells dieser Kampagne abgearbeitet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Enrichment progress banner */}
       {isEnrichmentActive && (
