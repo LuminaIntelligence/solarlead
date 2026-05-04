@@ -413,7 +413,7 @@ function AreaSelector({
                     {region.description}
                   </div>
                   <div className={cn("text-xs mt-0.5", active ? "text-[#1F3D2E]/60" : "text-slate-400")}>
-                    {region.circles.length} Suchkreise · bis zu 240 Treffer/Kreis
+                    {region.circles.length} Suchkreise · 60–240 Treffer/Kreis (je nach Branche &amp; Lage)
                     {partial && !active && (
                       <span className="text-[#B2D082]/80 ml-1">
                         ({areas.filter((a) => regionAreaKeys(region).includes(areaKey(a))).length} aktiv)
@@ -580,7 +580,13 @@ export default function NewDiscoveryCampaignPage() {
     }
   }
 
-  const estimatedResults = areas.length * categories.length * 60;
+  // Conservative lower-bound estimate (60 unique places/cell). Actual yields
+  // typically 1-3x higher in dense metros, lower in rural cells. There is no
+  // hard cap — the daily budget controls cost, not the number of leads.
+  const estimatedCells = areas.length * categories.length;
+  const estimatedLow = estimatedCells * 60;
+  const estimatedHigh = estimatedCells * 200;
+  const estimatedCostEur = estimatedCells * 0.32; // 12 API calls × ~€0.027
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -743,10 +749,24 @@ export default function NewDiscoveryCampaignPage() {
             </div>
 
             {categories.length > 0 && (
-              <p className="text-xs text-slate-500 mt-4">
-                {categories.length} Branche{categories.length !== 1 ? "n" : ""} × {areas.length} Suchkreis{areas.length !== 1 ? "e" : ""} ={" "}
-                <span className="text-slate-900 font-medium">bis zu {estimatedResults.toLocaleString("de-DE")} Treffer</span>
-              </p>
+              <div className="text-xs text-slate-500 mt-4 space-y-1">
+                <p>
+                  {categories.length} Branche{categories.length !== 1 ? "n" : ""} × {areas.length} Suchkreis{areas.length !== 1 ? "e" : ""} ={" "}
+                  <span className="text-slate-900 font-medium">{estimatedCells.toLocaleString("de-DE")} Such-Cells</span>
+                </p>
+                <p>
+                  Geschätzte Treffer:{" "}
+                  <span className="text-slate-900 font-medium">
+                    {estimatedLow.toLocaleString("de-DE")}–{estimatedHigh.toLocaleString("de-DE")}
+                  </span>
+                  <span className="text-slate-400"> (kein Limit, hängt von Branche & Lage ab)</span>
+                </p>
+                <p>
+                  Geschätzte API-Kosten:{" "}
+                  <span className="text-slate-900 font-medium">~€{estimatedCostEur.toFixed(2)}</span>
+                  <span className="text-slate-400"> · Verteilt über mehrere Tage durch das Tagesbudget</span>
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -771,11 +791,16 @@ export default function NewDiscoveryCampaignPage() {
               />
               {searchKeyword && <Row label="Suchbegriff" value={searchKeyword} />}
               {autoApproveThreshold && <Row label="Auto-Genehmigung" value={`Score ≥ ${autoApproveThreshold}`} />}
-              <div className="border-t border-slate-200 pt-3">
+              <div className="border-t border-slate-200 pt-3 space-y-2">
+                <Row label="Such-Cells" value={`${estimatedCells.toLocaleString("de-DE")}`} />
                 <Row
                   label="Geschätzte Treffer"
-                  value={`bis zu ${estimatedResults.toLocaleString("de-DE")} Gebäude`}
+                  value={`${estimatedLow.toLocaleString("de-DE")}–${estimatedHigh.toLocaleString("de-DE")} Gebäude`}
                   highlight
+                />
+                <Row
+                  label="API-Kosten"
+                  value={`~€${estimatedCostEur.toFixed(2)} · verteilt durch Tagesbudget`}
                 />
               </div>
             </div>
