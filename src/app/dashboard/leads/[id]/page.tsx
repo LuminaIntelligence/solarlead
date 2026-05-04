@@ -27,6 +27,7 @@ import type { ScoringBreakdown } from "@/lib/scoring/types";
 import type { LeadWithRelations } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditableCompanyInfo } from "@/components/leads/editable-company-info";
+import { DeleteLeadButton } from "@/components/leads/delete-lead-button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -315,7 +316,8 @@ export default async function LeadDetailPage({
             {formatCategory(lead.category)} &middot; {lead.city}, {lead.country}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <DeleteLeadButton leadId={lead.id} companyName={lead.company_name} />
           <div
             className={`text-4xl font-bold ${scoreColor(lead.total_score)}`}
           >
@@ -733,6 +735,7 @@ export default async function LeadDetailPage({
                 leadId={lead.id}
                 nextContactDate={lead.next_contact_date ?? null}
                 winProbability={lead.win_probability ?? null}
+                dealValue={lead.deal_value ?? null}
                 currentNotes={lead.notes ?? ""}
                 currentLinkedIn={lead.linkedin_url ?? ""}
                 companyName={lead.company_name}

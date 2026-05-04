@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { deleteLead, bulkUpdateStatus, bulkDeleteLeads } from "@/lib/actions/leads";
+import { deleteLead, bulkUpdateStatus, bulkUpdateCategory, bulkDeleteLeads } from "@/lib/actions/leads";
+import { CATEGORY_OPTIONS } from "@/lib/constants/categories";
 import type { Lead, LeadStatus } from "@/types/database";
 
 const statusColors: Record<LeadStatus, string> = {
@@ -105,6 +106,7 @@ export function LeadsTable({ leads }: LeadsTableProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
 
   const currentSortBy = searchParams.get("sortBy") ?? "total_score";
   const currentSortOrder = searchParams.get("sortOrder") ?? "desc";
@@ -162,6 +164,16 @@ export function LeadsTable({ leads }: LeadsTableProps) {
     setBulkStatusOpen(false);
     startTransition(async () => {
       await bulkUpdateStatus(ids, status);
+      setSelectedIds(new Set());
+      router.refresh();
+    });
+  };
+
+  const handleBulkCategory = (category: string) => {
+    const ids = Array.from(selectedIds);
+    setBulkCategoryOpen(false);
+    startTransition(async () => {
+      await bulkUpdateCategory(ids, category);
       setSelectedIds(new Set());
       router.refresh();
     });
@@ -331,7 +343,7 @@ export function LeadsTable({ leads }: LeadsTableProps) {
           {/* Status ändern */}
           <div className="relative">
             <button
-              onClick={() => setBulkStatusOpen(!bulkStatusOpen)}
+              onClick={() => { setBulkStatusOpen(!bulkStatusOpen); setBulkCategoryOpen(false); }}
               className="flex items-center gap-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 px-3 py-1.5 text-sm font-medium transition-colors"
             >
               Status ändern
@@ -346,6 +358,31 @@ export function LeadsTable({ leads }: LeadsTableProps) {
                     className="w-full text-left px-4 py-2 text-sm hover:bg-slate-100 transition-colors"
                   >
                     {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Branche ändern */}
+          <div className="relative">
+            <button
+              onClick={() => { setBulkCategoryOpen(!bulkCategoryOpen); setBulkStatusOpen(false); }}
+              className="flex items-center gap-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 px-3 py-1.5 text-sm font-medium transition-colors"
+            >
+              Branche ändern
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {bulkCategoryOpen && (
+              <div className="absolute bottom-full mb-2 left-0 bg-white text-gray-900 rounded-lg shadow-xl border overflow-hidden min-w-[200px] max-h-72 overflow-y-auto">
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleBulkCategory(opt.value)}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-slate-100 transition-colors flex items-center gap-2"
+                  >
+                    <span>{opt.emoji}</span>
+                    <span>{opt.label}</span>
                   </button>
                 ))}
               </div>

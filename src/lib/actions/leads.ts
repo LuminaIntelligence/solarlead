@@ -445,6 +445,52 @@ export async function bulkUpdateStatus(
   }
 }
 
+export async function bulkUpdateCategory(
+  ids: string[],
+  category: string
+): Promise<number> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 0;
+
+    const { data, error } = await supabase
+      .from("solar_lead_mass")
+      .update({
+        category,
+        last_edited_by: user.id,
+        last_edited_at: new Date().toISOString(),
+      })
+      .in("id", ids)
+      .eq("user_id", user.id)
+      .select("id");
+
+    if (error) {
+      // Retry without audit columns if migration hasn't applied yet
+      if (error.message?.includes("last_edited_")) {
+        const retry = await supabase
+          .from("solar_lead_mass")
+          .update({ category })
+          .in("id", ids)
+          .eq("user_id", user.id)
+          .select("id");
+        if (retry.error) { console.error("bulkUpdateCategory retry:", retry.error); return 0; }
+        revalidatePath("/dashboard/leads");
+        revalidatePath("/dashboard");
+        return retry.data?.length ?? 0;
+      }
+      console.error("Error in bulkUpdateCategory:", error);
+      return 0;
+    }
+    revalidatePath("/dashboard/leads");
+    revalidatePath("/dashboard");
+    return data?.length ?? 0;
+  } catch (error) {
+    console.error("Error in bulkUpdateCategory:", error);
+    return 0;
+  }
+}
+
 export async function bulkDeleteLeads(ids: string[]): Promise<boolean> {
   try {
     const supabase = await createClient();

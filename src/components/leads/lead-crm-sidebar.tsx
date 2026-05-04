@@ -12,6 +12,7 @@ interface LeadCrmSidebarProps {
   leadId: string;
   nextContactDate: string | null;
   winProbability: number | null;
+  dealValue: number | null;
   currentNotes: string;
   currentLinkedIn: string;
   companyName: string;
@@ -34,6 +35,7 @@ export function LeadCrmSidebar({
   leadId,
   nextContactDate,
   winProbability,
+  dealValue,
   currentNotes,
   currentLinkedIn,
   companyName,
@@ -49,6 +51,10 @@ export function LeadCrmSidebar({
       ? nextContactDate.slice(0, 10)
       : ""
   );
+  // Deal value as a string so users can clear the input or type comma/dot
+  const [dealValueStr, setDealValueStr] = useState<string>(
+    dealValue != null ? String(dealValue) : ""
+  );
   const [notes, setNotes] = useState(currentNotes);
   const [linkedin, setLinkedin] = useState(currentLinkedIn);
   const [saving, setSaving] = useState(false);
@@ -57,11 +63,21 @@ export function LeadCrmSidebar({
   async function handleSave() {
     setSaving(true);
     try {
+      // Parse deal value: accept "12.345,67" (DE) and "12345.67" (US)
+      let parsedDealValue: number | null = null;
+      const dvTrim = dealValueStr.trim();
+      if (dvTrim) {
+        const normalized = dvTrim.replace(/\./g, "").replace(",", ".");
+        const n = Number(normalized);
+        if (Number.isFinite(n) && n >= 0) parsedDealValue = n;
+      }
+
       const payload: Record<string, unknown> = {
         notes: notes || null,
         linkedin_url: linkedin || null,
         win_probability: probability,
         next_contact_date: nextContact || null,
+        deal_value: parsedDealValue,
       };
 
       const res = await fetch(`/api/leads/${leadId}`, {
@@ -171,6 +187,25 @@ export function LeadCrmSidebar({
             value={nextContact}
             onChange={(e) => setNextContact(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="deal_value">Geschätzter Deal-Wert (€)</Label>
+          <div className="relative">
+            <Input
+              id="deal_value"
+              type="text"
+              inputMode="decimal"
+              value={dealValueStr}
+              onChange={(e) => setDealValueStr(e.target.value)}
+              placeholder="z.B. 25000"
+              className="pr-8"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">€</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Leer lassen = unbekannt. Punkt oder Komma als Dezimal- oder Tausender-Trenner.
+          </p>
         </div>
       </div>
 
