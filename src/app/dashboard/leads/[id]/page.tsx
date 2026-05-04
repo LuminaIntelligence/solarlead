@@ -26,6 +26,7 @@ import { calculateScore, generateOutreachNotes } from "@/lib/scoring";
 import type { ScoringBreakdown } from "@/lib/scoring/types";
 import type { LeadWithRelations } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EditableCompanyInfo } from "@/components/leads/editable-company-info";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -373,98 +374,24 @@ export default async function LeadDetailPage({
           <TabsContent value="overview" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              {/* Company Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Building2 className="h-5 w-5" />
-                    Unternehmensinformationen
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <InfoRow
-                    icon={<Building2 className="h-4 w-4" />}
-                    label="Name"
-                    value={lead.company_name}
-                  />
-                  <InfoRow
-                    icon={<Tag className="h-4 w-4" />}
-                    label="Kategorie"
-                    value={formatCategory(lead.category)}
-                  />
-                  <InfoRow
-                    icon={<MapPin className="h-4 w-4" />}
-                    label="Adresse"
-                    value={`${lead.address}${lead.postal_code ? `, ${lead.postal_code}` : ""}`}
-                  />
-                  <InfoRow
-                    icon={<MapPin className="h-4 w-4" />}
-                    label="Stadt"
-                    value={`${lead.city}, ${lead.country}`}
-                  />
-                  {lead.website && (
-                    <InfoRow
-                      icon={<Globe className="h-4 w-4" />}
-                      label="Webseite"
-                      value={
-                        <a
-                          href={
-                            lead.website.startsWith("http")
-                              ? lead.website
-                              : `https://${lead.website}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline truncate block max-w-[200px]"
-                        >
-                          {lead.website}
-                        </a>
-                      }
-                    />
-                  )}
-                  {lead.phone && (
-                    <InfoRow
-                      icon={<Phone className="h-4 w-4" />}
-                      label="Telefon"
-                      value={lead.phone}
-                    />
-                  )}
-                  {lead.email && (
-                    <InfoRow
-                      icon={<Mail className="h-4 w-4" />}
-                      label="E-Mail"
-                      value={
-                        <a
-                          href={`mailto:${lead.email}`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {lead.email}
-                        </a>
-                      }
-                    />
-                  )}
-                  {lead.place_id && (
-                    <InfoRow
-                      icon={<Hash className="h-4 w-4" />}
-                      label="Place ID"
-                      value={
-                        <span className="text-xs font-mono text-muted-foreground truncate block max-w-[200px]">
-                          {lead.place_id}
-                        </span>
-                      }
-                    />
-                  )}
-                  <InfoRow
-                    icon={<FileText className="h-4 w-4" />}
-                    label="Quelle"
-                    value={
-                      <Badge variant="outline">
-                        {lead.source === "google_places" ? "Google Places" : lead.source === "csv_import" ? "CSV-Import" : lead.source === "manual" ? "Manuell" : lead.source}
-                      </Badge>
-                    }
-                  />
-                </CardContent>
-              </Card>
+              {/* Company Info — inline-editable */}
+              <EditableCompanyInfo
+                lead={{
+                  id: lead.id,
+                  company_name: lead.company_name,
+                  category: lead.category,
+                  address: lead.address ?? "",
+                  city: lead.city,
+                  postal_code: lead.postal_code ?? null,
+                  country: lead.country,
+                  website: lead.website ?? null,
+                  phone: lead.phone ?? null,
+                  email: lead.email ?? null,
+                  place_id: lead.place_id ?? null,
+                  source: lead.source,
+                  last_edited_at: (lead as { last_edited_at?: string | null }).last_edited_at ?? null,
+                }}
+              />
 
               {/* Score Overview */}
               <Card>

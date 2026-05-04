@@ -120,6 +120,9 @@ export interface LeadContact {
   seniority: string | null;
   department: string | null;
   source: string;
+  is_primary?: boolean;
+  last_edited_at?: string | null;
+  last_edited_by?: string | null;
   created_at: string;
 }
 

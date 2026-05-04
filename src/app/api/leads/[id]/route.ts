@@ -58,13 +58,37 @@ export async function PATCH(
       return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
     }
 
-    const { data, error } = await supabase
+    // Track WHO edited and WHEN. The DB columns may not exist yet on older
+    // deployments — if the migration hasn't run, the update is best-effort
+    // (we retry without these fields on column-not-found errors).
+    const updatePayload = {
+      ...parsed.data,
+      last_edited_by: user.id,
+      last_edited_at: new Date().toISOString(),
+    };
+
+    let { data, error } = await supabase
       .from("solar_lead_mass")
-      .update(parsed.data)
+      .update(updatePayload)
       .eq("id", id)
       .eq("user_id", user.id)
       .select()
       .single();
+
+    // Fallback: if the audit columns don't exist (migration pending), retry
+    // with just the user-provided fields so editing isn't blocked.
+    if (error && error.message?.includes("last_edited_")) {
+      console.warn("[PATCH /api/leads/[id]] audit columns missing, retrying without them");
+      const retry = await supabase
+        .from("solar_lead_mass")
+        .update(parsed.data)
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error("[PATCH /api/leads/[id]] DB error:", error);
