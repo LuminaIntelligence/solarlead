@@ -75,6 +75,8 @@ export async function updateUserSettings(
       | "email_sender_title"
       | "email_sender_email"
       | "email_sender_phone"
+      | "places_daily_budget_eur"
+      | "alert_email"
     >
   >
 ): Promise<UserSettings | null> {

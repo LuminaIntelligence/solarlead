@@ -163,6 +163,7 @@ export interface SearchRun {
 export interface UserSettings {
   id: string;
   user_id: string;
+  role: "user" | "admin";
   google_places_api_key: string | null;
   google_solar_api_key: string | null;
   provider_mode: "mock" | "live";
@@ -172,6 +173,10 @@ export interface UserSettings {
   email_sender_title: string | null;
   email_sender_email: string | null;
   email_sender_phone: string | null;
+  // Discovery-Automation: Tagesbudget Google Places in EUR (0 = unbegrenzt)
+  places_daily_budget_eur: number;
+  // Empfänger für kritische System-Alerts (API-Fehler, Budget-Überschreitung)
+  alert_email: string | null;
   created_at: string;
   updated_at: string;
 }

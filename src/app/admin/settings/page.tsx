@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch, Database, FlaskConical } from "lucide-react";
+import { Eye, EyeOff, Loader2, RotateCcw, Server, Settings, Sun, CheckCircle2, AlertCircle, Users, ScanSearch, Database, FlaskConical, Euro, Bell, Radar } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/lib/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,11 @@ export default function AdminSettingsPage() {
   const [weights, setWeights] = useState<ScoringWeights>({ ...DEFAULT_WEIGHTS });
   const [savingWeights, setSavingWeights] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+
+  // Discovery Automation
+  const [placesDailyBudget, setPlacesDailyBudget] = useState<number>(10);
+  const [alertEmail, setAlertEmail] = useState<string>("");
+  const [savingDiscovery, setSavingDiscovery] = useState(false);
 
   // Backfill solar tool
   const [backfillStatus, setBackfillStatus] = useState<{ missing?: number; total?: number } | null>(null);
@@ -167,6 +172,8 @@ export default function AdminSettingsPage() {
               outreach: Math.round(data.scoring_weights.outreach * 100),
             });
           }
+          setPlacesDailyBudget(Number(data.places_daily_budget_eur ?? 10));
+          setAlertEmail(data.alert_email ?? "");
         }
       } catch {
         toast({
@@ -243,6 +250,38 @@ export default function AdminSettingsPage() {
       toast({ title: "Fehler", description: "Neuberechnung fehlgeschlagen.", variant: "destructive" });
     } finally {
       setRecalculating(false);
+    }
+  };
+
+  const handleSaveDiscovery = async () => {
+    setSavingDiscovery(true);
+    try {
+      // Validate email if provided
+      const emailTrimmed = alertEmail.trim();
+      if (emailTrimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+        toast({ title: "Ungültige E-Mail", description: "Bitte eine gültige E-Mail-Adresse eingeben oder leer lassen.", variant: "destructive" });
+        setSavingDiscovery(false);
+        return;
+      }
+      const budget = Math.max(0, Number(placesDailyBudget) || 0);
+      const updated = await updateUserSettings({
+        places_daily_budget_eur: budget,
+        alert_email: emailTrimmed || null,
+      });
+      if (updated) {
+        toast({
+          title: "Discovery-Einstellungen gespeichert",
+          description: budget === 0
+            ? "Tagesbudget deaktiviert (unbegrenzt)."
+            : `Tagesbudget: €${budget.toFixed(2)}${emailTrimmed ? ` · Alerts: ${emailTrimmed}` : ""}`,
+        });
+      } else {
+        toast({ title: "Fehler", description: "Speichern fehlgeschlagen.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Fehler", description: "Speichern fehlgeschlagen.", variant: "destructive" });
+    } finally {
+      setSavingDiscovery(false);
     }
   };
 
@@ -509,6 +548,78 @@ export default function AdminSettingsPage() {
           <Button onClick={handleSaveApi} disabled={savingApi}>
             {savingApi && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             API-Konfiguration speichern
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Discovery-Automation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Radar className="h-5 w-5 text-[#B2D082]" />
+            Discovery-Automation
+          </CardTitle>
+          <CardDescription>
+            Tagesbudget für Google Places + E-Mail-Adresse für kritische System-Alerts (API-Fehler, Budget-Überschreitung, Cron-Ausfall).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="places-budget" className="flex items-center gap-1.5">
+              <Euro className="h-4 w-4 text-amber-600" />
+              Tagesbudget Google Places API (EUR)
+            </Label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="places-budget"
+                type="number"
+                min={0}
+                step={1}
+                value={placesDailyBudget}
+                onChange={(e) => setPlacesDailyBudget(Number(e.target.value) || 0)}
+                placeholder="10"
+                className="max-w-[200px]"
+              />
+              <span className="text-xs text-slate-500">
+                {placesDailyBudget === 0
+                  ? "Unbegrenzt — kein Stop bei Erreichen"
+                  : `~${Math.floor(placesDailyBudget / 0.32)} Cells/Tag (etwa ${Math.floor(placesDailyBudget / 0.32 * 60)}–${Math.floor(placesDailyBudget / 0.32 * 200)} Leads)`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Sobald der heutige Verbrauch das Budget erreicht, pausiert der Cron bis Mitternacht. Der bisherige Stand ist im Discovery-Health-Dashboard sichtbar. <strong>0 = kein Limit</strong>.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="alert-email" className="flex items-center gap-1.5">
+              <Bell className="h-4 w-4 text-blue-600" />
+              Alert-E-Mail-Adresse
+            </Label>
+            <Input
+              id="alert-email"
+              type="email"
+              value={alertEmail}
+              onChange={(e) => setAlertEmail(e.target.value)}
+              placeholder="alerts@deine-firma.de"
+              className="max-w-[400px]"
+            />
+            <p className="text-xs text-slate-400">
+              Bei kritischen Fehlern (API-Key abgelaufen, Tagesbudget aufgebraucht, mehrere Cells in Folge fehlgeschlagen) wird eine Mail an diese Adresse geschickt. Dedup: max 1× pro Stunde pro Fehler-Typ. Leer lassen = keine E-Mails (du bekommst dann nichts mit wenn etwas schief läuft).
+            </p>
+            {!alertEmail.trim() && (
+              <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Aktuell ist keine Alert-E-Mail gesetzt — du bekommst keine Benachrichtigung wenn etwas in der Discovery-Automation kaputt geht. Empfehlung: deine Admin-E-Mail eintragen.
+                </span>
+              </div>
+            )}
+          </div>
+
+          <Button onClick={handleSaveDiscovery} disabled={savingDiscovery}>
+            {savingDiscovery && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Discovery-Einstellungen speichern
           </Button>
         </CardContent>
       </Card>
