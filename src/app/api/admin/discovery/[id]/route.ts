@@ -39,6 +39,15 @@ export async function GET(
     solarCompleteLeadIds = (completeAssessments ?? []).map((a: { lead_id: string }) => a.lead_id);
   }
 
+  // NOTE: previously this endpoint excluded discovery_leads whose linked
+  // solar_lead_mass had status='existing_solar' via a `.not("lead_id", "in", ...)`
+  // call. With 3000+ existing_solar rows, the IN-list URL exceeded 8K chars
+  // and PostgREST silently failed → page showed "Kampagne nicht gefunden".
+  //
+  // The filter is now dropped: discovery_leads referencing existing_solar appear
+  // in the list. They are visually distinguishable via the status column on the
+  // linked lead, and they are already excluded from the contact-backfill queue
+  // and from outreach via the existing `status='existing_solar'` checks elsewhere.
   let leadsQuery = supabase
     .from("discovery_leads")
     .select("*", { count: "exact" })
@@ -48,16 +57,6 @@ export async function GET(
 
   if (statusFilter) {
     leadsQuery = leadsQuery.eq("status", statusFilter);
-  }
-
-  // Always exclude discovery_leads where the linked lead is marked as existing_solar
-  const { data: existingSolarLeads } = await supabase
-    .from("solar_lead_mass")
-    .select("id")
-    .eq("status", "existing_solar");
-  if (existingSolarLeads?.length) {
-    const excludeIds = existingSolarLeads.map((l: { id: string }) => l.id);
-    leadsQuery = leadsQuery.not("lead_id", "in", `(${excludeIds.join(",")})`);
   }
 
   if (solarCompleteLeadIds !== null) {
