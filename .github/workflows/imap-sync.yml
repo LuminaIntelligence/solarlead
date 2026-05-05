@@ -1,0 +1,32 @@
+name: IMAP Sync Cron
+
+on:
+  schedule:
+    # Every 10 minutes
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  imap-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run IMAP sync
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/imap-sync")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "IMAP sync failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          # Parse and display key metrics
+          METRICS=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"checked={d.get('messagesChecked',0)}, replies={d.get('repliesFound',0)}, opt_outs={d.get('optedOutFound',0)}, skipped={d.get('skipped',False)}\")" 2>/dev/null || echo "parse error")
+          echo "Results: $METRICS"
