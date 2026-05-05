@@ -50,6 +50,34 @@ function verifyMailgunSignature(
   return expected === signature;
 }
 
+/** Best-effort log to mailgun_inbound_events. Never throws. */
+async function logEvent(payload: {
+  from_email: string | null;
+  recipient: string | null;
+  subject: string | null;
+  result: "matched" | "no_match" | "invalid_signature" | "error" | "no_from_address";
+  job_id?: string | null;
+  assigned_to?: string | null;
+  is_opt_out?: boolean;
+  error_message?: string | null;
+}) {
+  try {
+    const adminSb = createAdminClient();
+    await adminSb.from("mailgun_inbound_events").insert({
+      from_email: payload.from_email,
+      recipient: payload.recipient,
+      subject: payload.subject,
+      result: payload.result,
+      job_id: payload.job_id ?? null,
+      assigned_to: payload.assigned_to ?? null,
+      is_opt_out: payload.is_opt_out ?? false,
+      error_message: payload.error_message ?? null,
+    });
+  } catch (e) {
+    console.warn("[mailgun-inbound] failed to log event:", e);
+  }
+}
+
 /**
  * POST /api/webhooks/mailgun-inbound
  * Mailgun Inbound Route webhook — called for every incoming email.
@@ -63,16 +91,12 @@ export async function POST(req: NextRequest) {
   const token     = formData.get("token")?.toString() ?? "";
   const signature = formData.get("signature")?.toString() ?? "";
 
-  // Verify signature (skip in dev if no key set)
-  const signingKey = process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? process.env.MAILGUN_API_KEY;
-  if (signingKey && !verifyMailgunSignature(timestamp, token, signature)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-  }
-
-  // Extract email fields
-  const fromRaw   = formData.get("from")?.toString() ?? "";       // "Name <email@example.com>"
-  const sender    = formData.get("sender")?.toString() ?? "";     // "email@example.com"
-  const bodyPlain = formData.get("body-plain")?.toString() ?? ""; // plain text body
+  // Pre-extract the recipient/subject/from for logging even on early-exit paths
+  const fromRaw   = formData.get("from")?.toString() ?? "";
+  const sender    = formData.get("sender")?.toString() ?? "";
+  const recipient = formData.get("recipient")?.toString() ?? null;
+  const subject   = formData.get("subject")?.toString() ?? null;
+  const bodyPlain = formData.get("body-plain")?.toString() ?? "";
 
   // Resolve sender address — prefer `sender` (clean), fall back to parsing `from`
   const fromEmail = (
@@ -81,7 +105,26 @@ export async function POST(req: NextRequest) {
     fromRaw
   ).toLowerCase().trim();
 
+  // Verify signature (skip if no key set in dev)
+  const signingKey = process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? process.env.MAILGUN_API_KEY;
+  if (signingKey && !verifyMailgunSignature(timestamp, token, signature)) {
+    await logEvent({
+      from_email: fromEmail || null,
+      recipient,
+      subject,
+      result: "invalid_signature",
+      error_message: "HMAC mismatch — check MAILGUN_WEBHOOK_SIGNING_KEY",
+    });
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
   if (!fromEmail) {
+    await logEvent({
+      from_email: null,
+      recipient,
+      subject,
+      result: "no_from_address",
+    });
     return NextResponse.json({ ok: true, skipped: "no_from_address" });
   }
 
@@ -102,7 +145,13 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!job) {
-    // No matching job — could be an unrelated email, silently accept
+    await logEvent({
+      from_email: fromEmail,
+      recipient,
+      subject,
+      result: "no_match",
+      error_message: "No outreach_jobs row with status sent/opened for this sender",
+    });
     return NextResponse.json({ ok: true, skipped: "no_matching_job" });
   }
 
@@ -136,6 +185,16 @@ export async function POST(req: NextRequest) {
       console.warn("[mailgun-inbound] auto-assign failed for", job.id, e);
     }
   }
+
+  await logEvent({
+    from_email: fromEmail,
+    recipient,
+    subject,
+    result: "matched",
+    job_id: job.id as string,
+    assigned_to: assignedTo,
+    is_opt_out: isOptOut,
+  });
 
   return NextResponse.json({
     ok: true,

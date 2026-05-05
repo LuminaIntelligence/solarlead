@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { InboundStatusPanel } from "@/components/admin/InboundStatusPanel";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -195,20 +196,8 @@ export default function RepliesPage() {
         </div>
       </div>
 
-      {/* Mailgun setup info — shown once as a collapsible hint */}
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="py-3 px-5">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            <span className="font-semibold text-slate-800">Wie Antworten eingehen:</span>{" "}
-            Antworten werden automatisch über den Mailgun Inbound-Webhook erfasst.
-            Richte in Mailgun unter <strong>Receiving → Routes</strong> eine Route ein, die an{" "}
-            <code className="bg-slate-200 px-1 rounded text-slate-700">
-              https://solarleadgen.lumina-intelligence.ai/api/webhooks/mailgun-inbound
-            </code>{" "}
-            weiterleitet. Danach erscheinen Antworten hier automatisch.
-          </p>
-        </CardContent>
-      </Card>
+      {/* Live-Diagnose: MX, Signing-Key, Webhook-Calls */}
+      <InboundStatusPanel />
 
       {/* Pipeline filter tabs */}
       {jobs.length > 0 && (
