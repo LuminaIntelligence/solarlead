@@ -16,9 +16,12 @@ import {
   XCircle,
   Inbox,
   Zap,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,8 +133,10 @@ function StageDropdown({
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function RepliesPage() {
+  const { toast } = useToast();
   const [jobs, setJobs] = useState<ReplyJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<"all" | PipelineStage>("all");
 
   const fetchReplies = useCallback(async () => {
@@ -150,6 +155,35 @@ export default function RepliesPage() {
   useEffect(() => {
     fetchReplies();
   }, [fetchReplies]);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/admin/outreach/sync-replies", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Sync fehlgeschlagen",
+          description: data.error ?? "Unbekannter Fehler. Server-Logs prüfen.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Postfach synchronisiert",
+        description: `${data.messagesChecked ?? 0} Mails geprüft · ${data.repliesFound ?? 0} neue Antworten · ${data.optedOutFound ?? 0} Opt-Outs`,
+      });
+      await fetchReplies();
+    } catch (err) {
+      toast({
+        title: "Sync fehlgeschlagen",
+        description: err instanceof Error ? err.message : "Unbekannter Fehler",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function handleStageChange(jobId: string, stage: PipelineStage) {
     setJobs((prev) =>
@@ -188,10 +222,25 @@ export default function RepliesPage() {
           </div>
         </div>
 
-        {/* Mailgun status badge */}
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-          <Zap className="h-3.5 w-3.5 text-green-600" />
-          <span className="text-xs text-green-700 font-medium">Mailgun Webhook aktiv</span>
+        {/* Sync + Mailgun status */}
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSync}
+            disabled={syncing}
+            size="sm"
+            variant="default"
+          >
+            {syncing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {syncing ? "Synchronisiere…" : "Jetzt synchronisieren"}
+          </Button>
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+            <Zap className="h-3.5 w-3.5 text-green-600" />
+            <span className="text-xs text-green-700 font-medium">Mailgun Webhook aktiv</span>
+          </div>
         </div>
       </div>
 
