@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { autoAssignJob } from "@/lib/team/auto-assign";
 import * as crypto from "crypto";
 
 const OPT_OUT_KEYWORDS = [
@@ -104,22 +106,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "no_matching_job" });
   }
 
-  // Update job
+  // Update job. Set outcome='new' so the team inbox picks it up + bump
+  // last_activity_at for SLA tracking. Mirror of the IMAP sync-replies logic
+  // so both ingestion paths produce the same result.
+  const repliedAt = new Date().toISOString();
   await supabase
     .from("outreach_jobs")
     .update({
       status: newStatus,
-      replied_at: new Date().toISOString(),
+      replied_at: repliedAt,
       reply_content: bodyText.slice(0, 1000),
+      outcome: isOptOut ? "not_interested" : "new",
+      outcome_at: repliedAt,
+      last_activity_at: repliedAt,
       // Cancel pending follow-up
       followup_status: job.followup_status === "pending" ? "skipped" : job.followup_status,
     })
     .eq("id", job.id);
+
+  // Auto-assign non-opt-out replies to a specialist via round-robin.
+  // Best-effort: if no specialist exists, the reply stays unassigned in pool.
+  let assignedTo: string | null = null;
+  if (!isOptOut) {
+    try {
+      const adminSb = createAdminClient();
+      const result = await autoAssignJob(adminSb, job.id as string);
+      assignedTo = result.assignedTo;
+    } catch (e) {
+      console.warn("[mailgun-inbound] auto-assign failed for", job.id, e);
+    }
+  }
 
   return NextResponse.json({
     ok: true,
     job_id: job.id,
     status: newStatus,
     from: fromEmail,
+    assigned_to: assignedTo,
   });
 }
