@@ -14,6 +14,12 @@ export async function GET(
   const { searchParams } = new URL(req.url);
   const statusFilter = searchParams.get("status") ?? "";
   const solarComplete = searchParams.get("solar_complete") === "1";
+  const minContactsParam = searchParams.get("min_contacts");
+  const minScoreParam = searchParams.get("min_score");
+  const minAreaParam = searchParams.get("min_area_m2");
+  const minContacts = minContactsParam ? parseInt(minContactsParam, 10) : null;
+  const minScore = minScoreParam ? parseInt(minScoreParam, 10) : null;
+  const minArea = minAreaParam ? parseInt(minAreaParam, 10) : null;
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const pageSize = 50;
 
@@ -57,6 +63,17 @@ export async function GET(
 
   if (statusFilter) {
     leadsQuery = leadsQuery.eq("status", statusFilter);
+  }
+
+  // New filter params for bulk-by-filter UX
+  if (minContacts !== null && Number.isFinite(minContacts)) {
+    leadsQuery = leadsQuery.gte("contact_count", minContacts);
+  }
+  if (minScore !== null && Number.isFinite(minScore)) {
+    leadsQuery = leadsQuery.gte("total_score", minScore);
+  }
+  if (minArea !== null && Number.isFinite(minArea)) {
+    leadsQuery = leadsQuery.gte("max_array_area_m2", minArea);
   }
 
   if (solarCompleteLeadIds !== null) {

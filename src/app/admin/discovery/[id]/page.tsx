@@ -274,6 +274,9 @@ export default function DiscoveryCampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [solarCompleteFilter, setSolarCompleteFilter] = useState(false);
+  const [minContacts, setMinContacts] = useState<number>(0);
+  const [minScore, setMinScore] = useState<number>(0);
+  const [minArea, setMinArea] = useState<number>(0);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
@@ -287,10 +290,13 @@ export default function DiscoveryCampaignDetailPage() {
   const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchData = useCallback(async (p = page, sf = statusFilter, sc = solarCompleteFilter) => {
+  const fetchData = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ page: String(p), status: sf });
-      if (sc) params.set("solar_complete", "1");
+      const params = new URLSearchParams({ page: String(page), status: statusFilter });
+      if (solarCompleteFilter) params.set("solar_complete", "1");
+      if (minContacts > 0) params.set("min_contacts", String(minContacts));
+      if (minScore > 0) params.set("min_score", String(minScore));
+      if (minArea > 0) params.set("min_area_m2", String(minArea));
       const res = await fetch(`/api/admin/discovery/${id}?${params.toString()}`);
       if (!res.ok) return;
       const json: ApiResponse = await res.json();
@@ -300,12 +306,12 @@ export default function DiscoveryCampaignDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, page, statusFilter, solarCompleteFilter]);
+  }, [id, page, statusFilter, solarCompleteFilter, minContacts, minScore, minArea]);
 
   useEffect(() => {
     setLoading(true);
-    fetchData(page, statusFilter, solarCompleteFilter);
-  }, [page, statusFilter, solarCompleteFilter, fetchData]);
+    fetchData();
+  }, [fetchData]);
 
   // Auto-poll while running OR while enrichment is still in progress in background
   const isEnrichmentActive = (data?.enrichmentPending ?? 0) > 0;
@@ -316,12 +322,12 @@ export default function DiscoveryCampaignDetailPage() {
       data?.campaign?.status === "pending" ||
       isEnrichmentActive;
     if (shouldPoll) {
-      pollRef.current = setInterval(() => fetchData(page, statusFilter), 5000);
+      pollRef.current = setInterval(() => fetchData(), 5000);
     }
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [data?.campaign?.status, isEnrichmentActive, fetchData, page, statusFilter]);
+  }, [data?.campaign?.status, isEnrichmentActive, fetchData]);
 
   // Detect stuck enrichment: if pending count hasn't changed for 90 seconds, mark as stuck
   useEffect(() => {
@@ -430,6 +436,41 @@ export default function DiscoveryCampaignDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, lead_ids: Array.from(selected) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Fehler");
+      setSelected(new Set());
+      await fetchData();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  /**
+   * Bulk-by-filter: send the active filter set to the server, which resolves
+   * matching IDs and applies the action. Used for "alle 1245 Bereit-Leads
+   * mit ≥2 Kontakten genehmigen" without per-page selection.
+   */
+  async function handleBulkActionByFilter(action: "approve" | "reject", totalToConfirm: number) {
+    if (totalToConfirm === 0) return;
+    const verb = action === "approve" ? "genehmigen" : "ablehnen";
+    if (!confirm(`Wirklich ${totalToConfirm} Lead${totalToConfirm === 1 ? "" : "s"} (gefiltert) ${verb}?`)) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const filters: Record<string, unknown> = {};
+      if (statusFilter) filters.status = statusFilter;
+      if (solarCompleteFilter) filters.solar_complete = true;
+      if (minContacts > 0) filters.min_contacts = minContacts;
+      if (minScore > 0) filters.min_score = minScore;
+      if (minArea > 0) filters.min_area_m2 = minArea;
+
+      const res = await fetch(`/api/admin/discovery/${id}/leads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, filters }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Fehler");
@@ -834,6 +875,7 @@ export default function DiscoveryCampaignDetailPage() {
 
           {/* Status filter */}
           <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide mr-1">Status:</span>
             {LEAD_STATUS_FILTERS.map((f) => (
               <button
                 key={f.value}
@@ -860,6 +902,96 @@ export default function DiscoveryCampaignDetailPage() {
               Vollständige Solar-Daten
             </button>
           </div>
+
+          {/* Quality filters */}
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide mr-1">Kontakte:</span>
+            {[0, 1, 2, 3, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => { setMinContacts(n); setPage(1); setSelected(new Set()); }}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  minContacts === n
+                    ? "bg-blue-500 text-white"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                {n === 0 ? "Egal" : `≥${n}`}
+              </button>
+            ))}
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide ml-3 mr-1">Score:</span>
+            {[0, 50, 70, 85].map((n) => (
+              <button
+                key={n}
+                onClick={() => { setMinScore(n); setPage(1); setSelected(new Set()); }}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  minScore === n
+                    ? "bg-blue-500 text-white"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                {n === 0 ? "Egal" : `≥${n}`}
+              </button>
+            ))}
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide ml-3 mr-1">Dachfläche:</span>
+            {[0, 500, 1000, 3000].map((n) => (
+              <button
+                key={n}
+                onClick={() => { setMinArea(n); setPage(1); setSelected(new Set()); }}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  minArea === n
+                    ? "bg-blue-500 text-white"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                {n === 0 ? "Egal" : `≥${n}m²`}
+              </button>
+            ))}
+          </div>
+
+          {/* Bulk-by-filter action bar — appears when there's something to act on */}
+          {(() => {
+            const hasFilters = !!statusFilter || solarCompleteFilter || minContacts > 0 || minScore > 0 || minArea > 0;
+            const filterableActionable = statusFilter === "ready" || (statusFilter === "" && hasFilters);
+            if (!filterableActionable || total === 0 || selected.size > 0) return null;
+            const verb = statusFilter === "ready" ? "Bereit-Leads" : "Leads";
+            const filterDesc = [
+              minContacts > 0 ? `≥${minContacts} Kontakt${minContacts === 1 ? "" : "e"}` : null,
+              minScore > 0 ? `Score ≥${minScore}` : null,
+              minArea > 0 ? `Dach ≥${minArea}m²` : null,
+              solarCompleteFilter ? "vollständige Solar-Daten" : null,
+            ].filter(Boolean).join(", ");
+            return (
+              <div className="mt-3 p-3 rounded-lg border border-blue-200 bg-blue-50 flex items-center justify-between flex-wrap gap-3">
+                <div className="text-sm text-blue-900">
+                  <strong>{total}</strong> gefilterte {verb}
+                  {filterDesc && <span className="text-blue-700"> · {filterDesc}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleBulkActionByFilter("approve", total)}
+                    disabled={actionLoading || total === 0}
+                    className="text-[#1F3D2E] font-semibold text-xs"
+                    style={{ backgroundColor: "#B2D082" }}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                    Alle {total} genehmigen
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleBulkActionByFilter("reject", total)}
+                    disabled={actionLoading || total === 0}
+                    className="border-red-300 text-red-600 hover:bg-red-50 text-xs"
+                  >
+                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                    Alle {total} ablehnen
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </CardHeader>
 
         <CardContent className="p-0">
