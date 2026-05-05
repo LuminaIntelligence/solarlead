@@ -32,6 +32,12 @@ export async function GET(req: NextRequest) {
   const report: Record<string, unknown> = { timestamp: now.toISOString() };
 
   // ── Fix 1: Stuck campaigns (running > 30 min without update) ──────────────
+  // IMPORTANT: in the cell-based architecture, a running campaign without
+  // recent updates is normal — it's waiting for the next cron-tick to claim
+  // a cell, possibly paused by daily budget. We only auto-complete if all
+  // cells are in a terminal state (done/no_results/error/paused). If any
+  // pending/searching cells exist, leave the campaign alone — it WILL
+  // continue progressing on the next tick.
   const stuckCampaignThreshold = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
   const { data: stuckCampaigns } = await supabase
     .from("discovery_campaigns")
@@ -40,20 +46,37 @@ export async function GET(req: NextRequest) {
     .lt("updated_at", stuckCampaignThreshold);
 
   let fixedCampaigns = 0;
+  let skippedCampaigns = 0;
   for (const c of stuckCampaigns ?? []) {
+    // Check if there are any non-terminal cells. If yes, skip — campaign is
+    // legitimately progressing, just slowly.
+    const { count: openCells } = await supabase
+      .from("search_cells")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", c.id)
+      .in("status", ["pending", "searching"]);
+
+    if ((openCells ?? 0) > 0) {
+      skippedCampaigns++;
+      continue;
+    }
+
+    // Truly done: all cells are terminal. Mark complete, clear any stale
+    // error_message from previous watchdog runs.
     await supabase
       .from("discovery_campaigns")
       .update({
         status: "completed",
         completed_at: now.toISOString(),
         updated_at: now.toISOString(),
-        error_message: `Auto-completed by watchdog (stuck since ${c.updated_at})`,
+        error_message: null,
       })
       .eq("id", c.id);
     fixedCampaigns++;
-    console.log(`[Watchdog] Fixed stuck campaign: ${c.name} (${c.id})`);
+    console.log(`[Watchdog] Finalized completed campaign: ${c.name} (${c.id})`);
   }
   report.fixed_campaigns = fixedCampaigns;
+  report.skipped_campaigns_with_open_cells = skippedCampaigns;
 
   // ── Fix 2: Stuck enriching leads (enriching > 15 min) ────────────────────
   const stuckEnrichThreshold = new Date(now.getTime() - 15 * 60 * 1000).toISOString();

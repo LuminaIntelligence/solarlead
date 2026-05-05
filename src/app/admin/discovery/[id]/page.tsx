@@ -602,11 +602,19 @@ export default function DiscoveryCampaignDetailPage() {
         </div>
       </div>
 
-      {/* Error message from campaign */}
-      {campaign.error_message && (
+      {/* Error message from campaign — only red alarm for actual failures.
+          For completed/paused campaigns the message is historical (e.g. old
+          watchdog auto-completion notes) and shown as a neutral info note. */}
+      {campaign.error_message && campaign.status === "failed" && (
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>{campaign.error_message}</span>
+        </div>
+      )}
+      {campaign.error_message && campaign.status !== "failed" && (
+        <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-500">
+          <span className="shrink-0">ℹ</span>
+          <span>System-Hinweis: {campaign.error_message}</span>
         </div>
       )}
 
