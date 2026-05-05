@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { MoreHorizontal, Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ function formatDate(dateStr: string | null): string {
 }
 
 export default function UsersPage() {
+  const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -104,16 +106,44 @@ export default function UsersPage() {
 
     setActionLoading(true);
     try {
+      // updateUserRole returns boolean (false on failure). The previous code
+      // ignored the return value → silent failures (e.g. CHECK constraint
+      // rejecting a role value the DB schema doesn't know yet). We now surface
+      // the failure as a toast so the admin sees that nothing changed.
+      let ok = true;
       if (dialogAction === "role" && pendingRole) {
-        await updateUserRole(selectedUser.id, pendingRole);
+        ok = await updateUserRole(selectedUser.id, pendingRole);
       } else if (dialogAction === "ban") {
-        await banUser(selectedUser.id);
+        ok = await banUser(selectedUser.id);
       } else if (dialogAction === "unban") {
-        await unbanUser(selectedUser.id);
+        ok = await unbanUser(selectedUser.id);
+      }
+      if (!ok) {
+        toast({
+          title: "Aktion fehlgeschlagen",
+          description: dialogAction === "role"
+            ? "Rolle konnte nicht gesetzt werden. Vermutlich fehlt eine DB-Migration oder ein CHECK-Constraint blockt den Wert. Server-Logs prüfen."
+            : "Server hat die Aktion abgelehnt. Server-Logs prüfen.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erledigt",
+          description: dialogAction === "role" && pendingRole
+            ? `${selectedUser.email} ist jetzt ${ROLE_META[pendingRole].label}.`
+            : dialogAction === "ban"
+              ? `${selectedUser.email} wurde gesperrt.`
+              : `Sperre für ${selectedUser.email} aufgehoben.`,
+        });
       }
       await loadUsers();
     } catch (err) {
       console.error("Aktion fehlgeschlagen:", err);
+      toast({
+        title: "Aktion fehlgeschlagen",
+        description: err instanceof Error ? err.message : "Unbekannter Fehler",
+        variant: "destructive",
+      });
     } finally {
       setActionLoading(false);
       setDialogOpen(false);
