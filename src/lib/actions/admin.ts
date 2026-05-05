@@ -40,9 +40,12 @@ async function requireAdmin(): Promise<string> {
 
   if (!user) throw new Error("Nicht authentifiziert");
 
-  // DB-backed role check (server-controlled, immutable by user).
-  // user_metadata.role is kept as a fallback for legacy admins whose
-  // user_settings row hasn't been seeded yet.
+  // DB-backed role check (server-controlled, immutable by the user).
+  // No user_metadata fallback — that field is user-writable via
+  // auth.updateUser({ data: { role } }) and would defeat the whole point
+  // of migration 20260503. If a legacy admin somehow has no user_settings
+  // row, fix it explicitly via SQL: INSERT INTO user_settings (user_id, role)
+  // VALUES ('<id>', 'admin').
   const adminClient = createAdminClient();
   const { data: profile } = await adminClient
     .from("user_settings")
@@ -50,8 +53,7 @@ async function requireAdmin(): Promise<string> {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const role = (profile?.role as string | undefined) ?? user.user_metadata?.role;
-  if (role !== "admin") throw new Error("Keine Admin-Berechtigung");
+  if (profile?.role !== "admin") throw new Error("Keine Admin-Berechtigung");
 
   return user.id;
 }

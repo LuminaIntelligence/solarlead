@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
 
@@ -17,7 +18,18 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  if (user.user_metadata?.role !== "admin") {
+  // DB-backed role check — user_metadata.role is user-writable and untrusted.
+  // The middleware already gates this path, but we double-check at the layout
+  // boundary because Next.js doesn't guarantee middleware runs for every render
+  // (e.g. partial prerendering, edge cases with caching).
+  const adminSupabase = createAdminClient();
+  const { data: profile } = await adminSupabase
+    .from("user_settings")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profile?.role !== "admin") {
     redirect("/dashboard");
   }
 

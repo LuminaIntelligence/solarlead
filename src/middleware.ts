@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
@@ -50,15 +51,25 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Protect admin routes — only admins allowed
-  if (
-    user &&
-    request.nextUrl.pathname.startsWith("/admin") &&
-    user.user_metadata?.role !== "admin"
-  ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+  // Protect admin routes — only admins allowed.
+  // DB-backed: read role from user_settings via service-role client.
+  // user_metadata.role is NOT trusted (user-writable via auth.updateUser).
+  if (user && request.nextUrl.pathname.startsWith("/admin")) {
+    const adminClient = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+    const { data: profile } = await adminClient
+      .from("user_settings")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (profile?.role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Redirect logged-in users from auth pages to dashboard
