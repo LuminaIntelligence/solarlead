@@ -12,6 +12,7 @@
  */
 
 import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { autoAssignJob } from "@/lib/team/auto-assign";
 
@@ -28,20 +29,52 @@ function detectOptOut(text: string): boolean {
   return OPT_OUT_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-/** Extract plain text body from raw email source. */
-function extractBodyText(rawEmail: string): string {
-  const bodyStart = rawEmail.indexOf("\r\n\r\n");
-  const body = bodyStart >= 0 ? rawEmail.slice(bodyStart + 4) : rawEmail;
-  const lines = body.split(/\r?\n/);
-  return lines
-    .filter((l) => !l.startsWith(">") && !l.startsWith("&gt;"))
-    .join("\n")
-    .replace(/=\r?\n/g, "")
-    .replace(/={2}[0-9A-F]{2}/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim()
-    .slice(0, 2000);
+/**
+ * Extract clean plain text from a raw RFC822 email.
+ * Uses mailparser to handle multipart MIME, quoted-printable decoding,
+ * charset conversion (iso-8859-1, utf-8, etc.) and HTML→text fallback.
+ *
+ * Strips quoted reply lines, signatures, and collapses whitespace so
+ * the team-inbox shows a clean readable preview instead of MIME garbage.
+ */
+async function extractBodyText(rawEmail: string): Promise<string> {
+  try {
+    const parsed = await simpleParser(rawEmail, {
+      skipHtmlToText: false,
+      skipImageLinks: true,
+      skipTextLinks: false,
+    });
+
+    // Prefer text body; fall back to HTML-converted text
+    let text = (parsed.text ?? parsed.html ?? "").toString();
+
+    // Strip quoted reply lines ("> ...") and "On ... wrote:" headers
+    text = text
+      .split(/\r?\n/)
+      .filter((l) => !l.trimStart().startsWith(">"))
+      .filter((l) => !/^On .{1,80} wrote:\s*$/i.test(l))
+      .filter((l) => !/^Am .{1,80} schrieb .{1,80}:\s*$/i.test(l))
+      .filter((l) => !/^Von:\s/i.test(l))
+      .filter((l) => !/^Gesendet:\s/i.test(l))
+      .filter((l) => !/^An:\s/i.test(l))
+      .filter((l) => !/^Betreff:\s/i.test(l))
+      .join("\n");
+
+    // Cut at "-----Original Message-----" / "-- " signature delimiter
+    const sigIdx = text.search(/^(-{2,5}\s?Original.*|--\s*$)/m);
+    if (sigIdx > 0) text = text.slice(0, sigIdx);
+
+    // Collapse 3+ blank lines
+    text = text
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .slice(0, 2000);
+
+    return text;
+  } catch (e) {
+    console.warn("[imap-sync] mail parsing failed, falling back to raw:", e);
+    return rawEmail.slice(0, 2000);
+  }
 }
 
 export interface ImapSyncResult {
@@ -171,7 +204,7 @@ export async function runImapSync(): Promise<ImapSyncResult> {
           const rawEmail = full
             ? (full as { source?: Buffer }).source?.toString("utf-8") ?? ""
             : "";
-          const bodyText = extractBodyText(rawEmail);
+          const bodyText = await extractBodyText(rawEmail);
           const isOptOut = detectOptOut(bodyText);
           const newStatus = isOptOut ? "opted_out" : "replied";
 
