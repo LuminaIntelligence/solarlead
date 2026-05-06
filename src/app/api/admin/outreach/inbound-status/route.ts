@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { promises as dns } from "dns";
 import { requireAdmin } from "@/lib/auth/admin-gate";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isImapConfigured } from "@/lib/team/imap-sync";
 
 /**
@@ -17,7 +18,12 @@ import { isImapConfigured } from "@/lib/team/imap-sync";
 export async function GET() {
   const gate = await requireAdmin();
   if (gate.error) return gate.error;
-  const { supabase } = gate;
+
+  // Auth via requireAdmin (User-JWT), aber DB-Zugriff via service_role —
+  // mailgun_inbound_events / inbound_sync_state haben RLS aktiviert ohne
+  // Policies, also kommt nur service_role durch. Sicher: requireAdmin
+  // ist die Auth-Schwelle, der Admin-Client nur das DB-Tool.
+  const supabase = createAdminClient();
 
   // ── Detect active channel ──────────────────────────────────────────────────
   const imapConfigured = isImapConfigured();
