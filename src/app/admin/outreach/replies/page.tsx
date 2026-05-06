@@ -134,22 +134,28 @@ export default function RepliesPage() {
   const [jobs, setJobs] = useState<ReplyJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<"all" | PipelineStage>("all");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const fetchReplies = useCallback(async () => {
-    setLoading(true);
+  const fetchReplies = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/admin/outreach/replies");
       if (res.ok) {
         const data = await res.json();
         setJobs(data.jobs ?? []);
+        setLastUpdated(new Date());
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchReplies();
+    // Auto-refresh alle 30 Sek — neue Replies landen so live in der UI
+    // ohne dass der Admin manuell F5 drückt.
+    const interval = setInterval(() => fetchReplies(true), 30_000);
+    return () => clearInterval(interval);
   }, [fetchReplies]);
 
   function handleStageChange(jobId: string, stage: PipelineStage) {
@@ -185,6 +191,11 @@ export default function RepliesPage() {
             </h1>
             <p className="text-slate-500 text-sm mt-0.5">
               {jobs.length} Antworten — Deals durch den Funnel führen
+              {lastUpdated && (
+                <span className="ml-2 text-xs text-slate-400">
+                  · letztes Update {lastUpdated.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
+              )}
             </p>
           </div>
         </div>
