@@ -13,6 +13,10 @@ import {
   MessageSquare,
   Radar,
   RotateCcw,
+  Inbox,
+  KanbanSquare,
+  ClipboardCheck,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +29,14 @@ const navItems = [
   { label: "Follow-ups", href: "/admin/outreach/followups", icon: RotateCcw },
   { label: "Antworten", href: "/admin/outreach/replies", icon: MessageSquare },
   { label: "System-Einstellungen", href: "/admin/settings", icon: Settings },
+];
+
+// Reply-Team-Section — Admin sieht alles, kann auch in der Team-Sicht arbeiten
+const teamNavItems = [
+  { label: "Reply-Management", href: "/admin/reply-management", icon: Activity },
+  { label: "Posteingang (Team)", href: "/team/inbox", icon: Inbox },
+  { label: "Meine Replies", href: "/team/me", icon: ClipboardCheck },
+  { label: "Pipeline (Team)", href: "/team/board", icon: KanbanSquare },
 ];
 
 export function AdminSidebar() {
@@ -61,6 +73,31 @@ export function AdminSidebar() {
               ? pathname === "/admin/outreach" || (pathname.startsWith("/admin/outreach/") && !pathname.startsWith("/admin/outreach/replies") && !pathname.startsWith("/admin/outreach/followups"))
               : pathname.startsWith(item.href);
 
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "text-[#1F3D2E] font-semibold"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              )}
+              style={isActive ? { backgroundColor: "#B2D082" } : undefined}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              {item.label}
+            </Link>
+          );
+        })}
+
+        {/* Reply-Team-Bereich */}
+        <div className="my-3 border-t" style={{ borderColor: "rgba(178,208,130,0.2)" }} />
+        <div className="px-3 py-1 text-[10px] uppercase tracking-wide" style={{ color: "rgba(178,208,130,0.7)" }}>
+          Reply-Team
+        </div>
+        {teamNavItems.map((item) => {
+          const isActive = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

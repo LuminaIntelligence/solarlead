@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   LayoutDashboard,
@@ -15,11 +14,13 @@ import {
   Shield,
   Kanban,
   Bell,
+  Inbox,
+  ClipboardCheck,
+  KanbanSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 
-const navItems = [
+const baseNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Lead-Suche", href: "/dashboard/search", icon: Search },
   { label: "Adresssuche", href: "/dashboard/address-search", icon: MapPin },
@@ -31,20 +32,23 @@ const navItems = [
   { label: "Einstellungen", href: "/dashboard/settings", icon: Settings },
 ];
 
-export function SidebarNav() {
-  const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = useState(false);
+// Reply-Team-Section — sichtbar für Specialists, Team-Leads und Admins
+const teamNavItems = [
+  { label: "Posteingang (Team)", href: "/team/inbox", icon: Inbox },
+  { label: "Meine Replies", href: "/team/me", icon: ClipboardCheck },
+  { label: "Pipeline (Team)", href: "/team/board", icon: KanbanSquare },
+];
 
-  useEffect(() => {
-    async function checkAdmin() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.user_metadata?.role === "admin") {
-        setIsAdmin(true);
-      }
-    }
-    checkAdmin();
-  }, []);
+interface SidebarNavProps {
+  role: string;
+}
+
+export function SidebarNav({ role }: SidebarNavProps) {
+  const pathname = usePathname();
+
+  const isAdmin = role === "admin";
+  const isTeamMember =
+    role === "admin" || role === "team_lead" || role === "reply_specialist";
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col text-white" style={{ backgroundColor: "#1F3D2E" }}>
@@ -61,8 +65,8 @@ export function SidebarNav() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 px-3 py-4">
-        {navItems.map((item) => {
+      <nav className="flex-1 space-y-0.5 px-3 py-4 overflow-y-auto">
+        {baseNavItems.map((item) => {
           const isActive =
             item.href === "/dashboard"
               ? pathname === "/dashboard"
@@ -85,6 +89,35 @@ export function SidebarNav() {
             </Link>
           );
         })}
+
+        {/* Reply-Team-Bereich */}
+        {isTeamMember && (
+          <>
+            <div className="my-3 border-t" style={{ borderColor: "rgba(178,208,130,0.2)" }} />
+            <div className="px-3 py-1 text-[10px] uppercase tracking-wide" style={{ color: "rgba(178,208,130,0.7)" }}>
+              Reply-Team
+            </div>
+            {teamNavItems.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "text-[#1F3D2E] font-semibold"
+                      : "text-white/70 hover:text-white hover:bg-white/10"
+                  )}
+                  style={isActive ? { backgroundColor: "#B2D082" } : undefined}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </>
+        )}
 
         {/* Admin link */}
         {isAdmin && (
