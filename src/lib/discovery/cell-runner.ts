@@ -14,7 +14,12 @@ import { enrichDiscoveryLead } from "./enricher";
 import { recordApiCalls } from "./cost-tracker";
 import { recordHealth, sendAlertIfFresh } from "./health-tracker";
 
-const PER_CELL_TIMEOUT_MS = 90_000;
+// 120s statt 90s: Google Places antwortet bei großen Städten (Aachen,
+// Bielefeld) regelmäßig zwischen 90-110s. 90s war zu eng — 31 Timeouts
+// in einer Nacht. 120s reduziert das deutlich, ohne dass eine echte
+// Hänger-Anfrage die Cell sehr viel länger blockiert (PER_TICK-Budget
+// schützt die Run-Length insgesamt).
+const PER_CELL_TIMEOUT_MS = 120_000;
 const MAX_ATTEMPTS_BEFORE_ALERT = 3;
 const ENRICHMENT_STAGGER_MS = 2000;
 
