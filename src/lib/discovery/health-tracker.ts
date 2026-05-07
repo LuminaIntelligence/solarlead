@@ -62,8 +62,13 @@ export async function getLastHeartbeat(
 /**
  * Send a critical alert email — but only if:
  *   1. alert_email is configured in user_settings
- *   2. We haven't already alerted on the same kind in the last 60 minutes
- *      (dedup; prevents email floods when an API key is broken)
+ *   2. We haven't already alerted on the same kind since `dedupSince`
+ *      (default: 60 min ago — prevents email floods when an API key is broken)
+ *
+ * Special-case `budget_exceeded`: dedup-Fenster reicht standardmäßig bis
+ * zur nächsten UTC-Mitternacht (= Reset des Tagesbudgets), damit der
+ * Admin nur EINMAL pro Tag eine Mail bekommt, statt alle 4-5 Min beim
+ * jedem Cron-Tick.
  *
  * Returns true if an email was actually sent.
  */
@@ -72,8 +77,21 @@ export async function sendAlertIfFresh(
   alertKind: string,    // 'budget_exceeded' | 'cell_repeat_failure' | 'no_heartbeat' | ...
   subject: string,
   message: string,
-  context: Record<string, unknown> = {}
+  context: Record<string, unknown> = {},
+  dedupSince?: string   // ISO-timestamp; default: -60min, oder Mitternacht für budget_exceeded
 ): Promise<boolean> {
+  // Default dedup-Fenster
+  if (!dedupSince) {
+    if (alertKind === "budget_exceeded") {
+      // Reset bei UTC-Mitternacht (dasselbe wann das Tagesbudget reset wird).
+      // Heißt: einmal pro Tag, egal wie oft der Cron-Tick "Budget voll" sieht.
+      const midnight = new Date();
+      midnight.setUTCHours(0, 0, 0, 0);
+      dedupSince = midnight.toISOString();
+    } else {
+      dedupSince = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    }
+  }
   // Find admin alert_email
   const { data: settings } = await adminSupabase
     .from("user_settings")
@@ -95,13 +113,12 @@ export async function sendAlertIfFresh(
     return false;
   }
 
-  // Dedup: any 'alert_sent' event with same alertKind in last 60min?
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  // Dedup: any 'alert_sent' event with same alertKind since `dedupSince`?
   const { data: recent } = await adminSupabase
     .from("system_health_events")
     .select("id")
     .eq("kind", "alert_sent")
-    .gte("ts", oneHourAgo)
+    .gte("ts", dedupSince)
     .filter("context->>alert_kind", "eq", alertKind)
     .limit(1)
     .maybeSingle();
