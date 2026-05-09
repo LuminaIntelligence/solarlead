@@ -138,7 +138,7 @@ export async function runTestSeed(count = 30): Promise<SeedResult> {
         max_kw: Math.round(fake.maxArrayPanelsCount * 0.4), // ~400 W/Panel
         contact_name: fake.contactName,
         contact_email: fake.contactEmail,
-        status: "ready",
+        status: "new",
         is_test_data: true,
       })
       .select()
