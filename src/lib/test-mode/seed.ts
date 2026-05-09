@@ -95,11 +95,28 @@ async function ensureTestSpecialists(
   return ids;
 }
 
-export async function runTestSeed(count = 30): Promise<SeedResult> {
+export async function runTestSeed(count = 30, ownerUserId?: string): Promise<SeedResult> {
   const sb = createAdminClient();
 
   // 1) Test-Specialists sicherstellen
   await ensureTestSpecialists(sb);
+
+  // 2) Owner-User für solar_lead_mass.user_id (NOT NULL): erst der
+  // explizit übergebene Admin (der den Seed auslöste), Fallback ist
+  // der erste Admin aus user_settings.
+  let leadOwnerId = ownerUserId ?? null;
+  if (!leadOwnerId) {
+    const { data: anyAdmin } = await sb
+      .from("user_settings")
+      .select("user_id")
+      .eq("role", "admin")
+      .limit(1)
+      .maybeSingle();
+    leadOwnerId = (anyAdmin?.user_id as string | undefined) ?? null;
+  }
+  if (!leadOwnerId) {
+    throw new Error("Kein Admin-User gefunden für solar_lead_mass.user_id");
+  }
 
   // 2) Outreach-Batch anlegen
   const batchName = `[TEST] Outreach Test ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
@@ -136,6 +153,7 @@ export async function runTestSeed(count = 30): Promise<SeedResult> {
     const { data: lead, error: leadErr } = await sb
       .from("solar_lead_mass")
       .insert({
+        user_id: leadOwnerId, // NOT NULL — Admin der den Seed auslöste
         company_name: fake.companyName,
         category: fake.companyCategory,
         address: fake.address,

@@ -15,7 +15,8 @@ export async function POST(req: Request) {
   const count = Math.min(Math.max(parseInt(String(body.count ?? 30), 10) || 30, 1), 100);
 
   try {
-    const result = await runTestSeed(count);
+    // Admin der den Seed auslöste = Owner der Test-Records (solar_lead_mass.user_id)
+    const result = await runTestSeed(count, gate.user!.id);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json(
