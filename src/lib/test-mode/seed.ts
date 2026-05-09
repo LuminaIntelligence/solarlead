@@ -126,26 +126,35 @@ export async function runTestSeed(count = 30): Promise<SeedResult> {
   const summary: SeedResult["testLeads"] = [];
 
   for (const fake of fakeLeads) {
-    // Lead
+    // Lead in solar_lead_mass (NICHT leads — outreach_jobs.lead_id zeigt auf solar_lead_mass).
+    // Felder gemappt aus fake-data + dem solar_lead_mass-Schema:
+    //   company_name, category, address, city, postal_code, latitude, longitude,
+    //   email (für Inbound-Match-Fallback), status, is_pool_lead=true, is_test_data=true
+    const postalCodeMatch = fake.address.match(/(\d{5})\s/);
+    const postalCode = postalCodeMatch?.[1] ?? null;
+
     const { data: lead, error: leadErr } = await sb
-      .from("leads")
+      .from("solar_lead_mass")
       .insert({
         company_name: fake.companyName,
+        category: fake.companyCategory,
         address: fake.address,
-        lat: fake.lat,
-        lng: fake.lng,
-        max_usable_area: fake.roofAreaM2,
-        max_kw: Math.round(fake.maxArrayPanelsCount * 0.4), // ~400 W/Panel
-        contact_name: fake.contactName,
-        contact_email: fake.contactEmail,
+        city: fake.companyCity,
+        postal_code: postalCode,
+        country: "DE",
+        latitude: fake.lat,
+        longitude: fake.lng,
+        email: fake.contactEmail,
+        source: "test_seed",
         status: "new",
+        is_pool_lead: true,
         is_test_data: true,
       })
-      .select()
+      .select("id")
       .single();
 
     if (leadErr || !lead) {
-      console.warn(`[Seed] Lead-Insert fehlgeschlagen für ${fake.companyName}:`, leadErr);
+      console.warn(`[Seed] solar_lead_mass-Insert fehlgeschlagen für ${fake.companyName}:`, leadErr);
       continue;
     }
     leadsCreated++;
@@ -254,14 +263,14 @@ export async function runTestReset(batchId?: string | null): Promise<{
       deleted.solar_assessments = count ?? 0;
     }
 
-    // leads
+    // solar_lead_mass (das ist die Lead-Tabelle für outreach_jobs)
     if (leadIds.length > 0) {
       const { count } = await sb
-        .from("leads")
+        .from("solar_lead_mass")
         .delete({ count: "exact" })
         .in("id", leadIds)
         .eq("is_test_data", true);
-      deleted.leads = count ?? 0;
+      deleted.solar_lead_mass = count ?? 0;
     }
 
     // outreach_batches
@@ -280,8 +289,8 @@ export async function runTestReset(batchId?: string | null): Promise<{
       (await sb.from("outreach_jobs").delete({ count: "exact" }).eq("is_test_data", true)).count ?? 0;
     deleted.solar_assessments =
       (await sb.from("solar_assessments").delete({ count: "exact" }).eq("is_test_data", true)).count ?? 0;
-    deleted.leads =
-      (await sb.from("leads").delete({ count: "exact" }).eq("is_test_data", true)).count ?? 0;
+    deleted.solar_lead_mass =
+      (await sb.from("solar_lead_mass").delete({ count: "exact" }).eq("is_test_data", true)).count ?? 0;
     deleted.outreach_batches =
       (await sb.from("outreach_batches").delete({ count: "exact" }).eq("is_test_data", true)).count ?? 0;
   }
