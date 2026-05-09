@@ -145,7 +145,11 @@ export async function runTestSeed(count = 30): Promise<SeedResult> {
         latitude: fake.lat,
         longitude: fake.lng,
         email: fake.contactEmail,
-        source: "test_seed",
+        // source: ENUM-Spalte, "test_seed" wirft 22P02. Wir nutzen
+        // 'google_places' (einziger bekannter Wert) — das verfälscht das
+        // Test-Verhalten nicht, weil is_test_data=true die Records eh
+        // klar als Test markiert.
+        source: "google_places",
         status: "new",
         is_pool_lead: true,
         is_test_data: true,
