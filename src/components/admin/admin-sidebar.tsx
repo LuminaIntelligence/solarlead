@@ -17,6 +17,7 @@ import {
   KanbanSquare,
   ClipboardCheck,
   Activity,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const navItems = [
   { label: "Massenversand", href: "/admin/outreach", icon: SendHorizonal },
   { label: "Follow-ups", href: "/admin/outreach/followups", icon: RotateCcw },
   { label: "Antworten", href: "/admin/outreach/replies", icon: MessageSquare },
+  { label: "Test-Modus", href: "/admin/test-mode", icon: FlaskConical },
   { label: "System-Einstellungen", href: "/admin/settings", icon: Settings },
 ];
 

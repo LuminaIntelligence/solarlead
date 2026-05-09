@@ -55,6 +55,16 @@ export async function sendEmail(msg: MailgunMessage): Promise<{ id: string } | n
   if (msg["v:job-id"]) body.set("v:job-id", msg["v:job-id"]);
   if (msg["o:tag"]) msg["o:tag"].forEach((t) => body.append("o:tag", t));
 
+  // Mailgun-natives Tracking aktivieren — liefert Events an
+  // /api/webhooks/mailgun-events (Open/Click/Delivered/Bounced).
+  // Mailgun setzt automatisch ein 1×1-Tracking-Pixel + rewrited Links
+  // mit Redirect über mailgun.org für Click-Tracking.
+  body.set("o:tracking", "yes");
+  body.set("o:tracking-opens", "yes");
+  // Click-Tracking nur für HTML — Plain-Text-Mails würden die
+  // Redirect-URLs sonst hässlich darstellen.
+  body.set("o:tracking-clicks", "htmlonly");
+
   const credentials = Buffer.from(`api:${apiKey}`).toString("base64");
 
   const res = await fetch(`${MAILGUN_EU_BASE}/${domain}/messages`, {
