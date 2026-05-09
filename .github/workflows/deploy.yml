@@ -31,8 +31,9 @@ jobs:
         run: |
           ssh solarlead@${{ secrets.SERVER_HOST }} "
             cd /opt/solarlead &&
-            git checkout -- package.json package-lock.json &&
-            git pull origin master &&
+            git checkout -- package.json package-lock.json ecosystem.config.js 2>/dev/null || true &&
+            git fetch origin master &&
+            git reset --hard origin/master &&
             npm install &&
             rm -rf .next &&
             npm run build &&
