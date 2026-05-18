@@ -27,6 +27,7 @@ const navItems = [
   { label: "Nutzerverwaltung", href: "/admin/users", icon: Users },
   { label: "Alle Leads", href: "/admin/leads", icon: Database },
   { label: "Lead-Entdeckung", href: "/admin/discovery", icon: Radar },
+  { label: "LinkedIn-Finder", href: "/admin/leads/linkedin-backfill", icon: Linkedin },
   { label: "Massenversand", href: "/admin/outreach", icon: SendHorizonal },
   { label: "LinkedIn-Outreach", href: "/admin/outreach/linkedin", icon: Linkedin },
   { label: "Follow-ups", href: "/admin/outreach/followups", icon: RotateCcw },
