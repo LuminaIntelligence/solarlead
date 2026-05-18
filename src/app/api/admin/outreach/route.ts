@@ -123,10 +123,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch lead details from solar_lead_mass for enriching jobs
+    // Fetch lead details from solar_lead_mass for enriching jobs.
+    // linkedin_url ist mit dabei — wenn vorhanden, geht der Job in die
+    // LinkedIn-Pipeline (channel='linkedin'), sonst Email.
     const { data: leads, error: leadsError } = await supabase
       .from("solar_lead_mass")
-      .select("id, company_name, city, category")
+      .select("id, company_name, city, category, linkedin_url")
       .in("id", lead_ids);
 
     if (leadsError) {
@@ -149,13 +151,14 @@ export async function POST(request: NextRequest) {
 
     const leadMap: Record<
       string,
-      { company_name: string; city: string; category: string }
+      { company_name: string; city: string; category: string; linkedin_url: string | null }
     > = {};
     for (const lead of leads ?? []) {
       leadMap[lead.id] = {
         company_name: lead.company_name,
         city: lead.city,
         category: lead.category,
+        linkedin_url: lead.linkedin_url ?? null,
       };
     }
 
@@ -176,11 +179,19 @@ export async function POST(request: NextRequest) {
       const contact = contact_map[leadId] ?? null;
       const leadInfo = leadMap[leadId] ?? null;
 
+      // Channel-Routing: LinkedIn first, dann Email, sonst überspringen.
+      // User-Wahl: LinkedIn IMMER wenn URL vorhanden — bessere Response-Rate.
+      const channel: "email" | "linkedin" = leadInfo?.linkedin_url
+        ? "linkedin"
+        : "email";
+
       return {
         batch_id: batch.id,
         lead_id: leadId,
         contact_id: null,
         status: "pending" as const,
+        channel,
+        linkedin_url: leadInfo?.linkedin_url ?? null,
         contact_name: contact?.name ?? null,
         contact_email: contact?.email ?? null,
         contact_title: contact?.title ?? null,
@@ -196,11 +207,15 @@ export async function POST(request: NextRequest) {
         reply_content: null,
         assigned_to: null,
         scheduled_for: scheduledDate.toISOString().slice(0, 10),
-        followup_scheduled_for: followupDate
-          ? followupDate.toISOString().slice(0, 10)
-          : null,
+        // Follow-ups gibt's nur für Email — LinkedIn-Follow-up macht der
+        // Specialist manuell, sobald die InMail beantwortet wurde.
+        followup_scheduled_for:
+          channel === "email" && followupDate
+            ? followupDate.toISOString().slice(0, 10)
+            : null,
         followup_sent_at: null,
-        followup_status: "pending" as const,
+        followup_status:
+          channel === "email" ? ("pending" as const) : ("skipped" as const),
       };
     });
 

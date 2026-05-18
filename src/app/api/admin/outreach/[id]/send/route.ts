@@ -49,12 +49,17 @@ export async function POST(
 
   const templateType = (batch?.template_type ?? "erstkontakt") as "erstkontakt" | "followup" | "finale";
 
-  // Heutige pending Jobs laden
+  // Heutige pending Jobs laden — NUR Email-Channel.
+  // LinkedIn-Jobs werden separat über das LinkedIn-Outreach-Dashboard
+  // manuell versendet (Sales Navigator InMail). Würden wir sie hier
+  // einbeziehen, würden wir versuchen, an deren leere contact_email zu
+  // senden = Bounce-Schauer.
   const { data: jobs, error: jobsError } = await supabase
     .from("outreach_jobs")
     .select("*")
     .eq("batch_id", id)
     .eq("status", "pending")
+    .eq("channel", "email")
     .eq("scheduled_for", today);
 
   if (jobsError) return NextResponse.json({ error: jobsError.message }, { status: 500 });
