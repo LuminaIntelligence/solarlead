@@ -100,6 +100,10 @@ const REGIONS: RegionDef[] = [
       { label: "Regensburg",  lat: 49.013, lng: 12.102, km: 50 },
       { label: "Passau",      lat: 48.574, lng: 13.458, km: 40 },
       { label: "Rosenheim",   lat: 47.857, lng: 12.128, km: 35 },
+      { label: "Hof",         lat: 50.314, lng: 11.913, km: 30 }, // Oberfranken
+      { label: "Coburg",      lat: 50.260, lng: 10.965, km: 30 }, // Oberfranken
+      { label: "Landshut",    lat: 48.545, lng: 12.151, km: 30 }, // Niederbayern
+      { label: "Kempten",     lat: 47.726, lng: 10.317, km: 35 }, // Allgäu
     ],
   },
   {
@@ -131,12 +135,15 @@ const REGIONS: RegionDef[] = [
     circles: [
       { label: "Köln",       lat: 50.938, lng:  6.960, km: 50 },
       { label: "Düsseldorf", lat: 51.226, lng:  6.773, km: 35 },
+      { label: "Duisburg",   lat: 51.434, lng:  6.762, km: 30 },
       { label: "Dortmund",   lat: 51.514, lng:  7.465, km: 40 },
       { label: "Essen",      lat: 51.456, lng:  7.011, km: 30 },
       { label: "Bochum",     lat: 51.481, lng:  7.219, km: 25 },
       { label: "Münster",    lat: 51.962, lng:  7.626, km: 40 },
       { label: "Bielefeld",  lat: 52.021, lng:  8.532, km: 35 },
       { label: "Aachen",     lat: 50.776, lng:  6.084, km: 35 },
+      { label: "Paderborn",  lat: 51.719, lng:  8.755, km: 30 }, // Ostwestfalen-Lippe
+      { label: "Siegen",     lat: 50.875, lng:  8.024, km: 30 }, // Südwestfalen
     ],
   },
   {
@@ -153,31 +160,44 @@ const REGIONS: RegionDef[] = [
   {
     label: "Baden-Württemberg",
     emoji: "🌲",
-    description: "Stuttgart, Karlsruhe, Freiburg",
+    description: "Stuttgart, Karlsruhe, Freiburg, Mannheim",
     circles: [
-      { label: "Stuttgart",  lat: 48.775, lng:  9.182, km: 50 },
-      { label: "Karlsruhe",  lat: 49.008, lng:  8.404, km: 40 },
-      { label: "Freiburg",   lat: 47.999, lng:  7.842, km: 40 },
-      { label: "Ulm",        lat: 48.401, lng:  9.987, km: 40 },
+      { label: "Stuttgart",      lat: 48.775, lng:  9.182, km: 50 },
+      { label: "Karlsruhe",      lat: 49.008, lng:  8.404, km: 40 },
+      { label: "Freiburg",       lat: 47.999, lng:  7.842, km: 40 },
+      { label: "Ulm",            lat: 48.401, lng:  9.987, km: 40 },
+      { label: "Mannheim",       lat: 49.489, lng:  8.467, km: 35 }, // Rhein-Neckar (mit Heidelberg)
+      { label: "Heilbronn",      lat: 49.143, lng:  9.219, km: 30 }, // Industrie Nord-BW
+      { label: "Friedrichshafen",lat: 47.651, lng:  9.479, km: 30 }, // Bodensee
     ],
   },
   {
     label: "Hessen",
     emoji: "🏦",
-    description: "Frankfurt, Wiesbaden & Kassel",
+    description: "Frankfurt, Kassel, Gießen, Fulda & Mittelhessen",
     circles: [
-      { label: "Frankfurt",  lat: 50.110, lng:  8.682, km: 50 },
-      { label: "Kassel",     lat: 51.312, lng:  9.481, km: 40 },
+      { label: "Frankfurt",   lat: 50.110, lng:  8.682, km: 50 },
+      { label: "Kassel",      lat: 51.312, lng:  9.481, km: 40 },
+      { label: "Gießen",      lat: 50.587, lng:  8.678, km: 30 }, // Mittelhessen-Industrie
+      { label: "Fulda",       lat: 50.555, lng:  9.681, km: 35 }, // Osthessen, Logistik
+      { label: "Marburg",     lat: 50.802, lng:  8.766, km: 25 }, // Uni + Pharma
+      { label: "Bad Hersfeld",lat: 50.869, lng:  9.706, km: 30 }, // Mittel-Hessen-Gap
     ],
   },
   {
     label: "Niedersachsen",
     emoji: "🐎",
-    description: "Hannover, Braunschweig & Osnabrück",
+    description: "Hannover, Braunschweig, Osnabrück + Oldenburg, Göttingen, Küste",
     circles: [
-      { label: "Hannover",   lat: 52.374, lng:  9.738, km: 50 },
-      { label: "Braunschweig",lat:52.268, lng: 10.527, km: 40 },
-      { label: "Osnabrück",  lat: 52.279, lng:  8.047, km: 40 },
+      { label: "Hannover",      lat: 52.374, lng:  9.738, km: 50 },
+      { label: "Braunschweig",  lat: 52.268, lng: 10.527, km: 40 },
+      { label: "Osnabrück",     lat: 52.279, lng:  8.047, km: 40 },
+      { label: "Oldenburg",     lat: 53.144, lng:  8.214, km: 40 }, // West-NDS
+      { label: "Göttingen",     lat: 51.534, lng:  9.935, km: 40 }, // Süd-NDS
+      { label: "Lüneburg",      lat: 53.246, lng: 10.414, km: 40 }, // Nordost
+      { label: "Wilhelmshaven", lat: 53.529, lng:  8.116, km: 30 }, // Jadebusen
+      { label: "Emden",         lat: 53.366, lng:  7.207, km: 30 }, // Ostfriesland
+      { label: "Cuxhaven",      lat: 53.864, lng:  8.703, km: 30 }, // Elbmündung
     ],
   },
   {
@@ -193,38 +213,49 @@ const REGIONS: RegionDef[] = [
   {
     label: "Thüringen",
     emoji: "🌳",
-    description: "Erfurt, Jena & Weimar",
+    description: "Erfurt, Jena, Weimar, Gera & Eisenach",
     circles: [
-      { label: "Erfurt",     lat: 50.984, lng: 11.029, km: 45 },
+      { label: "Erfurt",   lat: 50.984, lng: 11.029, km: 45 }, // deckt Jena, Weimar, Apolda
+      { label: "Gera",     lat: 50.880, lng: 12.082, km: 30 }, // Ost-Thüringen
+      { label: "Eisenach", lat: 50.974, lng: 10.319, km: 30 }, // West-Thüringen
     ],
   },
   {
     label: "Brandenburg & Berlin",
     emoji: "🐻",
-    description: "Berlin und Umland",
+    description: "Berlin, Potsdam, Cottbus & Brandenburg",
     circles: [
-      { label: "Berlin",     lat: 52.520, lng: 13.405, km: 50 },
+      { label: "Berlin",                lat: 52.520, lng: 13.405, km: 50 }, // deckt Potsdam, Oranienburg
+      { label: "Cottbus",               lat: 51.756, lng: 14.334, km: 35 }, // Lausitz
+      { label: "Brandenburg a.d. Havel",lat: 52.408, lng: 12.560, km: 30 }, // West-Brandenburg
+      { label: "Frankfurt (Oder)",      lat: 52.347, lng: 14.553, km: 30 }, // Ost-Brandenburg
     ],
   },
   {
     label: "Rheinland-Pfalz",
     emoji: "🍷",
-    description: "Mainz, Koblenz & Trier",
+    description: "Mainz, Koblenz, Trier, Ludwigshafen & Pfalz",
     circles: [
-      { label: "Mainz",      lat: 49.999, lng:  8.273, km: 40 },
-      { label: "Koblenz",    lat: 50.361, lng:  7.590, km: 35 },
-      { label: "Trier",      lat: 49.749, lng:  6.637, km: 35 },
+      { label: "Mainz",          lat: 49.999, lng:  8.273, km: 40 },
+      { label: "Koblenz",        lat: 50.361, lng:  7.590, km: 35 },
+      { label: "Trier",          lat: 49.749, lng:  6.637, km: 35 },
+      { label: "Ludwigshafen",   lat: 49.481, lng:  8.435, km: 30 }, // Rhein-Neckar, BASF
+      { label: "Kaiserslautern", lat: 49.443, lng:  7.768, km: 30 }, // Pfalz
     ],
   },
   {
     label: "Norddeutschland",
     emoji: "⚓",
-    description: "Hamburg, Bremen, Kiel, Rostock",
+    description: "Hamburg, Bremen, Kiel, Rostock + Lübeck, Flensburg, MV-Küste",
     circles: [
-      { label: "Hamburg",    lat: 53.551, lng:  9.993, km: 50 },
-      { label: "Bremen",     lat: 53.073, lng:  8.806, km: 40 },
-      { label: "Kiel",       lat: 54.323, lng: 10.123, km: 40 },
-      { label: "Rostock",    lat: 54.092, lng: 12.099, km: 35 },
+      { label: "Hamburg",   lat: 53.551, lng:  9.993, km: 50 },
+      { label: "Bremen",    lat: 53.073, lng:  8.806, km: 40 },
+      { label: "Kiel",      lat: 54.323, lng: 10.123, km: 40 },
+      { label: "Rostock",   lat: 54.092, lng: 12.099, km: 35 },
+      { label: "Lübeck",    lat: 53.866, lng: 10.687, km: 30 }, // SH-Süd
+      { label: "Flensburg", lat: 54.782, lng:  9.437, km: 30 }, // SH-Nord
+      { label: "Schwerin",  lat: 53.629, lng: 11.413, km: 35 }, // MV-Mitte
+      { label: "Stralsund", lat: 54.310, lng: 13.094, km: 30 }, // MV-Ost
     ],
   },
 ];
