@@ -124,8 +124,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch lead details from solar_lead_mass for enriching jobs.
-    // linkedin_url ist mit dabei — wenn vorhanden, geht der Job in die
-    // LinkedIn-Pipeline (channel='linkedin'), sonst Email.
+    // linkedin_url auf solar_lead_mass ist meistens die Company-URL — die
+    // brauchen wir nur als Fallback. Die persönlichen Profile (für InMail)
+    // hängen an lead_contacts (siehe unten).
     const { data: leads, error: leadsError } = await supabase
       .from("solar_lead_mass")
       .select("id, company_name, city, category, linkedin_url")
@@ -133,6 +134,29 @@ export async function POST(request: NextRequest) {
 
     if (leadsError) {
       console.error("Fehler beim Abrufen der Lead-Daten:", leadsError.message);
+    }
+
+    // Persönliche LinkedIn-URLs aus lead_contacts holen, gematcht über
+    // die im contact_map ausgewählte E-Mail. Daher: Lead-ID + Kontakt-Email
+    // → linkedin_url des PERSONS-Profils, nicht des Firmen-Profils.
+    // Wenn die Person eine LinkedIn-URL hat, geht der Job in die LinkedIn-
+    // Pipeline (channel='linkedin'), sonst E-Mail.
+    const contactEmails = Object.values(contact_map)
+      .map((c) => c?.email)
+      .filter((e): e is string => !!e);
+    const contactLinkedInMap: Record<string, string | null> = {}; // key = `${lead_id}|${email_lower}`
+    if (contactEmails.length > 0) {
+      const { data: contacts } = await supabase
+        .from("lead_contacts")
+        .select("lead_id, email, linkedin_url")
+        .in("lead_id", lead_ids)
+        .in("email", contactEmails);
+      for (const c of contacts ?? []) {
+        if (c.lead_id && c.email) {
+          contactLinkedInMap[`${c.lead_id}|${c.email.toLowerCase()}`] =
+            c.linkedin_url ?? null;
+        }
+      }
     }
 
     // Fetch solar assessments (roof area) for lease estimate personalization
@@ -179,11 +203,18 @@ export async function POST(request: NextRequest) {
       const contact = contact_map[leadId] ?? null;
       const leadInfo = leadMap[leadId] ?? null;
 
-      // Channel-Routing: LinkedIn first, dann Email, sonst überspringen.
-      // User-Wahl: LinkedIn IMMER wenn URL vorhanden — bessere Response-Rate.
-      const channel: "email" | "linkedin" = leadInfo?.linkedin_url
-        ? "linkedin"
-        : "email";
+      // Channel-Routing: persönliche LinkedIn-URL des gewählten Kontakts
+      // hat Vorrang (für InMail). Fallback: Company-URL (nur als
+      // Display-Info, eigentlich kein InMail-Ziel). Sonst E-Mail.
+      const personalLinkedIn = contact?.email
+        ? contactLinkedInMap[`${leadId}|${contact.email.toLowerCase()}`] ?? null
+        : null;
+      const linkedInForJob = personalLinkedIn ?? leadInfo?.linkedin_url ?? null;
+      // Nur 'echte' persönliche LinkedIn-URLs routen auf LinkedIn-Pipeline.
+      // Company-URLs (`/company/...`) sind kein InMail-Ziel → Email-Channel.
+      const isPersonalLinkedIn =
+        !!linkedInForJob && /linkedin\.com\/in\//i.test(linkedInForJob);
+      const channel: "email" | "linkedin" = isPersonalLinkedIn ? "linkedin" : "email";
 
       return {
         batch_id: batch.id,
@@ -191,7 +222,7 @@ export async function POST(request: NextRequest) {
         contact_id: null,
         status: "pending" as const,
         channel,
-        linkedin_url: leadInfo?.linkedin_url ?? null,
+        linkedin_url: linkedInForJob,
         contact_name: contact?.name ?? null,
         contact_email: contact?.email ?? null,
         contact_title: contact?.title ?? null,
