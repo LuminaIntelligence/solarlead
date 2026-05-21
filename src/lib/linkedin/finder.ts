@@ -121,23 +121,50 @@ function calcConfidenceB(
   position: number,
   roles: string[]
 ): number {
+  // Strenger normalisieren — Suffixe + Trennzeichen weg, plus
+  // jedes Wort ≥ 4 Zeichen wird einzeln gegen Snippet/Title gecheckt.
+  const companyClean = company
+    .toLowerCase()
+    .replace(/\s*(gmbh|ag|kg|e\.v\.|holding|& co.*?$).*$/i, "")
+    .replace(/[^a-zäöüß0-9\s]/gi, " ")
+    .trim();
+  const distinctiveWords = companyClean
+    .split(/\s+/)
+    .filter((w) => w.length >= 4) // nur "echte" Firmen-Wörter (kein "und", "der" etc.)
+    .filter((w) => !["stahl", "metall", "bau", "haus", "werk", "gmbh", "transport", "logistik", "handel"].includes(w));
+  const textLower = (result.title + " " + result.snippet).toLowerCase();
+
+  // KRITISCH: mindestens EIN distinctive Firmen-Wort MUSS im Snippet/Title
+  // vorkommen. Sonst ist's eine Zufalls-Person die nichts mit der Firma
+  // zu tun hat — egal wie hoch sie bei Google rankt.
+  const hasCompanyMatch =
+    distinctiveWords.length === 0 // Fallback: kann keine guten Wörter rausziehen
+      ? textLower.includes(companyClean.split(/\s+/)[0] ?? "")
+      : distinctiveWords.some((w) => textLower.includes(w));
+
+  if (!hasCompanyMatch) {
+    // Hard cap: ohne Firmen-Match max. 0.35 — landet automatisch unter
+    // Threshold und damit NICHT in Auto-Apply
+    return 0.25;
+  }
+
   let score = 0;
-  if (position === 0) score += 0.3;
-  else if (position === 1) score += 0.2;
+  // Position
+  if (position === 0) score += 0.2;
+  else if (position === 1) score += 0.15;
   else if (position === 2) score += 0.1;
 
-  const companyNorm = company.toLowerCase().replace(/\s*(gmbh|ag|kg|e\.v\.|holding|& co.*).*$/i, "").trim();
-  if (companyNorm && (result.snippet.toLowerCase().includes(companyNorm) || result.title.toLowerCase().includes(companyNorm))) {
-    score += 0.3;
-  }
+  // Company-Match: höhere Punktzahl wenn MEHRERE distinctive Wörter matchen
+  const matchedWords = distinctiveWords.filter((w) => textLower.includes(w));
+  if (matchedWords.length >= 2) score += 0.4;
+  else if (matchedWords.length === 1) score += 0.25;
 
-  // Title-Match: einer der Decision-Maker-Rollen im Snippet/Title
-  const textLower = (result.title + " " + result.snippet).toLowerCase();
+  // Role-Match (Decision-Maker im Snippet/Title)
   if (roles.some((r) => textLower.includes(r.toLowerCase()))) {
-    score += 0.3;
+    score += 0.2;
   }
 
-  // Wenn ein erkennbarer Personenname im Title steht (mind. 2 Worte mit Großbuchstaben)
+  // Erkennbarer Personenname im Title
   const { name } = parseNameAndTitle(result);
   if (name && /^[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+/.test(name)) {
     score += 0.1;
