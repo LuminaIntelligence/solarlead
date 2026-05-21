@@ -36,7 +36,7 @@ import {
   isPersonalLinkedInUrl,
   type FoundProfile,
 } from "@/lib/linkedin/finder";
-import { isCseConfigured } from "@/lib/providers/search/googleCse";
+import { isAnySearchProviderConfigured, activeProvider } from "@/lib/providers/search/searchProvider";
 
 export const maxDuration = 60;
 
@@ -54,15 +54,16 @@ export async function POST(req: Request) {
   const gate = await requireAdminAndOrigin(req);
   if (gate.error) return gate.error;
 
-  if (!isCseConfigured()) {
+  if (!isAnySearchProviderConfigured()) {
     return NextResponse.json(
       {
         error:
-          "Google Custom Search nicht konfiguriert. ENV setzen: GOOGLE_CSE_API_KEY (oder GOOGLE_PLACES_API_KEY) + GOOGLE_CSE_ID",
+          "Kein Such-Provider konfiguriert. SERPAPI_KEY (bevorzugt) oder GOOGLE_CSE_API_KEY + GOOGLE_CSE_ID in .env.local setzen.",
       },
       { status: 503 }
     );
   }
+  const provider = activeProvider();
 
   const body = await req.json().catch(() => ({}));
   const minScore = Math.max(0, Math.min(100, Number(body.min_score ?? 80)));
@@ -302,19 +303,21 @@ export async function POST(req: Request) {
     results.push(result);
   }
 
-  // API-Calls in daily_api_usage tracken (provider='google_cse')
+  // API-Calls in daily_api_usage tracken — pro Provider getrennt
   if (apiCalls > 0) {
     const today = new Date().toISOString().slice(0, 10);
+    const providerKey = provider ?? "unknown";
     const { data: existing } = await sb
       .from("daily_api_usage")
       .select("id, calls, estimated_cost_eur")
       .eq("date", today)
-      .eq("provider", "google_cse")
+      .eq("provider", providerKey)
       .maybeSingle();
 
-    // Google CSE: ~$0.005 / Call (kein Free-Tier eingerechnet — wir zählen
-    // alle Calls; Pricing-Anzeige im UI zeigt die echte Rechnung)
-    const costPerCall = 0.005;
+    // Cost-Schätzung pro Provider:
+    //   google_cse: $0.005 / Call (~5€ / 1.000)
+    //   serpapi:    $0.01 / Call ($50 / 5.000)
+    const costPerCall = provider === "serpapi" ? 0.01 : 0.005;
     const additional = apiCalls * costPerCall;
 
     if (existing) {
@@ -330,7 +333,7 @@ export async function POST(req: Request) {
     } else {
       await sb.from("daily_api_usage").insert({
         date: today,
-        provider: "google_cse",
+        provider: providerKey,
         calls: apiCalls,
         estimated_cost_eur: additional,
       });
@@ -347,6 +350,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
+    provider,
     processed: results.length,
     api_calls: apiCalls,
     results,

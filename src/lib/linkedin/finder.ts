@@ -14,7 +14,16 @@
  *   - Title-Match aus Rolle (+0.2 bei Modus B)
  */
 
-import { searchCse, type CseResult } from "@/lib/providers/search/googleCse";
+import { searchWeb } from "@/lib/providers/search/searchProvider";
+
+// Result-Type (matcht beide Provider — CseResult und SerpResult sind
+// strukturell identisch)
+interface CseResult {
+  title: string;
+  link: string;
+  snippet: string;
+  displayLink: string;
+}
 
 const DECISION_MAKER_ROLES = [
   "Geschäftsführer",
@@ -145,7 +154,7 @@ export async function findProfileForPerson(args: {
 }): Promise<FinderResult> {
   const { firstName, lastName, company } = args;
   const query = `"${firstName} ${lastName}" "${company}" site:linkedin.com/in`;
-  const r = await searchCse(query, 5);
+  const r = await searchWeb(query, 5);
   if (!r.ok) {
     return {
       ok: false,
@@ -190,7 +199,7 @@ export async function findProfileAtCompany(args: {
     .map((r) => `"${r}"`)
     .join(" OR ");
   const query = `"${args.company}" site:linkedin.com/in (${roleQ})`;
-  const r = await searchCse(query, 8);
+  const r = await searchWeb(query, 8);
   if (!r.ok) {
     return {
       ok: false,
