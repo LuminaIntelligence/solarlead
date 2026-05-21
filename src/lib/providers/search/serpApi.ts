@@ -69,11 +69,19 @@ export async function searchSerp(query: string, num = 5): Promise<SerpResponse> 
 
     // SerpAPI gibt im Fehlerfall {error: "..."} mit HTTP 200 zurück (!)
     if (data.error) {
-      const isQuota = /searches|quota|exceeded|exhausted|run out/i.test(data.error);
+      const errMsg = String(data.error);
+      // "Google hasn't returned any results..." = einfach 0 Treffer, KEIN Fehler.
+      // SerpAPI behandelt 'no results' als error-field — wir mappen das auf
+      // ok:true mit leerem results-Array, sonst denkt der Caller es war ein
+      // API-Problem.
+      if (/hasn't returned any results|no results found/i.test(errMsg)) {
+        return { ok: true, results: [] };
+      }
+      const isQuota = /searches|quota|exceeded|exhausted|run out/i.test(errMsg);
       return {
         ok: false,
         results: [],
-        error: `SerpAPI: ${data.error}`,
+        error: `SerpAPI: ${errMsg}`,
         quotaExceeded: isQuota,
       };
     }
