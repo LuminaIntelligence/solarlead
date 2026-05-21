@@ -4,10 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   Linkedin, Loader2, ExternalLink, Send, MessageCircle, Inbox,
-  AlertCircle, ArrowRight, CheckCircle2,
+  AlertCircle, ArrowRight, CheckCircle2, Plus, Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 interface LinkedInJob {
   id: string;
@@ -42,9 +44,16 @@ const STATUS_TABS: Array<{ key: string; label: string; color: string }> = [
 const SOFT_DAILY_LIMIT = 25; // LinkedIn-Limit Personal Profile ist 20-30/Tag
 
 export default function LinkedInOutreachPage() {
+  const { toast } = useToast();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeStatus, setActiveStatus] = useState<string>("pending");
+
+  // Pool-Erstellungs-Form
+  const [poolMinScore, setPoolMinScore] = useState(70);
+  const [poolMaxScore, setPoolMaxScore] = useState(100);
+  const [poolLimit, setPoolLimit] = useState(200);
+  const [poolCreating, setPoolCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +68,42 @@ export default function LinkedInOutreachPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function createPool() {
+    if (!confirm(
+      `${poolMinScore}-${poolMaxScore} Score-Bereich, max ${poolLimit} Leads — alle bekommen einen LinkedIn-Outreach-Job. Bestehende Jobs werden nicht dupliziert. Fortfahren?`
+    )) return;
+    setPoolCreating(true);
+    try {
+      const res = await fetch("/api/admin/outreach/linkedin/pool-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          min_score: poolMinScore,
+          max_score: poolMaxScore,
+          limit: poolLimit,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        toast({ title: "Fehler", description: d.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: `${d.created} LinkedIn-Jobs erstellt`,
+        description: `${d.batch_name} · ${d.skipped_existing_job} schon vorhandene übersprungen`,
+      });
+      await load();
+    } catch (err) {
+      toast({
+        title: "Netzwerk-Fehler",
+        description: err instanceof Error ? err.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setPoolCreating(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -102,6 +147,72 @@ export default function LinkedInOutreachPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Pool-Erstellung (wenn keine Jobs vorhanden) */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-blue-700" />
+            Pool füllen aus vorhandenen Leads
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-slate-600 mb-3">
+            Erstellt LinkedIn-Outreach-Jobs für alle Leads im Score-Range die schon
+            eine persönliche LinkedIn-URL haben (über Apollo/Impressum/Google-CSE
+            gefunden). Du wählst dann pro Lead manuell ob du eine InMail schicken willst.
+          </p>
+          <div className="flex items-end gap-3 flex-wrap">
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Score min
+              </label>
+              <input
+                type="number"
+                value={poolMinScore}
+                onChange={(e) => setPoolMinScore(Number(e.target.value))}
+                min={0}
+                max={100}
+                className="w-20 border border-slate-300 rounded px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Score max
+              </label>
+              <input
+                type="number"
+                value={poolMaxScore}
+                onChange={(e) => setPoolMaxScore(Number(e.target.value))}
+                min={0}
+                max={100}
+                className="w-20 border border-slate-300 rounded px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Max Leads
+              </label>
+              <input
+                type="number"
+                value={poolLimit}
+                onChange={(e) => setPoolLimit(Number(e.target.value))}
+                min={1}
+                max={2000}
+                className="w-24 border border-slate-300 rounded px-2 py-1.5 text-sm"
+              />
+            </div>
+            <Button onClick={createPool} disabled={poolCreating}>
+              {poolCreating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              Pool erstellen
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Status-Tabs */}
       <div className="flex items-center gap-2 flex-wrap">

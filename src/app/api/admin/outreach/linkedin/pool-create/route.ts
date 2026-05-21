@@ -1,0 +1,192 @@
+/**
+ * POST /api/admin/outreach/linkedin/pool-create
+ *
+ * Erstellt ein virtuelles "LinkedIn-Pool"-Batch + befüllt es mit Outreach-Jobs
+ * für ALLE Leads die schon eine persönliche LinkedIn-URL haben. Anschließend
+ * tauchen die im LinkedIn-Outreach-Dashboard auf und der Admin kann sie
+ * einzeln abarbeiten.
+ *
+ * Body:
+ *   { min_score?: number, max_score?: number, limit?: number }
+ *
+ * Logik:
+ *   - Selektiert Leads im Score-Range die einen Kontakt mit linkedin.com/in/
+ *     haben
+ *   - Skipped Leads die schon einen offenen LinkedIn-Outreach-Job haben
+ *     (vermeidet Duplikate)
+ *   - Wählt pro Lead den besten Kontakt (is_primary=true bevorzugt)
+ *   - Erstellt einen LinkedIn-Outreach-Job pro Lead/Kontakt-Kombination
+ */
+
+import { NextResponse } from "next/server";
+import { requireAdminAndOrigin } from "@/lib/auth/admin-gate";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export const maxDuration = 120;
+
+interface ContactRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  title: string | null;
+  linkedin_url: string;
+  is_primary: boolean | null;
+}
+
+export async function POST(req: Request) {
+  const gate = await requireAdminAndOrigin(req);
+  if (gate.error) return gate.error;
+
+  const body = await req.json().catch(() => ({}));
+  const minScore = Math.max(0, Math.min(100, Number(body.min_score ?? 0)));
+  const maxScore = Math.max(0, Math.min(100, Number(body.max_score ?? 100)));
+  const limit = Math.max(1, Math.min(2000, Number(body.limit ?? 500)));
+
+  const sb = createAdminClient();
+
+  // 1) Leads im Score-Range mit existierender persönlicher LinkedIn-URL holen
+  // Wir filtern via lead_contacts.linkedin_url (LinkedIn-URL hängt am Kontakt,
+  // nicht am Lead).
+  const { data: contactsWithLinkedIn, error: cErr } = await sb
+    .from("lead_contacts")
+    .select("id, lead_id, name, email, title, linkedin_url, is_primary")
+    .ilike("linkedin_url", "%/in/%")
+    .limit(5000); // Hard cap zum Schutz vor Riesen-Result
+  if (cErr) {
+    return NextResponse.json({ error: cErr.message }, { status: 500 });
+  }
+
+  if (!contactsWithLinkedIn || contactsWithLinkedIn.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      created: 0,
+      skipped_no_lead: 0,
+      skipped_score: 0,
+      skipped_existing_job: 0,
+      message: "Keine Kontakte mit persönlicher LinkedIn-URL gefunden",
+    });
+  }
+
+  // Group nach lead_id (mehrere Kontakte pro Lead möglich)
+  const byLead = new Map<string, ContactRow[]>();
+  for (const c of contactsWithLinkedIn) {
+    if (!c.lead_id) continue;
+    if (!byLead.has(c.lead_id)) byLead.set(c.lead_id, []);
+    byLead.get(c.lead_id)!.push(c as ContactRow);
+  }
+
+  // 2) Lead-Scores holen
+  const leadIds = Array.from(byLead.keys());
+  const { data: leads } = await sb
+    .from("solar_lead_mass")
+    .select("id, company_name, city, category, total_score")
+    .in("id", leadIds)
+    .gte("total_score", minScore)
+    .lte("total_score", maxScore);
+
+  let skippedScore = byLead.size - (leads?.length ?? 0);
+
+  // 3) Existierende OFFENE LinkedIn-Jobs holen (Duplikat-Vermeidung)
+  const { data: existingJobs } = await sb
+    .from("outreach_jobs")
+    .select("lead_id")
+    .eq("channel", "linkedin")
+    .in("status", ["pending", "sent"])
+    .in("lead_id", leadIds);
+  const existingLeadIds = new Set((existingJobs ?? []).map((j) => j.lead_id));
+
+  // 4) Batch erstellen
+  const dateLabel = new Date().toISOString().slice(0, 10);
+  const batchName = `LinkedIn-Pool ${dateLabel} (Score ${minScore}-${maxScore})`;
+  const { data: batch, error: batchErr } = await sb
+    .from("outreach_batches")
+    .insert({
+      created_by: gate.user!.id,
+      name: batchName,
+      description: `Auto-generierter Pool aus ${leads?.length ?? 0} Leads mit persönlicher LinkedIn-URL.`,
+      status: "running",
+      daily_limit: 100,
+      total_leads: leads?.length ?? 0,
+      sent_count: 0,
+      replied_count: 0,
+      template_type: "linkedin",
+      followup_enabled: false,
+      followup_days: 0,
+      followup_template: "linkedin",
+      followup_sent_count: 0,
+      started_at: new Date().toISOString(),
+      completed_at: null,
+    })
+    .select()
+    .single();
+  if (batchErr || !batch) {
+    return NextResponse.json(
+      { error: `Batch-Erstellung fehlgeschlagen: ${batchErr?.message}` },
+      { status: 500 }
+    );
+  }
+
+  // 5) Jobs für jeden Lead erstellen — best contact wählen
+  let created = 0;
+  let skippedExisting = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const jobsToInsert: Record<string, unknown>[] = [];
+
+  for (const lead of leads ?? []) {
+    if (existingLeadIds.has(lead.id)) {
+      skippedExisting++;
+      continue;
+    }
+    const contacts = byLead.get(lead.id as string) ?? [];
+    // Beste Kontaktperson: erst is_primary mit LinkedIn, dann erste mit LinkedIn
+    const best =
+      contacts.find((c) => c.is_primary && c.linkedin_url) ??
+      contacts[0];
+    if (!best) continue;
+
+    jobsToInsert.push({
+      batch_id: batch.id,
+      lead_id: lead.id,
+      contact_id: best.id,
+      status: "pending",
+      channel: "linkedin",
+      linkedin_url: best.linkedin_url,
+      contact_name: best.name,
+      contact_email: best.email,
+      contact_title: best.title,
+      company_name: lead.company_name,
+      company_city: lead.city,
+      company_category: lead.category,
+      scheduled_for: today,
+      followup_status: "skipped", // Kein E-Mail-Follow-up für LinkedIn-Jobs
+    });
+    created++;
+    if (created >= limit) break;
+  }
+
+  // Batch-Insert in Chunks von 100
+  for (let i = 0; i < jobsToInsert.length; i += 100) {
+    const chunk = jobsToInsert.slice(i, i + 100);
+    const { error: jErr } = await sb.from("outreach_jobs").insert(chunk);
+    if (jErr) {
+      console.warn("[linkedin/pool-create] Job-Insert-Chunk fehlgeschlagen:", jErr);
+    }
+  }
+
+  // Total-Count im Batch aktualisieren
+  await sb
+    .from("outreach_batches")
+    .update({ total_leads: created })
+    .eq("id", batch.id);
+
+  return NextResponse.json({
+    ok: true,
+    batch_id: batch.id,
+    batch_name: batchName,
+    created,
+    total_leads_in_range: leads?.length ?? 0,
+    skipped_score: skippedScore,
+    skipped_existing_job: skippedExisting,
+    contacts_with_linkedin_total: byLead.size,
+  });
+}
