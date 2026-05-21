@@ -13,21 +13,7 @@
  * Tageslimit über daily_api_usage (provider='google_cse') gesteuert.
  */
 
-// Google hat zwei separate APIs:
-//   - /customsearch/v1            für CSEs mit "Im gesamten Web suchen"
-//   - /customsearch/v1/siterestrict für CSEs auf bestimmte Sites beschränkt
-//
-// Unsere CSE ist site-restricted (linkedin.com/*) — also brauchen wir
-// den siterestrict-Endpoint. Plus: das Projekt muss "Custom Search Site
-// Restricted JSON API" aktiviert haben (separat zur normalen Custom Search API).
-//
-// Falls jemand später eine "entire web"-CSE nutzt, kann er das per ENV
-// umstellen: GOOGLE_CSE_USE_SITERESTRICT=false
-const USE_SITERESTRICT =
-  process.env.GOOGLE_CSE_USE_SITERESTRICT !== "false";
-const CSE_ENDPOINT = USE_SITERESTRICT
-  ? "https://www.googleapis.com/customsearch/v1/siterestrict"
-  : "https://www.googleapis.com/customsearch/v1";
+const CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
 
 export interface CseResult {
   title: string;
