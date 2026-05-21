@@ -26,17 +26,21 @@ export interface SerpResponse {
   quotaExceeded?: boolean;
 }
 
+function getKey(): string | undefined {
+  return process.env.SERPAPI_KEY ?? process.env.SERP_API_KEY;
+}
+
 export function isSerpApiConfigured(): boolean {
-  return !!process.env.SERPAPI_KEY;
+  return !!getKey();
 }
 
 export async function searchSerp(query: string, num = 5): Promise<SerpResponse> {
-  const apiKey = process.env.SERPAPI_KEY;
+  const apiKey = getKey();
   if (!apiKey) {
     return {
       ok: false,
       results: [],
-      error: "SERPAPI_KEY fehlt in .env.local",
+      error: "SERPAPI_KEY oder SERP_API_KEY fehlt in .env.local",
     };
   }
 
