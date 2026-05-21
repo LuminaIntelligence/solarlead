@@ -58,7 +58,7 @@ export default function LinkedInBackfillPage() {
   const { toast } = useToast();
   const [minScore, setMinScore] = useState(80);
   const [maxScore, setMaxScore] = useState(100);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(20);
   const [autoThreshold, setAutoThreshold] = useState(0.7);
 
   const [running, setRunning] = useState(false);

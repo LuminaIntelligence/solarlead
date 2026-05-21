@@ -38,7 +38,9 @@ import {
 } from "@/lib/linkedin/finder";
 import { isAnySearchProviderConfigured, activeProvider } from "@/lib/providers/search/searchProvider";
 
-export const maxDuration = 60;
+// Längere maxDuration — bei 20 Leads × 2s SerpAPI ≈ 40s normal, aber
+// einzelne Calls können länger brauchen.
+export const maxDuration = 120;
 
 interface BackfillResult {
   lead_id: string;
@@ -98,6 +100,8 @@ export async function POST(req: Request) {
       message: "Keine offenen Leads im Score-Range gefunden.",
     });
   }
+
+  console.log(`[LinkedIn-Backfill] Start: ${leads.length} Leads, provider=${provider}, threshold=${autoThreshold}`);
 
   // 2) Pro Lead: Kontakte laden, Modus entscheiden, suchen, anwenden
   for (const lead of leads) {
@@ -300,8 +304,11 @@ export async function POST(req: Request) {
       result.message = e instanceof Error ? e.message : String(e);
     }
 
+    console.log(`[LinkedIn-Backfill] ${result.company_name}: mode=${result.mode} status=${result.status}${result.profile ? ` confidence=${result.profile.confidence.toFixed(2)}` : ""}${result.message ? ` msg=${result.message.slice(0, 80)}` : ""}`);
     results.push(result);
   }
+
+  console.log(`[LinkedIn-Backfill] Done: ${results.length} processed, ${apiCalls} API calls`);
 
   // API-Calls in daily_api_usage tracken — pro Provider getrennt
   if (apiCalls > 0) {
