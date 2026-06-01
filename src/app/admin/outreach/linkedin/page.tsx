@@ -89,9 +89,15 @@ export default function LinkedInOutreachPage() {
         toast({ title: "Fehler", description: d.error, variant: "destructive" });
         return;
       }
+      const emailNote =
+        d.email_pending_cancelled || d.email_followups_stopped
+          ? ` · ${d.email_pending_cancelled} Email-Jobs storniert, ${d.email_followups_stopped} Follow-ups gestoppt`
+          : "";
       toast({
         title: `${d.created} LinkedIn-Jobs erstellt`,
-        description: `${d.batch_name} · ${d.skipped_existing_job} schon vorhandene übersprungen`,
+        description:
+          `${d.batch_name} · ${d.skipped_existing_job} schon vorhandene übersprungen` +
+          emailNote,
       });
       await load();
     } catch (err) {

@@ -179,6 +179,41 @@ export async function POST(req: Request) {
     .update({ total_leads: created })
     .eq("id", batch.id);
 
+  // Email-Jobs für dieselben Leads stornieren/entschärfen, damit kein
+  // Lead parallel via Email UND LinkedIn angeschrieben wird.
+  //   - PENDING Email-Jobs → status='cancelled' (raus aus Auto-Send-Queue)
+  //   - SENT Email-Jobs    → followup_status='skipped' (kein Follow-up mehr)
+  const createdLeadIds = jobsToInsert.map((j) => j.lead_id as string);
+  let cancelledPending = 0;
+  let stoppedFollowups = 0;
+  if (createdLeadIds.length > 0) {
+    const { data: cancelledRows } = await sb
+      .from("outreach_jobs")
+      .update({
+        status: "cancelled",
+        followup_status: "skipped",
+      })
+      .eq("channel", "email")
+      .eq("status", "pending")
+      .in("lead_id", createdLeadIds)
+      .select("id");
+    cancelledPending = cancelledRows?.length ?? 0;
+
+    const { data: followupStoppedRows } = await sb
+      .from("outreach_jobs")
+      .update({ followup_status: "skipped" })
+      .eq("channel", "email")
+      .eq("status", "sent")
+      .is("followup_sent_at", null)
+      .in("lead_id", createdLeadIds)
+      .select("id");
+    stoppedFollowups = followupStoppedRows?.length ?? 0;
+
+    console.log(
+      `[linkedin/pool-create] Email-Jobs entschärft: ${cancelledPending} pending → cancelled, ${stoppedFollowups} sent → follow-up skipped`
+    );
+  }
+
   return NextResponse.json({
     ok: true,
     batch_id: batch.id,
@@ -188,5 +223,7 @@ export async function POST(req: Request) {
     skipped_score: skippedScore,
     skipped_existing_job: skippedExisting,
     contacts_with_linkedin_total: byLead.size,
+    email_pending_cancelled: cancelledPending,
+    email_followups_stopped: stoppedFollowups,
   });
 }

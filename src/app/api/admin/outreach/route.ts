@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       name,
       description,
       daily_limit,
-      lead_ids,
+      lead_ids: leadIdsInput,
       contact_map,
       template_type,
       followup_enabled = false,
@@ -73,9 +73,39 @@ export async function POST(request: NextRequest) {
       followup_template?: string;
     } = body;
 
-    if (!name || !lead_ids || lead_ids.length === 0) {
+    if (!name || !leadIdsInput || leadIdsInput.length === 0) {
       return NextResponse.json(
         { error: "Name und Lead-IDs sind erforderlich" },
+        { status: 400 }
+      );
+    }
+
+    // Pre-Filter: Leads die schon einen OFFENEN LinkedIn-Outreach-Job
+    // (pending oder sent) haben → aus diesem Email-Batch ausschließen.
+    // Verhindert doppelte Ansprache (Email + LinkedIn parallel) wenn der
+    // Lead bereits in der LinkedIn-Pipeline ist.
+    const { data: linkedInActive } = await supabase
+      .from("outreach_jobs")
+      .select("lead_id")
+      .eq("channel", "linkedin")
+      .in("status", ["pending", "sent"])
+      .in("lead_id", leadIdsInput);
+    const linkedInLeadSet = new Set(
+      (linkedInActive ?? []).map((j) => j.lead_id as string)
+    );
+    const skippedLinkedInCount = leadIdsInput.filter((id) =>
+      linkedInLeadSet.has(id)
+    ).length;
+    const lead_ids: string[] = leadIdsInput.filter(
+      (id) => !linkedInLeadSet.has(id)
+    );
+
+    if (lead_ids.length === 0) {
+      return NextResponse.json(
+        {
+          error: `Alle ${leadIdsInput.length} Leads sind bereits in der LinkedIn-Pipeline — kein Email-Batch erstellt.`,
+          skipped_in_linkedin_pipeline: skippedLinkedInCount,
+        },
         { status: 400 }
       );
     }
@@ -264,7 +294,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ batch }, { status: 201 });
+    return NextResponse.json(
+      {
+        batch,
+        skipped_in_linkedin_pipeline: skippedLinkedInCount,
+        total_requested: leadIdsInput.length,
+        total_created: lead_ids.length,
+      },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("Outreach POST fehlgeschlagen:", err);
     return NextResponse.json(
