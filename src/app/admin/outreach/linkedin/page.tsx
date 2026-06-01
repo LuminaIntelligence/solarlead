@@ -33,12 +33,14 @@ interface ApiResponse {
   jobs: LinkedInJob[];
   counts: Record<string, number>;
   today_sent_count: number;
+  stale_sent_count: number;
 }
 
 const STATUS_TABS: Array<{ key: string; label: string; color: string }> = [
   { key: "pending", label: "Offen", color: "bg-amber-100 text-amber-800" },
   { key: "sent",    label: "Gesendet", color: "bg-blue-100 text-blue-800" },
   { key: "replied", label: "Beantwortet", color: "bg-green-100 text-green-800" },
+  { key: "expired", label: "Abgelaufen (14d)", color: "bg-slate-100 text-slate-600" },
 ];
 
 const SOFT_DAILY_LIMIT = 25; // LinkedIn-Limit Personal Profile ist 20-30/Tag
@@ -161,6 +163,27 @@ export default function LinkedInOutreachPage() {
           Templates verwalten <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
+
+      {/* Stale-Reminder: gesendete InMails ≥1 Tag ohne Antwort-Vermerk */}
+      {data && data.stale_sent_count > 0 && activeStatus !== "sent" && (
+        <Card className="bg-amber-50 border-amber-200">
+          <CardContent className="py-3 px-4 flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Inbox className="h-4 w-4 shrink-0 text-amber-700" />
+              <span>
+                <strong>{data.stale_sent_count}</strong> InMails warten ≥1 Tag
+                auf Antwort-Check — kurz auf LinkedIn nachschauen?
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveStatus("sent")}
+              className="text-xs font-medium text-amber-900 hover:underline"
+            >
+              → Anzeigen
+            </button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Daily Rate-Limit-Hinweis */}
       {data && data.today_sent_count >= SOFT_DAILY_LIMIT * 0.8 && (
