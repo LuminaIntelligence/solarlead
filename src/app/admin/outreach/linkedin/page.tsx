@@ -54,6 +54,7 @@ export default function LinkedInOutreachPage() {
   const [poolMaxScore, setPoolMaxScore] = useState(100);
   const [poolLimit, setPoolLimit] = useState(200);
   const [poolCreating, setPoolCreating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +109,35 @@ export default function LinkedInOutreachPage() {
       });
     } finally {
       setPoolCreating(false);
+    }
+  }
+
+  async function syncEmailJobs() {
+    if (!confirm(
+      "Alle Leads die bereits in der LinkedIn-Pipeline sind werden aus offenen Email-Jobs entfernt (storniert) und ihre Follow-ups werden gestoppt. Fortfahren?"
+    )) return;
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/admin/outreach/linkedin/sync-email-jobs", {
+        method: "POST",
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        toast({ title: "Fehler", description: d.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: `Sync abgeschlossen`,
+        description: `${d.leads_in_linkedin_pipeline} LinkedIn-Leads geprüft · ${d.email_pending_cancelled} pending Email-Jobs storniert · ${d.email_followups_stopped} Follow-ups gestoppt`,
+      });
+    } catch (err) {
+      toast({
+        title: "Netzwerk-Fehler",
+        description: err instanceof Error ? err.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -215,6 +245,19 @@ export default function LinkedInOutreachPage() {
                 <Plus className="h-4 w-4 mr-2" />
               )}
               Pool erstellen
+            </Button>
+          </div>
+          <div className="mt-4 pt-3 border-t border-blue-200">
+            <p className="text-xs text-slate-600 mb-2">
+              <strong>Email-Sync für Bestand:</strong> Falls du den Pool schon vor
+              dem 01.06. erstellt hast, laufen ggf. noch parallele Email-Jobs für
+              dieselben Leads. Klick stoppt diese rückwirkend.
+            </p>
+            <Button onClick={syncEmailJobs} disabled={syncing} variant="outline" size="sm">
+              {syncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Email-Jobs für LinkedIn-Leads stoppen
             </Button>
           </div>
         </CardContent>
