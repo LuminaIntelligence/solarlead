@@ -7,7 +7,14 @@
  * einzeln abarbeiten.
  *
  * Body:
- *   { min_score?: number, max_score?: number, limit?: number }
+ *   {
+ *     min_score?: number,
+ *     max_score?: number,
+ *     limit?: number,
+ *     categories?: string[],     // Filter: nur diese Branchen
+ *     city_contains?: string,    // Filter: company_city ILIKE %city%
+ *     title_contains?: string,   // Filter: contact_title ILIKE %title%
+ *   }
  *
  * Logik:
  *   - Selektiert Leads im Score-Range die einen Kontakt mit linkedin.com/in/
@@ -41,17 +48,22 @@ export async function POST(req: Request) {
   const minScore = Math.max(0, Math.min(100, Number(body.min_score ?? 0)));
   const maxScore = Math.max(0, Math.min(100, Number(body.max_score ?? 100)));
   const limit = Math.max(1, Math.min(2000, Number(body.limit ?? 500)));
+  const categories: string[] = Array.isArray(body.categories)
+    ? body.categories.filter((c: unknown) => typeof c === "string")
+    : [];
+  const cityContains = (body.city_contains as string | undefined)?.trim() || null;
+  const titleContains = (body.title_contains as string | undefined)?.trim() || null;
 
   const sb = createAdminClient();
 
-  // 1) Leads im Score-Range mit existierender persönlicher LinkedIn-URL holen
-  // Wir filtern via lead_contacts.linkedin_url (LinkedIn-URL hängt am Kontakt,
-  // nicht am Lead).
-  const { data: contactsWithLinkedIn, error: cErr } = await sb
+  // 1) Kontakte mit persönlicher LinkedIn-URL holen, optional nach Title gefiltert
+  let contactQuery = sb
     .from("lead_contacts")
     .select("id, lead_id, name, email, title, linkedin_url, is_primary")
     .ilike("linkedin_url", "%/in/%")
-    .limit(5000); // Hard cap zum Schutz vor Riesen-Result
+    .limit(5000);
+  if (titleContains) contactQuery = contactQuery.ilike("title", `%${titleContains}%`);
+  const { data: contactsWithLinkedIn, error: cErr } = await contactQuery;
   if (cErr) {
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
@@ -75,14 +87,17 @@ export async function POST(req: Request) {
     byLead.get(c.lead_id)!.push(c as ContactRow);
   }
 
-  // 2) Lead-Scores holen
+  // 2) Lead-Scores holen mit Category-/City-Filter
   const leadIds = Array.from(byLead.keys());
-  const { data: leads } = await sb
+  let leadQuery = sb
     .from("solar_lead_mass")
     .select("id, company_name, city, category, total_score")
     .in("id", leadIds)
     .gte("total_score", minScore)
     .lte("total_score", maxScore);
+  if (categories.length > 0) leadQuery = leadQuery.in("category", categories);
+  if (cityContains) leadQuery = leadQuery.ilike("city", `%${cityContains}%`);
+  const { data: leads } = await leadQuery;
 
   let skippedScore = byLead.size - (leads?.length ?? 0);
 
