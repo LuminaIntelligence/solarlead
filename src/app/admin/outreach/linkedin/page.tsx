@@ -15,6 +15,7 @@ import { CATEGORY_GROUPS, getCategoryLabel, CATEGORY_EMOJI } from "@/lib/constan
 interface LinkedInJob {
   id: string;
   batch_id: string;
+  lead_id: string;
   status: string;
   contact_name: string | null;
   contact_title: string | null;
@@ -672,9 +673,12 @@ export default function LinkedInOutreachPage() {
                     return (
                       <tr key={j.id} className="border-b last:border-0 hover:bg-slate-50">
                         <td className="px-4 py-2.5">
-                          <div className="font-medium text-slate-900">
+                          <Link
+                            href={`/dashboard/leads/${j.lead_id}`}
+                            className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
+                          >
                             {j.company_name ?? "—"}
-                          </div>
+                          </Link>
                           <div className="text-xs text-slate-500">
                             {j.company_city ?? ""}
                             {j.company_category
