@@ -62,9 +62,16 @@ export default function LinkedInOutreachPage() {
   const { toast } = useToast();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // SessionStorage-Persistenz: Filter überleben Navigation zur Lead-Detail-Seite
+  // und Zurück-Button. Wird beim Schließen des Tabs (echtes Session-Ende)
+  // automatisch gelöscht.
+  const SESSION_KEY = "linkedin-outreach-filters-v1";
+
   const [activeStatus, setActiveStatus] = useState<string>("pending");
 
-  // Pool-Erstellungs-Form
+  // Pool-Erstellungs-Form (NICHT persistiert — wäre verwirrend wenn alte
+  // Pool-Filter beim nächsten Besuch wieder auftauchen)
   const [poolMinScore, setPoolMinScore] = useState(70);
   const [poolMaxScore, setPoolMaxScore] = useState(100);
   const [poolLimit, setPoolLimit] = useState(200);
@@ -75,14 +82,72 @@ export default function LinkedInOutreachPage() {
   const [poolCreating, setPoolCreating] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  // Filter / Sort State
+  // Filter / Sort State (wird in sessionStorage gespiegelt)
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterCity, setFilterCity] = useState("");
   const [filterTitle, setFilterTitle] = useState("");
   const [filterMinScore, setFilterMinScore] = useState("");
   const [filterMaxScore, setFilterMaxScore] = useState("");
   const [sortKey, setSortKey] = useState<string>("score_desc");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState<boolean>(false);
+  // Restored-Flag: erst wenn aus sessionStorage gelesen wurde dürfen wir
+  // den ersten Fetch und das Persistieren anstoßen. Verhindert Hydration-
+  // Mismatch und das versehentliche Überschreiben gespeicherter Filter mit
+  // den Defaults beim ersten Effect-Lauf.
+  const [restored, setRestored] = useState(false);
+
+  // 1) Beim Mount: Filter aus sessionStorage restoren
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (typeof s.activeStatus === "string") setActiveStatus(s.activeStatus);
+        if (typeof s.sortKey === "string") setSortKey(s.sortKey);
+        if (typeof s.showFilters === "boolean") setShowFilters(s.showFilters);
+        if (Array.isArray(s.filterCategories)) setFilterCategories(s.filterCategories);
+        if (typeof s.filterCity === "string") setFilterCity(s.filterCity);
+        if (typeof s.filterTitle === "string") setFilterTitle(s.filterTitle);
+        if (typeof s.filterMinScore === "string") setFilterMinScore(s.filterMinScore);
+        if (typeof s.filterMaxScore === "string") setFilterMaxScore(s.filterMaxScore);
+      }
+    } catch {
+      // ignore corrupt sessionStorage
+    }
+    setRestored(true);
+  }, []);
+
+  // 2) Jede Änderung der Filter spiegeln (erst nach Restore)
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          activeStatus,
+          sortKey,
+          showFilters,
+          filterCategories,
+          filterCity,
+          filterTitle,
+          filterMinScore,
+          filterMaxScore,
+        })
+      );
+    } catch {
+      // ignore quota errors
+    }
+  }, [
+    restored,
+    activeStatus,
+    sortKey,
+    showFilters,
+    filterCategories,
+    filterCity,
+    filterTitle,
+    filterMinScore,
+    filterMaxScore,
+  ]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,8 +211,9 @@ export default function LinkedInOutreachPage() {
     (filterMaxScore ? 1 : 0);
 
   useEffect(() => {
+    if (!restored) return; // erst nach sessionStorage-Restore fetchen
     load();
-  }, [load]);
+  }, [load, restored]);
 
   async function createPool() {
     const filterDesc = [
