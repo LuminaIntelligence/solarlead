@@ -1,0 +1,28 @@
+name: Outreach Existing-Solar Sweep
+
+on:
+  schedule:
+    # Daily at 05:30 UTC (~06:30 / 07:30 Berlin) — vor dem No-Reply-Sweep
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run existing-solar sweep
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/outreach-existing-solar-sweep")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Sweep failed with status $HTTP_CODE"
+            exit 1
+          fi

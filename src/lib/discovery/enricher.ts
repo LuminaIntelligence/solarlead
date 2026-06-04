@@ -13,6 +13,7 @@ import { FirecrawlContactProvider } from "@/lib/providers/contacts/firecrawl";
 import type { Contact } from "@/lib/providers/contacts/types";
 import { calculateScore } from "@/lib/scoring";
 import { checkExistingSolarOsm } from "@/lib/providers/mastr/overpass";
+import { markLeadAsExistingSolar } from "@/lib/leads/mark-existing-solar";
 
 const MIN_ROOF_AREA_M2 = 500;
 
@@ -86,10 +87,7 @@ export async function enrichDiscoveryLead(discoveryLeadId: string): Promise<void
       try {
         const solarCheck = await checkExistingSolarOsm(dl.latitude, dl.longitude);
         if (solarCheck.hasSolar) {
-          await supabase
-            .from("solar_lead_mass")
-            .update({ status: "existing_solar", updated_at: new Date().toISOString() })
-            .eq("id", leadId);
+          await markLeadAsExistingSolar(supabase, leadId, "discovery_enrichment");
           await supabase
             .from("discovery_leads")
             .update({

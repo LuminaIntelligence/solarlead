@@ -88,11 +88,14 @@ export async function POST(req: Request) {
   }
 
   // 2) Lead-Scores holen mit Category-/City-Filter
+  // WICHTIG: existing_solar-Leads werden grundsätzlich ausgeschlossen —
+  // wir wollen keinen Lead anschreiben dessen Dach bereits Solar hat.
   const leadIds = Array.from(byLead.keys());
   let leadQuery = sb
     .from("solar_lead_mass")
     .select("id, company_name, city, category, total_score")
     .in("id", leadIds)
+    .neq("status", "existing_solar")
     .gte("total_score", minScore)
     .lte("total_score", maxScore);
   if (categories.length > 0) leadQuery = leadQuery.in("category", categories);

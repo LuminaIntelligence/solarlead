@@ -139,6 +139,33 @@ export async function updateLead(
 ): Promise<Lead | null> {
   try {
     const supabase = await createClient();
+
+    // Sonderfall: Status wechselt auf 'existing_solar' → über zentralen Helper
+    // routen, damit Outreach-Jobs konsistent storniert werden und Tracking-
+    // Spalten (existing_solar_at, source='manual') gesetzt werden.
+    if (data.status === "existing_solar") {
+      const { markLeadAsExistingSolar } = await import(
+        "@/lib/leads/mark-existing-solar"
+      );
+      await markLeadAsExistingSolar(supabase, id, "manual");
+      // Andere Felder (notes, linkedin_url) trotzdem separat speichern wenn vorhanden
+      const otherData: Partial<Pick<Lead, "notes" | "linkedin_url">> = {};
+      if (data.notes !== undefined) otherData.notes = data.notes;
+      if (data.linkedin_url !== undefined) otherData.linkedin_url = data.linkedin_url;
+      if (Object.keys(otherData).length > 0) {
+        await supabase.from("solar_lead_mass").update(otherData).eq("id", id);
+      }
+      const { data: updated } = await supabase
+        .from("solar_lead_mass")
+        .select()
+        .eq("id", id)
+        .single();
+      revalidatePath("/leads");
+      revalidatePath(`/leads/${id}`);
+      revalidatePath("/dashboard");
+      return updated as Lead;
+    }
+
     const { data: updated, error } = await supabase
       .from("solar_lead_mass")
       .update(data)

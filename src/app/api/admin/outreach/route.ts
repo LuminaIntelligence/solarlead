@@ -80,30 +80,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Pre-Filter: Leads die schon einen OFFENEN LinkedIn-Outreach-Job
+    // Pre-Filter 1: Leads mit Status 'existing_solar' (Dach hat schon eine
+    // PV-Anlage) → aus jedem Outreach-Batch ausschließen, egal welcher Channel.
+    const { data: existingSolarRows } = await supabase
+      .from("solar_lead_mass")
+      .select("id")
+      .in("id", leadIdsInput)
+      .eq("status", "existing_solar");
+    const existingSolarSet = new Set(
+      (existingSolarRows ?? []).map((r) => r.id as string)
+    );
+    const skippedExistingSolarCount = existingSolarSet.size;
+    let workingLeadIds = leadIdsInput.filter((id) => !existingSolarSet.has(id));
+
+    // Pre-Filter 2: Leads die schon einen OFFENEN LinkedIn-Outreach-Job
     // (pending oder sent) haben → aus diesem Email-Batch ausschließen.
-    // Verhindert doppelte Ansprache (Email + LinkedIn parallel) wenn der
-    // Lead bereits in der LinkedIn-Pipeline ist.
+    // Verhindert doppelte Ansprache (Email + LinkedIn parallel).
     const { data: linkedInActive } = await supabase
       .from("outreach_jobs")
       .select("lead_id")
       .eq("channel", "linkedin")
       .in("status", ["pending", "sent"])
-      .in("lead_id", leadIdsInput);
+      .in("lead_id", workingLeadIds);
     const linkedInLeadSet = new Set(
       (linkedInActive ?? []).map((j) => j.lead_id as string)
     );
-    const skippedLinkedInCount = leadIdsInput.filter((id) =>
+    const skippedLinkedInCount = workingLeadIds.filter((id) =>
       linkedInLeadSet.has(id)
     ).length;
-    const lead_ids: string[] = leadIdsInput.filter(
+    const lead_ids: string[] = workingLeadIds.filter(
       (id) => !linkedInLeadSet.has(id)
     );
 
     if (lead_ids.length === 0) {
       return NextResponse.json(
         {
-          error: `Alle ${leadIdsInput.length} Leads sind bereits in der LinkedIn-Pipeline — kein Email-Batch erstellt.`,
+          error: `Alle ${leadIdsInput.length} Leads ausgeschlossen (${skippedExistingSolarCount} bereits Solar, ${skippedLinkedInCount} in LinkedIn-Pipeline) — kein Email-Batch erstellt.`,
+          skipped_existing_solar: skippedExistingSolarCount,
           skipped_in_linkedin_pipeline: skippedLinkedInCount,
         },
         { status: 400 }
@@ -297,6 +310,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         batch,
+        skipped_existing_solar: skippedExistingSolarCount,
         skipped_in_linkedin_pipeline: skippedLinkedInCount,
         total_requested: leadIdsInput.length,
         total_created: lead_ids.length,

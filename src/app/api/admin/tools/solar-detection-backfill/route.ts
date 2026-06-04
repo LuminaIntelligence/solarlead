@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, requireAdminAndOrigin } from "@/lib/auth/admin-gate";
 import { checkExistingSolarOsm } from "@/lib/providers/mastr/overpass";
+import { markLeadAsExistingSolar } from "@/lib/leads/mark-existing-solar";
 
 // GET — how many leads can still be checked
 export async function GET(_req: NextRequest) {
@@ -63,13 +64,7 @@ export async function POST(req: NextRequest) {
     const result = await checkExistingSolarOsm(lead.latitude, lead.longitude);
 
     if (result.hasSolar) {
-      await admin
-        .from("solar_lead_mass")
-        .update({
-          status: "existing_solar",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", lead.id);
+      await markLeadAsExistingSolar(admin, lead.id, "osm_backfill");
       detected++;
       console.log(
         `[SolarDetection] Marked as existing_solar: ${lead.company_name} (OSM count: ${result.count})`

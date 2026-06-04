@@ -353,10 +353,27 @@ async function runBackfill(zipPath: string): Promise<void> {
       const now = new Date().toISOString();
       let updated = 0;
       for (let i = 0; i < matchIds.length; i += 200) {
+        const chunk = matchIds.slice(i, i + 200);
         await supabase.from("solar_lead_mass")
-          .update({ status: "existing_solar", updated_at: now })
-          .in("id", matchIds.slice(i, i + 200));
-        updated += Math.min(200, matchIds.length - i);
+          .update({
+            status: "existing_solar",
+            existing_solar_at: now,
+            existing_solar_source: "mastr_backfill",
+            updated_at: now,
+          })
+          .in("id", chunk)
+          .neq("status", "existing_solar"); // existing_solar_at nicht überschreiben
+        // Outreach-Jobs für diese Leads aufräumen (bulk)
+        await supabase.from("outreach_jobs")
+          .update({ status: "cancelled", followup_status: "skipped", updated_at: now })
+          .in("lead_id", chunk)
+          .eq("status", "pending");
+        await supabase.from("outreach_jobs")
+          .update({ followup_status: "skipped", updated_at: now })
+          .in("lead_id", chunk)
+          .eq("status", "sent")
+          .is("followup_sent_at", null);
+        updated += chunk.length;
         job.updatedCount = updated;
       }
     }

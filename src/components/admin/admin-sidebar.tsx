@@ -19,6 +19,7 @@ import {
   Activity,
   FlaskConical,
   Linkedin,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ const navItems = [
   { label: "Übersicht", href: "/admin", icon: LayoutDashboard },
   { label: "Nutzerverwaltung", href: "/admin/users", icon: Users },
   { label: "Alle Leads", href: "/admin/leads", icon: Database },
+  { label: "Bereits Solar", href: "/admin/leads/existing-solar", icon: Sun },
   { label: "Lead-Entdeckung", href: "/admin/discovery", icon: Radar },
   { label: "LinkedIn-Finder", href: "/admin/leads/linkedin-backfill", icon: Linkedin },
   { label: "Massenversand", href: "/admin/outreach", icon: SendHorizonal },

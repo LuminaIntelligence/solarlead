@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkExistingSolarOsm } from "@/lib/providers/mastr/overpass";
+import { markLeadAsExistingSolar } from "@/lib/leads/mark-existing-solar";
 
 // Einfache Sperre gegen parallele Läufe (in-memory, reicht für Singleton-Prozess)
 let isRunning = false;
@@ -72,10 +73,7 @@ async function runSolarDetection(): Promise<void> {
         const result = await checkExistingSolarOsm(lead.latitude, lead.longitude);
 
         if (result.hasSolar) {
-          await supabase
-            .from("solar_lead_mass")
-            .update({ status: "existing_solar", updated_at: now })
-            .eq("id", lead.id);
+          await markLeadAsExistingSolar(supabase, lead.id, "osm_cron");
           marked++;
         }
 
