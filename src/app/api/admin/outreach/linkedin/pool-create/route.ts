@@ -91,6 +91,21 @@ export async function POST(req: Request) {
   // WICHTIG: existing_solar-Leads werden grundsätzlich ausgeschlossen —
   // wir wollen keinen Lead anschreiben dessen Dach bereits Solar hat.
   const leadIds = Array.from(byLead.keys());
+
+  // Diagnostik-Sub-Queries: zeigen WIE viele Leads in welcher Stufe rausfallen
+  const { count: diagSolarCount } = await sb
+    .from("solar_lead_mass")
+    .select("id", { count: "exact", head: true })
+    .in("id", leadIds)
+    .eq("status", "existing_solar");
+
+  const { count: diagOutsideScoreCount } = await sb
+    .from("solar_lead_mass")
+    .select("id", { count: "exact", head: true })
+    .in("id", leadIds)
+    .neq("status", "existing_solar")
+    .or(`total_score.lt.${minScore},total_score.gt.${maxScore}`);
+
   let leadQuery = sb
     .from("solar_lead_mass")
     .select("id, company_name, city, category, total_score")
@@ -112,6 +127,15 @@ export async function POST(req: Request) {
     .in("status", ["pending", "sent"])
     .in("lead_id", leadIds);
   const existingLeadIds = new Set((existingJobs ?? []).map((j) => j.lead_id));
+
+  // Diagnostik: wie viele cancelled LinkedIn-Jobs gibts schon für diese Leads?
+  // (Hilft zu erkennen ob Reset richtig war oder ob hier was hängt)
+  const { count: diagCancelledCount } = await sb
+    .from("outreach_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("channel", "linkedin")
+    .eq("status", "cancelled")
+    .in("lead_id", leadIds);
 
   // 4) Batch erstellen
   const dateLabel = new Date().toISOString().slice(0, 10);
@@ -272,5 +296,21 @@ export async function POST(req: Request) {
     contacts_with_linkedin_total: byLead.size,
     email_pending_cancelled: cancelledPending,
     email_followups_stopped: stoppedFollowups,
+    diagnostics: {
+      contacts_with_linkedin_url: contactsWithLinkedIn?.length ?? 0,
+      unique_leads_with_linkedin: byLead.size,
+      filtered_existing_solar: diagSolarCount ?? 0,
+      filtered_outside_score_range: diagOutsideScoreCount ?? 0,
+      filtered_by_category_or_city:
+        byLead.size -
+        (diagSolarCount ?? 0) -
+        (diagOutsideScoreCount ?? 0) -
+        (leads?.length ?? 0),
+      leads_after_all_filters: leads?.length ?? 0,
+      skipped_already_in_open_pool: skippedExisting,
+      skipped_solar_race_safety_net: skippedSolarRace,
+      previously_cancelled_jobs_for_these_leads: diagCancelledCount ?? 0,
+      final_jobs_created: created,
+    },
   });
 }

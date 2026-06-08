@@ -248,16 +248,42 @@ export default function LinkedInOutreachPage() {
         toast({ title: "Fehler", description: d.error, variant: "destructive" });
         return;
       }
-      const emailNote =
-        d.email_pending_cancelled || d.email_followups_stopped
-          ? ` · ${d.email_pending_cancelled} Email-Jobs storniert, ${d.email_followups_stopped} Follow-ups gestoppt`
+      // Wenn 0 erstellt wurden: Diagnose im Toast zeigen damit User sieht
+      // WARUM nichts gematched hat
+      if (d.created === 0 && d.diagnostics) {
+        const dx = d.diagnostics;
+        toast({
+          title: "0 Jobs erstellt — Diagnose:",
+          description:
+            `${dx.contacts_with_linkedin_url} Kontakte mit LinkedIn-URL · ` +
+            `${dx.unique_leads_with_linkedin} unique Leads · ` +
+            `davon ${dx.filtered_existing_solar} bereits Solar, ` +
+            `${dx.filtered_outside_score_range} außerhalb Score-Range, ` +
+            `${dx.filtered_by_category_or_city} durch Branche/Stadt-Filter raus, ` +
+            `${dx.skipped_already_in_open_pool} schon im offenen Pool. ` +
+            `Tipp: Filter weiter machen oder Score-Range erweitern.`,
+          duration: 15000,
+        });
+      } else {
+        const emailNote =
+          d.email_pending_cancelled || d.email_followups_stopped
+            ? ` · ${d.email_pending_cancelled} Email-Jobs storniert, ${d.email_followups_stopped} Follow-ups gestoppt`
+            : "";
+        const dx = d.diagnostics;
+        const dxNote = dx
+          ? ` (von ${dx.unique_leads_with_linkedin} möglichen: ` +
+            `${dx.filtered_existing_solar} Solar, ` +
+            `${dx.filtered_outside_score_range} Score, ` +
+            `${dx.filtered_by_category_or_city} Branche/Stadt, ` +
+            `${dx.skipped_already_in_open_pool} im Pool)`
           : "";
-      toast({
-        title: `${d.created} LinkedIn-Jobs erstellt`,
-        description:
-          `${d.batch_name} · ${d.skipped_existing_job} schon vorhandene übersprungen` +
-          emailNote,
-      });
+        toast({
+          title: `${d.created} LinkedIn-Jobs erstellt`,
+          description:
+            `${d.batch_name}${dxNote}${emailNote}`,
+          duration: 12000,
+        });
+      }
       await load();
     } catch (err) {
       toast({
