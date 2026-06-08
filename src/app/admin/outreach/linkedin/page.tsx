@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   Linkedin, Loader2, ExternalLink, Send, MessageCircle, Inbox,
-  AlertCircle, ArrowRight, CheckCircle2, Plus, Sparkles, X, Filter,
+  AlertCircle, ArrowRight, CheckCircle2, Plus, Sparkles, X, Filter, Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +81,7 @@ export default function LinkedInOutreachPage() {
   const [showPoolFilters, setShowPoolFilters] = useState(false);
   const [poolCreating, setPoolCreating] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   // Filter / Sort State (wird in sessionStorage gespiegelt)
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
@@ -266,6 +267,54 @@ export default function LinkedInOutreachPage() {
       });
     } finally {
       setPoolCreating(false);
+    }
+  }
+
+  async function resetPool() {
+    // Vorab den Count holen damit der Confirm-Dialog ehrlich ist
+    let pendingCount = 0;
+    try {
+      const probe = await fetch("/api/admin/outreach/linkedin/reset-pending");
+      if (probe.ok) {
+        const j = await probe.json();
+        pendingCount = j.pending_count ?? 0;
+      }
+    } catch {
+      // ignore — Confirm dann ohne Count
+    }
+    if (pendingCount === 0) {
+      toast({ title: "Nichts zu tun", description: "Keine offenen LinkedIn-Jobs vorhanden." });
+      return;
+    }
+    if (!confirm(
+      `${pendingCount} offene LinkedIn-Jobs werden auf 'cancelled' gesetzt.\n\n` +
+      `Gesendete & beantwortete Jobs bleiben unverändert. ` +
+      `Danach kannst du den Pool neu füllen.\n\n` +
+      `Fortfahren?`
+    )) return;
+    setResetting(true);
+    try {
+      const res = await fetch("/api/admin/outreach/linkedin/reset-pending", {
+        method: "POST",
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        toast({ title: "Fehler", description: d.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: "Pool zurückgesetzt",
+        description: `${d.cancelled} LinkedIn-Jobs storniert. Du kannst jetzt sauber neu starten.`,
+      });
+      await load();
+    } catch (err) {
+      toast({
+        title: "Netzwerk-Fehler",
+        description: err instanceof Error ? err.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -523,12 +572,33 @@ export default function LinkedInOutreachPage() {
               dem 01.06. erstellt hast, laufen ggf. noch parallele Email-Jobs für
               dieselben Leads. Klick stoppt diese rückwirkend.
             </p>
-            <Button onClick={syncEmailJobs} disabled={syncing} variant="outline" size="sm">
-              {syncing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
-              Email-Jobs für LinkedIn-Leads stoppen
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={syncEmailJobs} disabled={syncing} variant="outline" size="sm">
+                {syncing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : null}
+                Email-Jobs für LinkedIn-Leads stoppen
+              </Button>
+              <Button
+                onClick={resetPool}
+                disabled={resetting}
+                variant="outline"
+                size="sm"
+                className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+              >
+                {resetting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                )}
+                Pool komplett zurücksetzen
+              </Button>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-2">
+              <strong>Pool zurücksetzen:</strong> Storniert ALLE offenen
+              (pending) LinkedIn-Jobs. Gesendete & beantwortete bleiben.
+              Danach kannst du mit den verbesserten Filtern neu auffüllen.
+            </p>
           </div>
         </CardContent>
       </Card>
