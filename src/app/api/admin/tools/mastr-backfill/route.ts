@@ -354,7 +354,9 @@ async function runBackfill(zipPath: string): Promise<void> {
       let updated = 0;
       for (let i = 0; i < matchIds.length; i += 200) {
         const chunk = matchIds.slice(i, i + 200);
-        await supabase.from("solar_lead_mass")
+        // Versuche Update mit Tracking-Spalten, fallback auf status-only wenn
+        // Migration 20260605 noch nicht gelaufen ist.
+        const { error: updErr } = await supabase.from("solar_lead_mass")
           .update({
             status: "existing_solar",
             existing_solar_at: now,
@@ -363,6 +365,13 @@ async function runBackfill(zipPath: string): Promise<void> {
           })
           .in("id", chunk)
           .neq("status", "existing_solar"); // existing_solar_at nicht überschreiben
+        if (updErr && (updErr.code === "42703" || (updErr.message ?? "").toLowerCase().includes("existing_solar"))) {
+          console.warn("[mastr-backfill] Tracking-Spalten fehlen, fallback");
+          await supabase.from("solar_lead_mass")
+            .update({ status: "existing_solar", updated_at: now })
+            .in("id", chunk)
+            .neq("status", "existing_solar");
+        }
         // Outreach-Jobs für diese Leads aufräumen (bulk)
         await supabase.from("outreach_jobs")
           .update({ status: "cancelled", followup_status: "skipped", updated_at: now })
