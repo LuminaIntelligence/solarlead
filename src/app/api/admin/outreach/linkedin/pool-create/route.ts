@@ -182,6 +182,34 @@ export async function POST(req: Request) {
     if (created >= limit) break;
   }
 
+  // SAFETY-NET: Direkt vor dem Insert nochmal prüfen ob in der Zwischenzeit
+  // (z.B. durch parallelen OSM-Cron) ein Lead auf existing_solar geflippt ist.
+  // Verhindert dass solche Leads doch noch in den Pool reinrutschen, falls
+  // zwischen dem ersten Filter (Z.94) und dem Insert eine Race Condition liegt.
+  const insertLeadIds = jobsToInsert.map((j) => j.lead_id as string);
+  let skippedSolarRace = 0;
+  if (insertLeadIds.length > 0) {
+    const { data: solarRows } = await sb
+      .from("solar_lead_mass")
+      .select("id")
+      .in("id", insertLeadIds)
+      .eq("status", "existing_solar");
+    const solarSet = new Set((solarRows ?? []).map((r) => r.id as string));
+    if (solarSet.size > 0) {
+      const before = jobsToInsert.length;
+      const filtered = jobsToInsert.filter(
+        (j) => !solarSet.has(j.lead_id as string)
+      );
+      skippedSolarRace = before - filtered.length;
+      jobsToInsert.length = 0;
+      jobsToInsert.push(...filtered);
+      created -= skippedSolarRace;
+      console.log(
+        `[linkedin/pool-create] Safety-Net: ${skippedSolarRace} existing_solar Leads im letzten Moment rausgefiltert`
+      );
+    }
+  }
+
   // Batch-Insert in Chunks von 100
   for (let i = 0; i < jobsToInsert.length; i += 100) {
     const chunk = jobsToInsert.slice(i, i + 100);
@@ -240,6 +268,7 @@ export async function POST(req: Request) {
     total_leads_in_range: leads?.length ?? 0,
     skipped_score: skippedScore,
     skipped_existing_job: skippedExisting,
+    skipped_solar_race: skippedSolarRace,
     contacts_with_linkedin_total: byLead.size,
     email_pending_cancelled: cancelledPending,
     email_followups_stopped: stoppedFollowups,

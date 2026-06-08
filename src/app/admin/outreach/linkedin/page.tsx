@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   Linkedin, Loader2, ExternalLink, Send, MessageCircle, Inbox,
-  AlertCircle, ArrowRight, CheckCircle2, Plus, Sparkles, X, Filter, Sun,
+  AlertCircle, ArrowRight, CheckCircle2, Plus, Sparkles, X, Filter,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -81,7 +81,6 @@ export default function LinkedInOutreachPage() {
   const [showPoolFilters, setShowPoolFilters] = useState(false);
   const [poolCreating, setPoolCreating] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [solarSweeping, setSolarSweeping] = useState(false);
 
   // Filter / Sort State (wird in sessionStorage gespiegelt)
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
@@ -267,40 +266,6 @@ export default function LinkedInOutreachPage() {
       });
     } finally {
       setPoolCreating(false);
-    }
-  }
-
-  async function solarSweep() {
-    if (!confirm(
-      "Alle Leads die bereits Solar haben werden aus offenen Email- UND LinkedIn-Jobs entfernt. Fortfahren?"
-    )) return;
-    setSolarSweeping(true);
-    try {
-      const res = await fetch("/api/admin/outreach/existing-solar-sweep", {
-        method: "POST",
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        toast({ title: "Fehler", description: d.error, variant: "destructive" });
-        return;
-      }
-      toast({
-        title: "Solar-Sweep abgeschlossen",
-        description:
-          `${d.existing_solar_leads} Solar-Leads geprüft · ` +
-          `${d.pending_linkedin_cancelled} LinkedIn-Jobs storniert · ` +
-          `${d.pending_email_cancelled} Email-Jobs storniert · ` +
-          `${d.followups_stopped} Follow-ups gestoppt`,
-      });
-      await load();
-    } catch (err) {
-      toast({
-        title: "Netzwerk-Fehler",
-        description: err instanceof Error ? err.message : "",
-        variant: "destructive",
-      });
-    } finally {
-      setSolarSweeping(false);
     }
   }
 
@@ -558,34 +523,12 @@ export default function LinkedInOutreachPage() {
               dem 01.06. erstellt hast, laufen ggf. noch parallele Email-Jobs für
               dieselben Leads. Klick stoppt diese rückwirkend.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={syncEmailJobs} disabled={syncing} variant="outline" size="sm">
-                {syncing ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : null}
-                Email-Jobs für LinkedIn-Leads stoppen
-              </Button>
-              <Button
-                onClick={solarSweep}
-                disabled={solarSweeping}
-                variant="outline"
-                size="sm"
-                className="border-orange-300 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
-              >
-                {solarSweeping ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Sun className="h-4 w-4 mr-1.5" />
-                )}
-                Solar-Leads aus Outreach entfernen
-              </Button>
-            </div>
-            <p className="text-[11px] text-slate-500 mt-2">
-              <strong>Solar-Leads entfernen:</strong> Wenn ein Lead nachträglich
-              als „bereits Solar vorhanden" markiert wurde (z.B. durch den
-              nächtlichen OSM-Check), bleiben offene Email-/LinkedIn-Jobs sonst
-              aktiv. Dieser Sweep storniert sie sofort.
-            </p>
+            <Button onClick={syncEmailJobs} disabled={syncing} variant="outline" size="sm">
+              {syncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Email-Jobs für LinkedIn-Leads stoppen
+            </Button>
           </div>
         </CardContent>
       </Card>
