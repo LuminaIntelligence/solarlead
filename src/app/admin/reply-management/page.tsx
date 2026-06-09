@@ -285,7 +285,12 @@ export default function AdminReplyManagementPage() {
                       <div className="flex items-center gap-1.5">
                         {m.role === "admin" && <Crown className="h-3.5 w-3.5 text-amber-500" />}
                         {m.role === "team_lead" && <Crown className="h-3.5 w-3.5 text-purple-500" />}
-                        <span className="font-medium">{m.email ?? m.user_id.slice(0, 8)}</span>
+                        <Link
+                          href={`/admin/specialists/${m.user_id}`}
+                          className="font-medium text-blue-700 hover:underline"
+                        >
+                          {m.email ?? m.user_id.slice(0, 8)}
+                        </Link>
                         {m.role !== "reply_specialist" && (
                           <Badge variant="outline" className="text-[10px]">
                             {m.role === "admin" ? "Admin" : "Lead"}
