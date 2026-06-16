@@ -111,6 +111,10 @@ export async function PATCH(
 }
 
 // DELETE /api/leads/[id]  → Lead löschen
+//
+// Nur Admins. Löschen ist irreversibel und ein Reply-Specialist soll nicht
+// versehentlich einen Lead vernichten auf dem gerade ein Reply-Workflow
+// läuft. Andere Team-Rollen bekommen 403.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -125,13 +129,25 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Rolle prüfen — nur 'admin' darf löschen
+    const { data: settings } = await supabase
+      .from("user_settings")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (settings?.role !== "admin") {
+      return NextResponse.json(
+        { error: "Nur Admins dürfen Leads löschen" },
+        { status: 403 }
+      );
+    }
+
     const { id } = await params;
 
     const { error } = await supabase
       .from("solar_lead_mass")
       .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
+      .eq("id", id);
 
     if (error) {
       console.error("[DELETE /api/leads/[id]] DB error:", error);

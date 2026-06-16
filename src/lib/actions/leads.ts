@@ -192,6 +192,21 @@ export async function updateLead(
 export async function deleteLead(id: string): Promise<boolean> {
   try {
     const supabase = await createClient();
+    // Rolle prüfen — nur 'admin' darf löschen
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.warn("[deleteLead] no auth user");
+      return false;
+    }
+    const { data: settings } = await supabase
+      .from("user_settings")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (settings?.role !== "admin") {
+      console.warn(`[deleteLead] user ${user.id} role=${settings?.role} not allowed`);
+      return false;
+    }
     const { error } = await supabase.from("solar_lead_mass").delete().eq("id", id);
 
     if (error) {
