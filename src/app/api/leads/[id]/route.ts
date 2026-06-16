@@ -20,6 +20,12 @@ const UpdateLeadSchema = z.object({
 });
 
 // PATCH /api/leads/[id]  → Lead-Felder aktualisieren
+//
+// Team-Modell: JEDER authentifizierte Nutzer mit einer Team-Rolle darf
+// Lead-Daten (insbesondere Notizen, Status, CRM-Felder) editieren — nicht
+// nur der ursprüngliche Lead-Owner (user_id). Damit Reply-Specialists
+// (Helena & Co.) auch Notizen an Leads schreiben können, die ein Admin
+// per Discovery angelegt hat. Wer geändert hat steht in last_edited_by.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -46,21 +52,19 @@ export async function PATCH(
       );
     }
 
-    // Sicherstellen, dass der Lead dem Nutzer gehört
+    // Existenz-Check (kein Owner-Check mehr — Team-weite Bearbeitung)
     const { data: existing, error: fetchError } = await supabase
       .from("solar_lead_mass")
       .select("id")
       .eq("id", id)
-      .eq("user_id", user.id)
       .single();
 
     if (fetchError || !existing) {
       return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
     }
 
-    // Track WHO edited and WHEN. The DB columns may not exist yet on older
-    // deployments — if the migration hasn't run, the update is best-effort
-    // (we retry without these fields on column-not-found errors).
+    // Track WHO edited and WHEN. Die DB-Spalten existieren ab Migration
+    // 20260505_user_edit_tracking. Fallback wenn nicht vorhanden.
     const updatePayload = {
       ...parsed.data,
       last_edited_by: user.id,
@@ -71,7 +75,6 @@ export async function PATCH(
       .from("solar_lead_mass")
       .update(updatePayload)
       .eq("id", id)
-      .eq("user_id", user.id)
       .select()
       .single();
 
@@ -83,7 +86,6 @@ export async function PATCH(
         .from("solar_lead_mass")
         .update(parsed.data)
         .eq("id", id)
-        .eq("user_id", user.id)
         .select()
         .single();
       data = retry.data;
