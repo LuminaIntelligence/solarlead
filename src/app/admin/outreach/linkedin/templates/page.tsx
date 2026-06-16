@@ -214,8 +214,11 @@ export default function LinkedInTemplatesPage() {
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
                 Body (max 2000 Zeichen) — Tokens:{" "}
-                <code>{"{firstname}"}</code> <code>{"{company}"}</code>{" "}
-                <code>{"{city}"}</code> <code>{"{title}"}</code>
+                <code>{"{firstname}"}</code> <code>{"{lastname}"}</code>{" "}
+                <code>{"{salutation_lastname}"}</code>{" "}
+                <code>{"{company}"}</code> <code>{"{city}"}</code>{" "}
+                <code>{"{title}"}</code> <code>{"{roof_m2_formatted}"}</code>{" "}
+                <code>{"{lease}"}</code>
               </label>
               <textarea
                 value={editing.body}
