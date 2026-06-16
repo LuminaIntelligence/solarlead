@@ -106,10 +106,23 @@ export async function POST(req: Request) {
     .neq("status", "existing_solar")
     .or(`total_score.lt.${minScore},total_score.gt.${maxScore}`);
 
+  // Leads MIT Dachflächen-Assessment (max_array_area_m2 > 0) ermitteln —
+  // hard requirement: ohne gemessene Dachfläche keine Personalisierung
+  // möglich, also auch keinen Outreach.
+  const { data: roofAssessments } = await sb
+    .from("solar_assessments")
+    .select("lead_id, max_array_area_m2")
+    .in("lead_id", leadIds)
+    .gt("max_array_area_m2", 0);
+  const leadsWithRoof = new Set(
+    (roofAssessments ?? []).map((a) => a.lead_id as string)
+  );
+  const diagNoRoofCount = leadIds.filter((id) => !leadsWithRoof.has(id)).length;
+
   let leadQuery = sb
     .from("solar_lead_mass")
     .select("id, company_name, city, category, total_score")
-    .in("id", leadIds)
+    .in("id", Array.from(leadsWithRoof))
     .neq("status", "existing_solar")
     .gte("total_score", minScore)
     .lte("total_score", maxScore);
@@ -299,10 +312,12 @@ export async function POST(req: Request) {
     diagnostics: {
       contacts_with_linkedin_url: contactsWithLinkedIn?.length ?? 0,
       unique_leads_with_linkedin: byLead.size,
+      filtered_no_roof_area: diagNoRoofCount,
       filtered_existing_solar: diagSolarCount ?? 0,
       filtered_outside_score_range: diagOutsideScoreCount ?? 0,
       filtered_by_category_or_city:
         byLead.size -
+        diagNoRoofCount -
         (diagSolarCount ?? 0) -
         (diagOutsideScoreCount ?? 0) -
         (leads?.length ?? 0),

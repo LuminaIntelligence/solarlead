@@ -257,7 +257,8 @@ export default function LinkedInOutreachPage() {
           description:
             `${dx.contacts_with_linkedin_url} Kontakte mit LinkedIn-URL · ` +
             `${dx.unique_leads_with_linkedin} unique Leads · ` +
-            `davon ${dx.filtered_existing_solar} bereits Solar, ` +
+            `davon ${dx.filtered_no_roof_area ?? 0} ohne Dachfläche, ` +
+            `${dx.filtered_existing_solar} bereits Solar, ` +
             `${dx.filtered_outside_score_range} außerhalb Score-Range, ` +
             `${dx.filtered_by_category_or_city} durch Branche/Stadt-Filter raus, ` +
             `${dx.skipped_already_in_open_pool} schon im offenen Pool. ` +
@@ -272,6 +273,7 @@ export default function LinkedInOutreachPage() {
         const dx = d.diagnostics;
         const dxNote = dx
           ? ` (von ${dx.unique_leads_with_linkedin} möglichen: ` +
+            `${dx.filtered_no_roof_area ?? 0} ohne Dach, ` +
             `${dx.filtered_existing_solar} Solar, ` +
             `${dx.filtered_outside_score_range} Score, ` +
             `${dx.filtered_by_category_or_city} Branche/Stadt, ` +

@@ -93,6 +93,21 @@ export async function POST(request: NextRequest) {
     const skippedExistingSolarCount = existingSolarSet.size;
     let workingLeadIds = leadIdsInput.filter((id) => !existingSolarSet.has(id));
 
+    // Pre-Filter 1b: Leads OHNE gemessene Dachfläche → ausschließen.
+    // Ohne max_array_area_m2 keine Personalisierung möglich (kein Pacht-Wert,
+    // keine Dachgröße im Anschreiben) und damit kein sinnvoller Outreach.
+    const { data: roofAssessments } = await supabase
+      .from("solar_assessments")
+      .select("lead_id")
+      .in("lead_id", workingLeadIds)
+      .gt("max_array_area_m2", 0);
+    const leadsWithRoofSet = new Set(
+      (roofAssessments ?? []).map((a) => a.lead_id as string)
+    );
+    const beforeRoofFilter = workingLeadIds.length;
+    workingLeadIds = workingLeadIds.filter((id) => leadsWithRoofSet.has(id));
+    const skippedNoRoofCount = beforeRoofFilter - workingLeadIds.length;
+
     // Pre-Filter 2: Leads die schon einen OFFENEN LinkedIn-Outreach-Job
     // (pending oder sent) haben → aus diesem Email-Batch ausschließen.
     // Verhindert doppelte Ansprache (Email + LinkedIn parallel).
@@ -115,8 +130,9 @@ export async function POST(request: NextRequest) {
     if (lead_ids.length === 0) {
       return NextResponse.json(
         {
-          error: `Alle ${leadIdsInput.length} Leads ausgeschlossen (${skippedExistingSolarCount} bereits Solar, ${skippedLinkedInCount} in LinkedIn-Pipeline) — kein Email-Batch erstellt.`,
+          error: `Alle ${leadIdsInput.length} Leads ausgeschlossen (${skippedExistingSolarCount} bereits Solar, ${skippedNoRoofCount} ohne Dachfläche, ${skippedLinkedInCount} in LinkedIn-Pipeline) — kein Email-Batch erstellt.`,
           skipped_existing_solar: skippedExistingSolarCount,
+          skipped_no_roof_area: skippedNoRoofCount,
           skipped_in_linkedin_pipeline: skippedLinkedInCount,
         },
         { status: 400 }
@@ -311,6 +327,7 @@ export async function POST(request: NextRequest) {
       {
         batch,
         skipped_existing_solar: skippedExistingSolarCount,
+        skipped_no_roof_area: skippedNoRoofCount,
         skipped_in_linkedin_pipeline: skippedLinkedInCount,
         total_requested: leadIdsInput.length,
         total_created: lead_ids.length,
