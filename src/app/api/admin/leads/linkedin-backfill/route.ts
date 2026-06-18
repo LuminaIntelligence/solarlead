@@ -97,6 +97,13 @@ export async function POST(req: Request) {
       results: [],
       remaining: 0,
       api_calls: 0,
+      summary: {
+        auto_applied: 0,
+        review: 0,
+        no_result: 0,
+        errors: 0,
+        quota_exceeded: 0,
+      },
       message: "Keine offenen Leads im Score-Range gefunden.",
     });
   }

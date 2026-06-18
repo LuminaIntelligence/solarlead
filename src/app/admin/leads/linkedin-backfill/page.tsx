@@ -79,12 +79,27 @@ export default function LinkedInBackfillPage() {
           auto_apply_threshold: autoThreshold,
         }),
       });
-      const d: RunResponse & { error?: string } = await res.json();
+      const raw: Partial<RunResponse> & { error?: string } = await res.json();
       if (!res.ok) {
-        toast({ title: "Fehler", description: d.error, variant: "destructive" });
+        toast({ title: "Fehler", description: raw.error, variant: "destructive" });
         setContinueMode(false);
         return null;
       }
+      // Defensive: API könnte (in Edge-Cases) ohne summary kommen — defaulten
+      const d: RunResponse = {
+        ok: raw.ok ?? true,
+        processed: raw.processed ?? 0,
+        api_calls: raw.api_calls ?? 0,
+        remaining: raw.remaining ?? 0,
+        results: raw.results ?? [],
+        summary: {
+          auto_applied: raw.summary?.auto_applied ?? 0,
+          review: raw.summary?.review ?? 0,
+          no_result: raw.summary?.no_result ?? 0,
+          errors: raw.summary?.errors ?? 0,
+          quota_exceeded: raw.summary?.quota_exceeded ?? 0,
+        },
+      };
       setLastRun(d);
       setResults((prev) => [...d.results, ...prev]);
       toast({
