@@ -68,6 +68,7 @@ export default function LinkedInBackfillPage() {
   const [results, setResults] = useState<BackfillResult[]>([]);
   const [lastRun, setLastRun] = useState<RunResponse | null>(null);
   const [continueMode, setContinueMode] = useState(false);
+  const [pushingToPool, setPushingToPool] = useState(false);
 
   async function runOnce() {
     setRunning(true);
@@ -145,6 +146,51 @@ export default function LinkedInBackfillPage() {
       await new Promise((r) => setTimeout(r, 500));
     }
     setContinueMode(false);
+  }
+
+  async function pushToLinkedInPool() {
+    // Zählung der "outreach-fähigen" Leads im aktuellen Resultat
+    const readyCount = results.filter(
+      (r) => r.status === "auto_applied" || r.status === "skipped"
+    ).length;
+    if (!confirm(
+      `Alle Leads im Score-Range ${minScore}-${maxScore} die eine LinkedIn-URL haben werden ` +
+      `in den LinkedIn-Outreach-Pool übernommen (bestehende Solar-/Dachflächen-/Doppelfilter ` +
+      `bleiben aktiv). Ungefähr ${readyCount} 'bereite' aus diesem Lauf + alle anderen passenden. ` +
+      `Fortfahren?`
+    )) return;
+    setPushingToPool(true);
+    try {
+      const res = await fetch("/api/admin/outreach/linkedin/pool-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          min_score: minScore,
+          max_score: maxScore,
+          limit: 2000,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        toast({ title: "Fehler", description: d.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: `${d.created} Jobs im LinkedIn-Pool erstellt`,
+        description:
+          `${d.batch_name} · ${d.skipped_existing_job} schon im Pool · ` +
+          `${d.email_pending_cancelled ?? 0} parallele Email-Jobs storniert`,
+        duration: 12000,
+      });
+    } catch (err) {
+      toast({
+        title: "Netzwerk-Fehler",
+        description: err instanceof Error ? err.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setPushingToPool(false);
+    }
   }
 
   async function confirmContact(
@@ -289,18 +335,40 @@ export default function LinkedInBackfillPage() {
       {/* Last-Run Summary */}
       {lastRun && (
         <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="py-3 px-4 flex items-center gap-4 flex-wrap text-sm">
-            <span className="font-medium text-blue-900">Letzter Chunk:</span>
-            <span>📊 {lastRun.processed} Leads · {lastRun.api_calls} Calls</span>
-            <span className="text-green-700">✓ {lastRun.summary.auto_applied} auto</span>
-            <span className="text-amber-700">⚠ {lastRun.summary.review} review</span>
-            <span className="text-slate-600">○ {lastRun.summary.no_result} kein Treffer</span>
-            {lastRun.summary.errors > 0 && (
-              <span className="text-red-700">✗ {lastRun.summary.errors} Fehler</span>
-            )}
-            <span className="ml-auto text-slate-500">
-              Verbleibend im Range: <strong>{lastRun.remaining}</strong>
-            </span>
+          <CardContent className="py-3 px-4 space-y-2 text-sm">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="font-medium text-blue-900">Letzter Chunk:</span>
+              <span>📊 {lastRun.processed} Leads · {lastRun.api_calls} Calls</span>
+              <span className="text-green-700">✓ {lastRun.summary.auto_applied} auto</span>
+              <span className="text-amber-700">⚠ {lastRun.summary.review} review</span>
+              <span className="text-slate-600">○ {lastRun.summary.no_result} kein Treffer</span>
+              {lastRun.summary.errors > 0 && (
+                <span className="text-red-700">✗ {lastRun.summary.errors} Fehler</span>
+              )}
+              <span className="ml-auto text-slate-500">
+                Verbleibend im Range: <strong>{lastRun.remaining}</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 pt-2 border-t border-blue-200">
+              <Button
+                size="sm"
+                onClick={pushToLinkedInPool}
+                disabled={pushingToPool}
+                className="bg-blue-700 hover:bg-blue-800"
+              >
+                {pushingToPool ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Diese Leads in LinkedIn-Outreach übernehmen
+              </Button>
+              <span className="text-xs text-slate-500">
+                → Zieht alle Leads im Score-Range {minScore}-{maxScore} mit
+                LinkedIn-URL in den Outreach-Pool. Solar-, Dach-, Duplikat-
+                Filter bleiben aktiv.
+              </span>
+            </div>
           </CardContent>
         </Card>
       )}
