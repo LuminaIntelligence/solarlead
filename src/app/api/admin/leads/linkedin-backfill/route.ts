@@ -133,7 +133,7 @@ export async function POST(req: Request) {
       );
       if (hasPersonalLink) {
         result.status = "skipped";
-        result.message = "hat schon persönliches LinkedIn";
+        result.message = "Hat bereits LinkedIn-URL — bereit für Outreach";
         results.push(result);
         await sb
           .from("solar_lead_mass")

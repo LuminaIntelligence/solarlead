@@ -46,12 +46,15 @@ const STATUS_META: Record<
   string,
   { label: string; color: string; icon: typeof CheckCircle2 }
 > = {
-  auto_applied:   { label: "Übernommen",   color: "bg-green-100 text-green-800",  icon: CheckCircle2 },
-  review:         { label: "Prüfen",       color: "bg-amber-100 text-amber-800",  icon: AlertCircle },
-  no_result:      { label: "Kein Treffer", color: "bg-slate-100 text-slate-600",  icon: XCircle },
-  skipped:        { label: "Übersprungen", color: "bg-slate-100 text-slate-600",  icon: XCircle },
-  error:          { label: "Fehler",       color: "bg-red-100 text-red-800",      icon: XCircle },
-  quota_exceeded: { label: "Quota voll",   color: "bg-red-100 text-red-800",      icon: AlertCircle },
+  auto_applied:   { label: "Übernommen",      color: "bg-green-100 text-green-800",  icon: CheckCircle2 },
+  review:         { label: "Prüfen",          color: "bg-amber-100 text-amber-800",  icon: AlertCircle },
+  no_result:      { label: "Kein Treffer",    color: "bg-slate-100 text-slate-600",  icon: XCircle },
+  // skipped = Lead hatte schon eine persönliche /in/ LinkedIn-URL gespeichert.
+  // Diese Leads sind bereits "outreach-bereit" und tauchen im LinkedIn-Pool auf —
+  // also kein Misserfolg, sondern positiv: nichts zu tun.
+  skipped:        { label: "Schon bereit",    color: "bg-emerald-100 text-emerald-800", icon: CheckCircle2 },
+  error:          { label: "Fehler",          color: "bg-red-100 text-red-800",      icon: XCircle },
+  quota_exceeded: { label: "Quota voll",      color: "bg-red-100 text-red-800",      icon: AlertCircle },
 };
 
 export default function LinkedInBackfillPage() {
@@ -179,6 +182,19 @@ export default function LinkedInBackfillPage() {
           Personen, finde URL. Modus B: nur generischer Kontakt, finde Entscheidungsträger.
         </p>
       </div>
+
+      {/* Status-Erklärung */}
+      <Card className="bg-slate-50 border-slate-200">
+        <CardContent className="py-3 px-4 text-xs text-slate-600 space-y-1">
+          <div className="font-medium text-slate-700 mb-1">Status-Bedeutung:</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0.5">
+            <div><strong className="text-green-700">Übernommen</strong> — Profil mit hoher Confidence gefunden, URL bereits am Kontakt gespeichert</div>
+            <div><strong className="text-emerald-700">Schon bereit</strong> — Kontakt hatte schon eine persönliche LinkedIn-URL (Apollo/Impressum). Erscheint im LinkedIn-Pool, kann sofort angeschrieben werden.</div>
+            <div><strong className="text-amber-700">Prüfen</strong> — Profil gefunden, aber Confidence zu niedrig. Klick „Übernehmen" oder Verwerfen.</div>
+            <div><strong className="text-slate-700">Kein Treffer</strong> — Google liefert keine passende /in/-URL für diesen Lead.</div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filter-Form */}
       <Card>
