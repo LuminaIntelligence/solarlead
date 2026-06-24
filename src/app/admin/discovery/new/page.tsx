@@ -44,6 +44,10 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Chemnitz":            { lat: 50.833, lng: 12.924 },
   "Kiel":                { lat: 54.323, lng: 10.123 },
   "Erfurt":              { lat: 50.984, lng: 11.029 },
+  "Jena":                { lat: 50.927, lng: 11.587 },
+  "Weimar":              { lat: 50.979, lng: 11.323 },
+  "Gera":                { lat: 50.880, lng: 12.082 },
+  "Eisenach":            { lat: 50.974, lng: 10.319 },
   "Mainz":               { lat: 49.999, lng:  8.273 },
   "Rostock":             { lat: 54.092, lng: 12.099 },
   "Kassel":              { lat: 51.312, lng:  9.481 },
@@ -63,6 +67,60 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Potsdam":             { lat: 52.396, lng: 13.060 },
   "Saarbrücken":         { lat: 49.235, lng:  7.004 },
   "Lübeck":              { lat: 53.869, lng: 10.686 },
+  // Ruhrgebiet & Rheinland
+  "Mönchengladbach":     { lat: 51.180, lng:  6.442 },
+  "Gelsenkirchen":       { lat: 51.517, lng:  7.086 },
+  "Krefeld":             { lat: 51.339, lng:  6.585 },
+  "Oberhausen":          { lat: 51.470, lng:  6.851 },
+  "Hagen":               { lat: 51.367, lng:  7.463 },
+  "Hamm":                { lat: 51.680, lng:  7.815 },
+  "Mülheim an der Ruhr": { lat: 51.426, lng:  6.882 },
+  "Leverkusen":          { lat: 51.024, lng:  6.987 },
+  "Solingen":            { lat: 51.171, lng:  7.083 },
+  "Neuss":               { lat: 51.198, lng:  6.692 },
+  "Herne":               { lat: 51.538, lng:  7.220 },
+  "Bottrop":             { lat: 51.524, lng:  6.929 },
+  "Recklinghausen":      { lat: 51.614, lng:  7.197 },
+  "Bergisch Gladbach":   { lat: 50.989, lng:  7.130 },
+  "Remscheid":           { lat: 51.179, lng:  7.193 },
+  "Moers":               { lat: 51.452, lng:  6.626 },
+  "Paderborn":           { lat: 51.719, lng:  8.754 },
+  "Siegen":              { lat: 50.875, lng:  8.022 },
+  // Hessen
+  "Darmstadt":           { lat: 49.872, lng:  8.651 },
+  "Offenbach am Main":   { lat: 50.099, lng:  8.768 },
+  "Hanau":               { lat: 50.135, lng:  8.917 },
+  "Fulda":               { lat: 50.555, lng:  9.681 },
+  // Rheinland-Pfalz / Saar
+  "Ludwigshafen":        { lat: 49.481, lng:  8.434 },
+  "Koblenz":             { lat: 50.357, lng:  7.594 },
+  "Trier":               { lat: 49.750, lng:  6.637 },
+  "Kaiserslautern":      { lat: 49.444, lng:  7.769 },
+  // Baden-Württemberg
+  "Pforzheim":           { lat: 48.891, lng:  8.698 },
+  "Reutlingen":          { lat: 48.491, lng:  9.211 },
+  "Tübingen":            { lat: 48.521, lng:  9.058 },
+  "Esslingen am Neckar": { lat: 48.740, lng:  9.310 },
+  "Konstanz":            { lat: 47.660, lng:  9.176 },
+  // Bayern
+  "Erlangen":            { lat: 49.598, lng: 11.004 },
+  "Fürth":               { lat: 49.477, lng: 10.989 },
+  "Bayreuth":            { lat: 49.945, lng: 11.578 },
+  "Bamberg":             { lat: 49.898, lng: 10.904 },
+  "Aschaffenburg":       { lat: 49.974, lng:  9.146 },
+  // Niedersachsen
+  "Bremerhaven":         { lat: 53.539, lng:  8.581 },
+  "Hildesheim":          { lat: 52.155, lng:  9.951 },
+  "Salzgitter":          { lat: 52.151, lng: 10.334 },
+  "Wilhelmshaven":       { lat: 53.529, lng:  8.110 },
+  "Cuxhaven":            { lat: 53.864, lng:  8.700 },
+  "Lüneburg":            { lat: 53.247, lng: 10.414 },
+  "Emden":               { lat: 53.366, lng:  7.207 },
+  // Brandenburg
+  "Cottbus":             { lat: 51.760, lng: 14.334 },
+  "Frankfurt (Oder)":    { lat: 52.347, lng: 14.553 },
+  // Sachsen
+  "Zwickau":             { lat: 50.722, lng: 12.485 },
 };
 
 const CITY_NAMES = Object.keys(CITY_COORDS);
@@ -215,7 +273,9 @@ const REGIONS: RegionDef[] = [
     emoji: "🌳",
     description: "Erfurt, Jena, Weimar, Gera & Eisenach",
     circles: [
-      { label: "Erfurt",   lat: 50.984, lng: 11.029, km: 45 }, // deckt Jena, Weimar, Apolda
+      { label: "Erfurt",   lat: 50.984, lng: 11.029, km: 30 }, // Erfurt + Apolda
+      { label: "Weimar",   lat: 50.979, lng: 11.323, km: 20 }, // Weimar
+      { label: "Jena",     lat: 50.927, lng: 11.587, km: 25 }, // Jena + Saalfeld-Anlieger
       { label: "Gera",     lat: 50.880, lng: 12.082, km: 30 }, // Ost-Thüringen
       { label: "Eisenach", lat: 50.974, lng: 10.319, km: 30 }, // West-Thüringen
     ],
