@@ -10,6 +10,32 @@ import type {
   SolarAssessment,
   LeadEnrichment,
 } from "@/types/database";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Liefert Scope-Info für den aktuell eingeloggten User.
+ * - `mustScope=true` → Nutzer ist Field-Member (role='user'), darf nur
+ *   eigene oder zugewiesene Leads sehen
+ * - `mustScope=false` → Admin/Team-Lead/Reply-Specialist sieht alles
+ */
+async function getUserScope(supabase: SupabaseClient): Promise<{
+  userId: string | null;
+  role: string;
+  mustScope: boolean;
+}> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { userId: null, role: "anonymous", mustScope: true };
+  const { data: settings } = await supabase
+    .from("user_settings")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const role = (settings?.role as string) ?? "user";
+  const mustScope = role === "user" || !role;
+  return { userId: user.id, role, mustScope };
+}
 
 export async function getLeads(filters?: {
   status?: string;
@@ -23,7 +49,15 @@ export async function getLeads(filters?: {
 }): Promise<Lead[]> {
   try {
     const supabase = await createClient();
+    const scope = await getUserScope(supabase);
     let query = supabase.from("solar_lead_mass").select("*");
+
+    // Role-Scope: Field-Member sieht nur eigene + zugewiesene Leads
+    if (scope.mustScope && scope.userId) {
+      query = query.or(
+        `user_id.eq.${scope.userId},assigned_to.eq.${scope.userId}`
+      );
+    }
 
     if (filters?.status) {
       query = query.eq("status", filters.status);
@@ -72,11 +106,18 @@ export async function getLead(
 ): Promise<LeadWithRelations | null> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    const scope = await getUserScope(supabase);
+    let q = supabase
       .from("solar_lead_mass")
       .select("*, solar_assessments(*), lead_enrichment(*), lead_contacts(*), lead_activities(*)")
-      .eq("id", id)
-      .single();
+      .eq("id", id);
+
+    // Field-Member darf nur eigene + zugewiesene Leads öffnen
+    if (scope.mustScope && scope.userId) {
+      q = q.or(`user_id.eq.${scope.userId},assigned_to.eq.${scope.userId}`);
+    }
+
+    const { data, error } = await q.single();
 
     if (error) {
       console.error("Error fetching lead:", error);
@@ -224,9 +265,93 @@ export async function deleteLead(id: string): Promise<boolean> {
   }
 }
 
+/**
+ * Result-Type für saveLead/checkLeadDuplicate.
+ * Statt einfach null bei Duplikaten geben wir Kontext zurück (existing lead +
+ * wer ihm zugewiesen ist) damit das Frontend dem Field-Member sagen kann
+ * "schon im System, gehört Mitglied X" statt nur "Fehler".
+ */
+export interface SaveLeadResult {
+  ok: boolean;
+  lead?: Lead;
+  duplicate?: {
+    lead_id: string;
+    company_name: string | null;
+    assigned_to_user_id: string | null;
+    assigned_to_email: string | null;
+    is_own: boolean;
+  };
+  error?: string;
+}
+
+/**
+ * Prüft ob bereits ein Lead mit gleichem place_id / postal_code+company existiert.
+ * Liefert Info über aktuelle Zuweisung zurück, ohne neuen Lead anzulegen.
+ */
+export async function checkLeadDuplicate(args: {
+  place_id?: string | null;
+  company_name: string;
+  postal_code?: string | null;
+  city?: string | null;
+}): Promise<SaveLeadResult["duplicate"] | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // 1. Exact match via place_id
+  if (args.place_id) {
+    const { data: byPlace } = await supabase
+      .from("solar_lead_mass")
+      .select("id, company_name, assigned_to, user_id")
+      .eq("place_id", args.place_id)
+      .maybeSingle();
+    if (byPlace) {
+      return await enrichDuplicate(supabase, byPlace, user.id);
+    }
+  }
+
+  // 2. Fuzzy match: company_name + (postal_code OR city)
+  let q = supabase
+    .from("solar_lead_mass")
+    .select("id, company_name, assigned_to, user_id")
+    .ilike("company_name", args.company_name);
+  if (args.postal_code) q = q.eq("postal_code", args.postal_code);
+  else if (args.city) q = q.eq("city", args.city);
+  const { data: matches } = await q.limit(1);
+  if (matches && matches.length > 0) {
+    return await enrichDuplicate(supabase, matches[0], user.id);
+  }
+  return null;
+}
+
+async function enrichDuplicate(
+  supabase: SupabaseClient,
+  row: { id: string; company_name: string | null; assigned_to: string | null; user_id: string },
+  currentUserId: string
+): Promise<NonNullable<SaveLeadResult["duplicate"]>> {
+  let email: string | null = null;
+  const assigneeId = row.assigned_to ?? row.user_id;
+  if (assigneeId) {
+    try {
+      const admin = createAdminClient();
+      const { data } = await admin.auth.admin.getUserById(assigneeId);
+      email = data?.user?.email ?? null;
+    } catch { /* ignore */ }
+  }
+  return {
+    lead_id: row.id,
+    company_name: row.company_name,
+    assigned_to_user_id: assigneeId,
+    assigned_to_email: email,
+    is_own: assigneeId === currentUserId,
+  };
+}
+
 export async function saveLead(
   lead: Omit<Lead, "id" | "created_at" | "updated_at" | "user_id">
-): Promise<Lead | null> {
+): Promise<SaveLeadResult> {
   try {
     const supabase = await createClient();
     const {
@@ -234,9 +359,18 @@ export async function saveLead(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      console.error("Error in saveLead: user not authenticated");
-      return null;
+      return { ok: false, error: "Nicht angemeldet" };
     }
+
+    // Duplikat-Check zuerst — wenn schon vorhanden, KEIN neuer Lead, sondern
+    // Hinweis zurück (gehört Mitglied X / dir selbst).
+    const dup = await checkLeadDuplicate({
+      place_id: lead.place_id ?? null,
+      company_name: lead.company_name,
+      postal_code: lead.postal_code ?? null,
+      city: lead.city ?? null,
+    });
+    if (dup) return { ok: false, duplicate: dup };
 
     const { data, error } = await supabase
       .from("solar_lead_mass")
@@ -246,16 +380,16 @@ export async function saveLead(
 
     if (error) {
       console.error("Error saving lead:", error);
-      return null;
+      return { ok: false, error: error.message };
     }
 
     revalidatePath("/leads");
     revalidatePath("/dashboard");
 
-    return data as Lead;
+    return { ok: true, lead: data as Lead };
   } catch (error) {
     console.error("Error in saveLead:", error);
-    return null;
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 

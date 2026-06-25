@@ -161,10 +161,30 @@ export async function PUT(request: NextRequest) {
     );
 
     if (leadsToSave.length === 1) {
-      const saved = await saveLead(leadsToSave[0]);
+      const result = await saveLead(leadsToSave[0]);
+      if (result.ok && result.lead) {
+        return NextResponse.json({
+          savedLeads: [result.lead],
+          count: 1,
+        });
+      }
+      if (result.duplicate) {
+        return NextResponse.json({
+          savedLeads: [],
+          count: 0,
+          duplicate: result.duplicate,
+          message: result.duplicate.is_own
+            ? `Lead "${result.duplicate.company_name}" hast du bereits in deiner Liste.`
+            : `Lead "${result.duplicate.company_name}" ist bereits im System` +
+              (result.duplicate.assigned_to_email
+                ? ` und ${result.duplicate.assigned_to_email} zugewiesen.`
+                : "."),
+        });
+      }
       return NextResponse.json({
-        savedLeads: saved ? [saved] : [],
-        count: saved ? 1 : 0,
+        savedLeads: [],
+        count: 0,
+        error: result.error,
       });
     }
 

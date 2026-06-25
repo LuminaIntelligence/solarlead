@@ -221,10 +221,30 @@ export default function SearchPage() {
 
       if (!res.ok) throw new Error("Speichern fehlgeschlagen");
 
-      const { savedLeads } = await res.json();
+      const json = await res.json();
+      const { savedLeads, duplicate, message } = json as {
+        savedLeads?: { id: string }[];
+        duplicate?: {
+          company_name: string | null;
+          is_own: boolean;
+          assigned_to_email: string | null;
+        };
+        message?: string;
+      };
       if (!savedLeads || savedLeads.length === 0) {
         updateStatus("done");
-        toast({ title: "Bereits gespeichert", description: `${result.company_name} ist bereits in Ihrer Pipeline.` });
+        if (duplicate) {
+          toast({
+            title: duplicate.is_own ? "Schon in deiner Liste" : "Bereits zugewiesen",
+            description: message ??
+              (duplicate.is_own
+                ? `${duplicate.company_name} hast du bereits.`
+                : `${duplicate.company_name} ist bereits ${duplicate.assigned_to_email ?? "einem anderen Mitglied"} zugewiesen.`),
+            variant: duplicate.is_own ? undefined : "destructive",
+          });
+        } else {
+          toast({ title: "Bereits gespeichert", description: `${result.company_name} ist bereits in Ihrer Pipeline.` });
+        }
         return;
       }
 
