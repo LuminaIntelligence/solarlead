@@ -546,23 +546,37 @@ export async function getLeadStats(): Promise<{
 
   try {
     const supabase = await createClient();
+    const scope = await getUserScope(supabase);
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     const today = new Date().toISOString().slice(0, 10);
 
+    // Helper: applies role-scope to a Supabase query builder.
+    const scopeClause =
+      scope.mustScope && scope.userId
+        ? `user_id.eq.${scope.userId},assigned_to.eq.${scope.userId}`
+        : null;
+    const scoped = <T extends { or: (clause: string) => T }>(q: T): T => {
+      return scopeClause ? q.or(scopeClause) : q;
+    };
+
     const [leadsRes, newThisWeekRes, overdueRes] = await Promise.all([
-      supabase.from("solar_lead_mass").select("status, category, total_score"),
-      supabase
-        .from("solar_lead_mass")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", oneWeekAgo.toISOString()),
-      supabase
-        .from("solar_lead_mass")
-        .select("id", { count: "exact", head: true })
-        .lte("next_contact_date", today)
-        .neq("status", "rejected")
-        .neq("status", "qualified")
-        .not("next_contact_date", "is", null),
+      scoped(supabase.from("solar_lead_mass").select("status, category, total_score").limit(10000)),
+      scoped(
+        supabase
+          .from("solar_lead_mass")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", oneWeekAgo.toISOString())
+      ),
+      scoped(
+        supabase
+          .from("solar_lead_mass")
+          .select("id", { count: "exact", head: true })
+          .lte("next_contact_date", today)
+          .neq("status", "rejected")
+          .neq("status", "qualified")
+          .not("next_contact_date", "is", null)
+      ),
     ]);
 
     const leads = leadsRes.data;
