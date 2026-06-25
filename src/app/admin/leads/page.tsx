@@ -257,7 +257,7 @@ export default function AdminLeadsPage() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Unternehmen oder Stadt suchen..."
+                placeholder="Firma, Stadt, Adresse oder PLZ (z.B. 99 für ganz Thüringen)…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -303,6 +303,38 @@ export default function AdminLeadsPage() {
               </Button>
             )}
           </div>
+          {/* Quick-Select: Top-N nach Score */}
+          {leads.length > 0 && (
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 flex-wrap">
+              <span className="text-xs text-slate-500 mr-1">
+                Quick-Select (sortiert nach Score↓):
+              </span>
+              {[50, 100, 200, 500].map((n) => (
+                <Button
+                  key={n}
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setSelectedIds(new Set(leads.slice(0, Math.min(n, leads.length)).map((l) => l.id)))
+                  }
+                  disabled={leads.length < n && n !== 50}
+                  className="text-xs"
+                >
+                  Top {n} ({Math.min(n, leads.length)})
+                </Button>
+              ))}
+              {selectedIds.size > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs text-slate-500"
+                >
+                  Auswahl löschen
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

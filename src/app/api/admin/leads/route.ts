@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       .from("solar_lead_mass")
       .select("*")
       .order("total_score", { ascending: false })
-      .limit(500);
+      .limit(1000);
 
     if (status) {
       // Explicit status filter — show exactly what was requested (incl. existing_solar)
@@ -48,9 +48,16 @@ export async function GET(request: NextRequest) {
       query = query.eq("category", category);
     }
     if (search) {
-      query = query.or(
-        `company_name.ilike.%${search}%,city.ilike.%${search}%`
-      );
+      // Heuristik: wenn nur Ziffern → PLZ-Prefix-Suche, sonst Text-Suche
+      // über company_name, city, address und postal_code.
+      const isNumericPrefix = /^[0-9]{1,5}$/.test(search.trim());
+      if (isNumericPrefix) {
+        query = query.like("postal_code", `${search.trim()}%`);
+      } else {
+        query = query.or(
+          `company_name.ilike.%${search}%,city.ilike.%${search}%,address.ilike.%${search}%,postal_code.ilike.${search}%`
+        );
+      }
     }
 
     const { data: leadsRaw, error: leadsError } = await query;
