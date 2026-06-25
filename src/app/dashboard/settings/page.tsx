@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Settings, Shield, ExternalLink, Mail, Loader2, CheckCircle2 } from "lucide-react";
+import { Settings, Shield, ExternalLink, Mail, Loader2, CheckCircle2, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,11 +26,20 @@ export default function SettingsPage() {
   const [savingSignature, setSavingSignature] = useState(false);
   const [signatureSaved, setSignatureSaved] = useState(false);
 
+  // Passwort ändern
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+
   useEffect(() => {
     async function load() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       setIsAdmin(user?.user_metadata?.role === "admin");
+      setUserEmail(user?.email ?? "");
 
       const settings = await getUserSettings();
       if (settings) {
@@ -44,6 +53,90 @@ export default function SettingsPage() {
     }
     load();
   }, []);
+
+  async function handleChangePassword() {
+    // Validierung
+    if (!currentPassword) {
+      toast({
+        title: "Aktuelles Passwort fehlt",
+        description: "Bitte gib dein aktuelles Passwort ein.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({
+        title: "Neues Passwort zu kurz",
+        description: "Mindestens 8 Zeichen erforderlich.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwörter stimmen nicht überein",
+        description: "Neues Passwort und Bestätigung müssen identisch sein.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword === currentPassword) {
+      toast({
+        title: "Identisches Passwort",
+        description: "Das neue Passwort muss sich vom aktuellen unterscheiden.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const supabase = createClient();
+
+      // Schritt 1: aktuelles Passwort verifizieren via signIn-Versuch
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: currentPassword,
+      });
+      if (signInErr) {
+        toast({
+          title: "Aktuelles Passwort falsch",
+          description: "Das eingegebene aktuelle Passwort ist nicht korrekt.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Schritt 2: Passwort updaten
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateErr) {
+        toast({
+          title: "Fehler beim Ändern",
+          description: updateErr.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Passwort geändert",
+        description: "Dein neues Passwort ist ab sofort aktiv.",
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      toast({
+        title: "Fehler",
+        description: err instanceof Error ? err.message : "Unbekannter Fehler",
+        variant: "destructive",
+      });
+    } finally {
+      setChangingPassword(false);
+    }
+  }
 
   async function handleSaveSignature() {
     setSavingSignature(true);
@@ -107,6 +200,98 @@ export default function SettingsPage() {
               {isAdmin ? "Administrator" : "Benutzer"}
             </Badge>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Passwort ändern */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5" />
+            Passwort ändern
+          </CardTitle>
+          <CardDescription>
+            Setze ein neues Passwort für dein Konto ({userEmail}).
+            Mindestens 8 Zeichen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="currentPassword">Aktuelles Passwort</Label>
+            <div className="relative">
+              <Input
+                id="currentPassword"
+                type={showPasswords ? "text" : "password"}
+                placeholder="Aktuelles Passwort"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPasswords((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                title={showPasswords ? "Verbergen" : "Anzeigen"}
+              >
+                {showPasswords ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="newPassword">Neues Passwort</Label>
+              <Input
+                id="newPassword"
+                type={showPasswords ? "text" : "password"}
+                placeholder="Mindestens 8 Zeichen"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+              {newPassword.length > 0 && newPassword.length < 8 && (
+                <p className="text-xs text-amber-600">
+                  Noch {8 - newPassword.length} Zeichen
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirmPassword">Bestätigen</Label>
+              <Input
+                id="confirmPassword"
+                type={showPasswords ? "text" : "password"}
+                placeholder="Neues Passwort wiederholen"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+              {confirmPassword.length > 0 && confirmPassword !== newPassword && (
+                <p className="text-xs text-red-600">
+                  Stimmt nicht mit neuem Passwort überein
+                </p>
+              )}
+            </div>
+          </div>
+          <Button
+            onClick={handleChangePassword}
+            disabled={
+              changingPassword ||
+              !currentPassword ||
+              newPassword.length < 8 ||
+              newPassword !== confirmPassword
+            }
+          >
+            {changingPassword ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <KeyRound className="h-4 w-4 mr-2" />
+            )}
+            Passwort ändern
+          </Button>
         </CardContent>
       </Card>
 
