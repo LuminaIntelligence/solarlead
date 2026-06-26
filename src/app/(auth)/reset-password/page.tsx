@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, KeyRound } from "lucide-react";
@@ -24,6 +24,7 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [hasSession, setHasSession] = useState(false);
+  const completedRef = useRef(false);
   const router = useRouter();
   const { toast } = useToast();
   const supabase = createClient();
@@ -34,6 +35,15 @@ export default function ResetPasswordPage() {
       setHasSession(!!session);
       setChecking(false);
     });
+    // Cleanup: Wenn User die Seite verlässt OHNE neues Passwort gespeichert
+    // zu haben (z.B. Zurück-Button), die Magic-Link-Session sofort beenden.
+    // Sonst wäre er weiterhin eingeloggt obwohl er nie sein Passwort
+    // korrekt verifiziert hat.
+    return () => {
+      if (!completedRef.current) {
+        supabase.auth.signOut().catch(() => {});
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -73,6 +83,10 @@ export default function ResetPasswordPage() {
         });
         return;
       }
+
+      // Flag setzen damit die Cleanup-Funktion weiß: erfolgreicher Reset,
+      // die folgende explizite signOut() ist ausreichend.
+      completedRef.current = true;
 
       toast({
         title: "Passwort erfolgreich geändert",

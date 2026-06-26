@@ -23,28 +23,28 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [currentSessionEmail, setCurrentSessionEmail] = useState<string | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    // Sicherheits-Check: Wer auf /forgot-password landet, ist per Definition
+    // kein authentifizierter Nutzer (sonst würde er das Passwort über
+    // /dashboard/settings ändern). Eine bestehende Session hier deutet auf
+    // einen unsauberen Auth-State hin (z.B. abgebrochener Reset-Flow mit
+    // Magic-Link-Cookie). Sofortiges signOut() verhindert dass jemand durch
+    // den Reset-Flow versehentlich Zugriff bekommt ohne ein gültiges
+    // Passwort eingegeben zu haben.
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user?.email) {
         setCurrentSessionEmail(user.email);
-        setEmail(user.email);
+        // Auto-Cleanup: alte Magic-Link- oder Stale-Session sofort beenden.
+        await supabase.auth.signOut();
+        setCurrentSessionEmail(null);
+        router.refresh();
       }
     });
-  }, []);
-
-  async function handleSignOut() {
-    setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.refresh();
-    setCurrentSessionEmail(null);
-    setSigningOut(false);
-  }
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -103,26 +103,17 @@ export default function ForgotPasswordPage() {
       </CardHeader>
       {currentSessionEmail && !sent && (
         <CardContent className="space-y-3 pt-0">
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
               <div className="text-amber-900">
-                <strong>Du bist aktuell eingeloggt</strong> als{" "}
-                <code className="font-mono">{currentSessionEmail}</code>.
-                Wenn du ein neues Passwort setzt bleibt diese Session aktiv,
-                bis du dich ausloggst oder die Session abläuft (~1h).
+                <strong>Vorherige Session wurde aus Sicherheitsgründen beendet</strong>{" "}
+                <span className="text-amber-800">
+                  ({currentSessionEmail}). Du bist jetzt abgemeldet — bitte
+                  fortfahren mit dem Reset.
+                </span>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className="w-full"
-            >
-              {signingOut && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-              Jetzt abmelden
-            </Button>
           </div>
         </CardContent>
       )}
