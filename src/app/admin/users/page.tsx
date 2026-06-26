@@ -26,8 +26,11 @@ import {
   updateUserRole,
   banUser,
   unbanUser,
+  resetUserPassword,
   type AppRole,
 } from "@/lib/actions/admin";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const ROLE_META: Record<AppRole, { label: string; emoji: string; color: string; description: string }> = {
   user:             { label: "Standard-Nutzer", emoji: "👤", color: "bg-blue-100 text-blue-800", description: "Sieht eigene Leads im Dashboard" },
@@ -71,6 +74,12 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [pendingRole, setPendingRole] = useState<AppRole | null>(null);
 
+  // Password-Reset Dialog
+  const [pwdDialogOpen, setPwdDialogOpen] = useState(false);
+  const [pwdUser, setPwdUser] = useState<AdminUser | null>(null);
+  const [newPwd, setNewPwd] = useState("");
+  const [pwdSubmitting, setPwdSubmitting] = useState(false);
+
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
@@ -86,6 +95,45 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  function openPwdDialog(user: AdminUser) {
+    setPwdUser(user);
+    setNewPwd("");
+    setPwdDialogOpen(true);
+  }
+
+  async function handleResetPassword() {
+    if (!pwdUser) return;
+    if (newPwd.length < 8) {
+      toast({
+        title: "Passwort zu kurz",
+        description: "Mindestens 8 Zeichen.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setPwdSubmitting(true);
+    try {
+      const result = await resetUserPassword(pwdUser.id, newPwd);
+      if (!result.ok) {
+        toast({
+          title: "Passwort-Reset fehlgeschlagen",
+          description: result.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Passwort gesetzt",
+        description: `Neues Passwort für ${pwdUser.email} ist aktiv. Bitte sicher an den Nutzer kommunizieren.`,
+      });
+      setPwdDialogOpen(false);
+      setPwdUser(null);
+      setNewPwd("");
+    } finally {
+      setPwdSubmitting(false);
+    }
+  }
 
   function openDialog(action: "ban" | "unban", user: AdminUser) {
     setSelectedUser(user);
@@ -295,6 +343,10 @@ export default function UsersPage() {
                               );
                             })}
                             <div className="my-1 border-t border-slate-100" />
+                            <DropdownMenuItem onClick={() => openPwdDialog(u)}>
+                              🔑 Passwort setzen
+                            </DropdownMenuItem>
+                            <div className="my-1 border-t border-slate-100" />
                             {u.is_banned ? (
                               <DropdownMenuItem
                                 onClick={() => openDialog("unban", u)}
@@ -320,6 +372,62 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Passwort-Reset Dialog */}
+      <Dialog open={pwdDialogOpen} onOpenChange={setPwdDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Passwort setzen</DialogTitle>
+            <DialogDescription>
+              Neues Passwort für <strong>{pwdUser?.email}</strong> setzen.
+              Bestehende Sessions des Users bleiben aktiv — beim nächsten
+              Login wird das neue Passwort verlangt. Bitte dem User sicher
+              kommunizieren.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="newPwd">Neues Passwort (min. 8 Zeichen)</Label>
+              <Input
+                id="newPwd"
+                type="text"
+                placeholder="z.B. GreenScout2026!"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                autoFocus
+              />
+              {newPwd.length > 0 && newPwd.length < 8 && (
+                <p className="text-xs text-amber-600">
+                  Noch {8 - newPwd.length} Zeichen
+                </p>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              💡 Das Passwort ist im Klartext sichtbar — bewusst, damit du es
+              dem User korrekt durchgeben kannst. Bitte direkt nach dem
+              Setzen aus dem Browser entfernen.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPwdDialogOpen(false)}
+              disabled={pwdSubmitting}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              onClick={handleResetPassword}
+              disabled={pwdSubmitting || newPwd.length < 8}
+            >
+              {pwdSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Passwort setzen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

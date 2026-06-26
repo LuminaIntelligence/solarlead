@@ -404,6 +404,37 @@ export async function unbanUser(userId: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Passwort für anderen Nutzer setzen (Admin-Override)
+// ---------------------------------------------------------------------------
+
+export async function resetUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    if (!newPassword || newPassword.length < 8) {
+      return { ok: false, error: "Passwort muss mindestens 8 Zeichen lang sein." };
+    }
+    const adminClient = createAdminClient();
+    const { error } = await adminClient.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+    if (error) {
+      console.error("Fehler beim Setzen des Passworts:", error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("resetUserPassword fehlgeschlagen:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unbekannter Fehler",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Alle Leads eines Benutzers loeschen
 // ---------------------------------------------------------------------------
 
