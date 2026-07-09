@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { hasLeadAccess } from "@/lib/auth/lead-access";
 
 const ContactSchema = z.object({
   name: z.string().min(1, "Name ist erforderlich").max(200),
@@ -26,20 +27,6 @@ const ContactSchema = z.object({
   department: z.string().nullable().optional(),
 });
 
-async function ownsLead(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  leadId: string,
-  userId: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("solar_lead_mass")
-    .select("id")
-    .eq("id", leadId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  return !!data;
-}
-
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -49,7 +36,7 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
-  if (!await ownsLead(supabase, leadId, user.id)) {
+  if (!await hasLeadAccess(supabase, leadId, user.id)) {
     return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
   }
 
@@ -73,7 +60,7 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
-  if (!await ownsLead(supabase, leadId, user.id)) {
+  if (!await hasLeadAccess(supabase, leadId, user.id)) {
     return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
   }
 

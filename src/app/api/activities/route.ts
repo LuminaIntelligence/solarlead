@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { hasLeadAccess } from "@/lib/auth/lead-access";
 
 const CreateActivitySchema = z.object({
   lead_id: z.string().uuid(),
@@ -34,15 +35,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Sicherstellen, dass der Lead dem Nutzer gehört
-    const { data: lead, error: leadError } = await supabase
-      .from("solar_lead_mass")
-      .select("id")
-      .eq("id", leadId)
-      .eq("user_id", user.id)
-      .single();
-
-    if (leadError || !lead) {
+    // Zugriff prüfen: Owner, Assignee ODER privilegierte Rolle
+    if (!(await hasLeadAccess(supabase, leadId, user.id))) {
       return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
     }
 
@@ -92,15 +86,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sicherstellen, dass der Lead dem Nutzer gehört
-    const { data: lead, error: leadError } = await supabase
-      .from("solar_lead_mass")
-      .select("id")
-      .eq("id", parsed.data.lead_id)
-      .eq("user_id", user.id)
-      .single();
-
-    if (leadError || !lead) {
+    // Zugriff prüfen: Owner, Assignee ODER privilegierte Rolle
+    if (!(await hasLeadAccess(supabase, parsed.data.lead_id, user.id))) {
       return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
     }
 

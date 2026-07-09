@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasLeadAccess } from "@/lib/auth/lead-access";
 
 const PatchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -60,7 +61,8 @@ export async function PATCH(
 
   const ownership = await fetchContactOwnership(contactId);
   if (!ownership) return NextResponse.json({ error: "Kontakt nicht gefunden" }, { status: 404 });
-  if (ownership.ownerId !== user.id) {
+  // Zugriff prüfen: Owner, Assignee ODER privilegierte Rolle
+  if (!(await hasLeadAccess(supabase, ownership.leadId, user.id))) {
     return NextResponse.json({ error: "Keine Berechtigung" }, { status: 403 });
   }
 
@@ -132,7 +134,8 @@ export async function DELETE(
 
   const ownership = await fetchContactOwnership(contactId);
   if (!ownership) return NextResponse.json({ error: "Kontakt nicht gefunden" }, { status: 404 });
-  if (ownership.ownerId !== user.id) {
+  // Zugriff prüfen: Owner, Assignee ODER privilegierte Rolle
+  if (!(await hasLeadAccess(supabase, ownership.leadId, user.id))) {
     return NextResponse.json({ error: "Keine Berechtigung" }, { status: 403 });
   }
 
