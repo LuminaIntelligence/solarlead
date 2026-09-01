@@ -1,10 +1,10 @@
 name: Watchdog Cron
 
 on:
-  schedule:
-    # Every 10 minutes
-    - cron: "*/10 * * * *"
-  workflow_dispatch: # Allow manual trigger from GitHub UI
+  # Scheduled trigger deaktiviert — Server-Cron auf Hetzner läuft
+  # zuverlässiger (/opt/solarlead/bin/run-cron.sh watchdog).
+  # Workflow bleibt als Manual-Backup wenn Server nicht erreichbar ist.
+  workflow_dispatch:
 
 jobs:
   watchdog:

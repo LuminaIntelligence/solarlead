@@ -1,9 +1,8 @@
 name: LinkedIn No-Reply Sweep
 
 on:
-  schedule:
-    # Daily at 06:00 UTC (~07:00 Berlin im Winter, ~08:00 im Sommer)
-    - cron: "0 6 * * *"
+  # Scheduled trigger deaktiviert — Server-Cron auf Hetzner läuft
+  # zuverlässiger. Workflow bleibt als Manual-Backup.
   workflow_dispatch:
 
 jobs:

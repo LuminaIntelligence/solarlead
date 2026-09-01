@@ -1,10 +1,9 @@
 name: Solar Detection Cron
 
 on:
-  schedule:
-    # Jeden Tag um 02:00 UTC (03:00 / 04:00 deutsche Zeit)
-    - cron: "0 2 * * *"
-  workflow_dispatch: # Manuell auslösbar aus GitHub UI
+  # Scheduled trigger deaktiviert — Server-Cron auf Hetzner läuft
+  # zuverlässiger. Workflow bleibt als Manual-Backup.
+  workflow_dispatch:
 
 jobs:
   solar-detection:

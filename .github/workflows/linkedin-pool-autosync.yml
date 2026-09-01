@@ -1,9 +1,8 @@
 name: LinkedIn Pool Auto-Sync
 
 on:
-  schedule:
-    # Alle 4 Stunden (UTC)
-    - cron: "15 */4 * * *"
+  # Scheduled trigger deaktiviert — Server-Cron auf Hetzner läuft
+  # zuverlässiger. Workflow bleibt als Manual-Backup.
   workflow_dispatch:
 
 jobs:

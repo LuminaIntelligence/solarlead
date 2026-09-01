@@ -1,9 +1,8 @@
 name: Outreach Existing-Solar Sweep
 
 on:
-  schedule:
-    # Daily at 05:30 UTC (~06:30 / 07:30 Berlin) — vor dem No-Reply-Sweep
-    - cron: "30 5 * * *"
+  # Scheduled trigger deaktiviert — Server-Cron auf Hetzner läuft
+  # zuverlässiger. Workflow bleibt als Manual-Backup.
   workflow_dispatch:
 
 jobs:
