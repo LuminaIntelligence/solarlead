@@ -44,8 +44,22 @@ export async function middleware(request: NextRequest) {
   // Cron endpoints authenticate via x-cron-secret header — never redirect
   const isCronRoute = request.nextUrl.pathname.startsWith("/api/cron/");
 
+  // Same for admin-tool endpoints that opt into CRON_SECRET auth
+  // (currently: MaStR-Backfill kann per SSH getriggert werden). Header
+  // wird im Route-Handler nochmal gegen process.env.CRON_SECRET geprüft.
+  const hasCronSecretHeader = !!request.headers.get("x-cron-secret");
+  const isCronSecretedAdminTool =
+    hasCronSecretHeader &&
+    request.nextUrl.pathname.startsWith("/api/admin/tools/mastr-backfill");
+
   // Protect dashboard and admin routes
-  if (!user && !isAuthPage && !isCronRoute && request.nextUrl.pathname !== "/") {
+  if (
+    !user &&
+    !isAuthPage &&
+    !isCronRoute &&
+    !isCronSecretedAdminTool &&
+    request.nextUrl.pathname !== "/"
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
