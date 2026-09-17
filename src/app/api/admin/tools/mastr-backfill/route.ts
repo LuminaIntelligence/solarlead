@@ -406,18 +406,31 @@ async function runBackfill(zipPath: string): Promise<void> {
 }
 
 // ── GET ───────────────────────────────────────────────────────────────────────
-export async function GET(_req: NextRequest) {
-  const gate = await requireAdmin();
-  if (gate.error) return gate.error;
-  const { user, supabase } = gate;
+export async function GET(req: NextRequest) {
+  // Auch hier zwei Auth-Wege damit Server-Admin per SSH monitoren kann
+  const cronSecret = req.headers.get("x-cron-secret");
+  const isCronAuth =
+    cronSecret && process.env.CRON_SECRET && cronSecret === process.env.CRON_SECRET;
+  if (!isCronAuth) {
+    const gate = await requireAdmin();
+    if (gate.error) return gate.error;
+  }
   return NextResponse.json(job);
 }
 
 // ── POST ──────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const gate = await requireAdminAndOrigin(req);
-  if (gate.error) return gate.error;
-  const { user, supabase } = gate;
+  // Zwei Auth-Wege:
+  //   1) Admin-Session (Web-UI im /admin/settings)
+  //   2) CRON_SECRET via x-cron-secret Header (SSH/Curl vom Server-Admin)
+  const cronSecret = req.headers.get("x-cron-secret");
+  const isCronAuth =
+    cronSecret && process.env.CRON_SECRET && cronSecret === process.env.CRON_SECRET;
+
+  if (!isCronAuth) {
+    const gate = await requireAdminAndOrigin(req);
+    if (gate.error) return gate.error;
+  }
 
   if (!["idle", "done", "error"].includes(job.status)) {
     return NextResponse.json({ error: "Job läuft bereits" }, { status: 409 });
