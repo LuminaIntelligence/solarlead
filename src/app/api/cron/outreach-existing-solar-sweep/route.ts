@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function isAuthorized(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET;
@@ -36,15 +36,24 @@ export async function GET(req: NextRequest) {
   const sb = createAdminClient();
   const now = new Date().toISOString();
 
-  // 1) Alle existing_solar Leads
-  const { data: solarLeads, error: sErr } = await sb
-    .from("solar_lead_mass")
-    .select("id")
-    .eq("status", "existing_solar");
-  if (sErr) {
-    return NextResponse.json({ error: sErr.message }, { status: 500 });
+  // 1) Alle existing_solar Leads (paginiert — Supabase Default-Limit ist 1000)
+  const leadIds: string[] = [];
+  const PAGE = 1000;
+  let page = 0;
+  while (true) {
+    const { data, error } = await sb
+      .from("solar_lead_mass")
+      .select("id")
+      .eq("status", "existing_solar")
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data || data.length === 0) break;
+    leadIds.push(...data.map((l) => l.id as string));
+    if (data.length < PAGE) break;
+    page++;
   }
-  const leadIds = (solarLeads ?? []).map((l) => l.id as string);
 
   if (leadIds.length === 0) {
     return NextResponse.json({
