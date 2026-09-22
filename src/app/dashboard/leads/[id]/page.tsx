@@ -19,6 +19,7 @@ import {
   Search,
   MessageSquare,
   Users,
+  Image as ImageIcon,
 } from "lucide-react";
 import { getLead } from "@/lib/actions/leads";
 import { getUserSettings } from "@/lib/actions/settings";
@@ -41,6 +42,7 @@ import { LeadStatusEditor } from "@/components/leads/lead-status-editor";
 import { LeadContacts } from "@/components/leads/lead-contacts";
 import { LeadActivities } from "@/components/leads/lead-activities";
 import { LeadCrmSidebar } from "@/components/leads/lead-crm-sidebar";
+import { LeadImagesGallery } from "@/components/leads/lead-images-gallery";
 import { GreenScoutEmailTemplates } from "@/components/leads/greenscout-email-templates";
 import { ExistingSolarButton } from "@/components/leads/existing-solar-button";
 
@@ -335,7 +337,7 @@ export default async function LeadDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Tabs area */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="overview" className="gap-1.5">
               <Building2 className="h-4 w-4" />
               Übersicht
@@ -361,6 +363,10 @@ export default async function LeadDetailPage({
                   {activitiesData.length}
                 </span>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="images" className="gap-1.5">
+              <ImageIcon className="h-4 w-4" />
+              Bilder
             </TabsTrigger>
             <TabsTrigger value="enrichment" className="gap-1.5">
               <Search className="h-4 w-4" />
@@ -603,6 +609,11 @@ export default async function LeadDetailPage({
                 />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Tab: Bilder */}
+          <TabsContent value="images" className="space-y-4">
+            <LeadImagesGallery leadId={lead.id} />
           </TabsContent>
 
           {/* Tab: Enrichment */}
