@@ -26,6 +26,47 @@ export default function Error({
     console.error("[App Error Boundary]", error);
   }, [error]);
 
+  // Spezialfall: Server-Action-ID passt nicht mehr (typisch nach Deploy
+  // mit alter offener Browser-Session). "reset()" hilft nicht — die Seite
+  // muss komplett neu geladen werden damit neue Action-IDs im HTML sind.
+  const isStaleAction =
+    error.message?.includes("Server Action") &&
+    error.message?.includes("was not found");
+
+  if (isStaleAction) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-8">
+        <div className="max-w-lg w-full bg-white rounded-lg shadow-sm border border-amber-200 p-6 text-center">
+          <div className="h-12 w-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-2xl mx-auto mb-3">
+            ↻
+          </div>
+          <h1 className="text-lg font-semibold text-slate-900 mb-2">
+            Diese Seite ist veraltet
+          </h1>
+          <p className="text-sm text-slate-600 mb-5">
+            Nach einem Update braucht dein Browser die aktuelle Version.
+            Ein Klick auf „Neu laden" reicht — deine Eingaben sind nicht
+            verloren, du kannst sie danach noch mal machen.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 bg-slate-900 text-white rounded-md text-sm font-medium hover:bg-slate-700 transition-colors"
+          >
+            Jetzt neu laden
+          </button>
+          <details className="mt-6 text-left">
+            <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600">
+              Technische Details
+            </summary>
+            <pre className="mt-2 text-[10px] text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">
+              {error.message}
+            </pre>
+          </details>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-8">
       <div className="max-w-2xl w-full bg-white rounded-lg shadow-sm border border-red-200 p-6">
