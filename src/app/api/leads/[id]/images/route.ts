@@ -123,11 +123,26 @@ export async function POST(
     return NextResponse.json({ error: "Lead nicht gefunden" }, { status: 404 });
   }
 
-  // Limit-Check: max 20 Bilder pro Lead
-  const { count } = await supabase
+  // Limit-Check: max 20 Bilder pro Lead — nebenbei prüfen wir dass die
+  // Tabelle überhaupt existiert (Migration 20260922_lead_images muss
+  // vorher im Supabase-Dashboard SQL-Editor gelaufen sein).
+  const { count, error: countErr } = await supabase
     .from("lead_images")
     .select("id", { count: "exact", head: true })
     .eq("lead_id", leadId);
+  if (countErr) {
+    const msg = countErr.message ?? "";
+    if (msg.includes("does not exist") || msg.includes("schema cache") || countErr.code === "42P01") {
+      return NextResponse.json(
+        {
+          error:
+            "Die Bild-Tabelle ist noch nicht angelegt. Admin muss die Migration 20260922_lead_images.sql einmalig im Supabase-Dashboard ausführen.",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
   if (count !== null && count >= MAX_IMAGES_PER_LEAD) {
     return NextResponse.json(
       {
