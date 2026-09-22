@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, ChevronRight, RotateCcw } from "lucide-react";
+import { Loader2, ChevronRight, ChevronLeft, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,14 @@ const NEXT_STATUS: Record<string, string | null> = {
   contacted: "qualified",
   qualified: null,
   rejected:  null,
+};
+
+const PREV_STATUS: Record<string, string | null> = {
+  new:       null,
+  reviewed:  "new",
+  contacted: "reviewed",
+  qualified: "contacted",
+  rejected:  "new", // Abgelehnt zurück in "Neu" damit Bearbeitung neu starten kann
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -127,6 +135,8 @@ export function KanbanBoard() {
                 colLeads.map((lead) => {
                   const nextStatus = NEXT_STATUS[lead.status];
                   const nextCol = COLUMNS.find((c) => c.key === nextStatus);
+                  const prevStatus = PREV_STATUS[lead.status];
+                  const prevCol = COLUMNS.find((c) => c.key === prevStatus);
                   const overdue = isOverdue(lead.next_contact_date);
 
                   return (
@@ -169,25 +179,45 @@ export function KanbanBoard() {
                         </div>
                       )}
 
-                      {/* Move Button */}
-                      {nextStatus && nextCol && (
-                        <button
-                          onClick={() => moveStatus(lead.id, nextStatus)}
-                          disabled={moving === lead.id}
-                          className={cn(
-                            "w-full flex items-center justify-center gap-1 text-xs font-medium py-1 rounded-md border transition-colors",
-                            "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600",
-                            moving === lead.id && "opacity-50 cursor-not-allowed"
+                      {/* Move Buttons — Zurück & Weiter */}
+                      {(prevStatus && prevCol) || (nextStatus && nextCol) ? (
+                        <div className="flex gap-1">
+                          {prevStatus && prevCol && (
+                            <button
+                              onClick={() => moveStatus(lead.id, prevStatus)}
+                              disabled={moving === lead.id}
+                              title={`Zurück auf „${prevCol.label}"`}
+                              className={cn(
+                                "flex items-center justify-center gap-1 text-xs font-medium py-1 rounded-md border transition-colors px-2",
+                                "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-500",
+                                nextStatus && nextCol ? "shrink-0" : "flex-1",
+                                moving === lead.id && "opacity-50 cursor-not-allowed"
+                              )}
+                            >
+                              <ChevronLeft className="h-3 w-3" />
+                              {!(nextStatus && nextCol) && `← ${prevCol.label}`}
+                            </button>
                           )}
-                        >
-                          {moving === lead.id ? (
-                            <RotateCcw className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3" />
+                          {nextStatus && nextCol && (
+                            <button
+                              onClick={() => moveStatus(lead.id, nextStatus)}
+                              disabled={moving === lead.id}
+                              className={cn(
+                                "flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1 rounded-md border transition-colors",
+                                "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600",
+                                moving === lead.id && "opacity-50 cursor-not-allowed"
+                              )}
+                            >
+                              {moving === lead.id ? (
+                                <RotateCcw className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3" />
+                              )}
+                              → {nextCol.label}
+                            </button>
                           )}
-                          → {nextCol.label}
-                        </button>
-                      )}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })
