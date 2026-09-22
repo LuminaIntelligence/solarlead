@@ -1,10 +1,97 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserSettings } from "@/lib/actions/settings";
 import { calculateScore } from "@/lib/scoring";
 import { checkLeadDuplicate } from "@/lib/actions/leads";
+import { geocodeAddress } from "@/lib/providers/geocoding/nominatim";
+import { getSolarProvider } from "@/lib/providers/solar";
 import type { Lead } from "@/types/database";
+
+/**
+ * Solar-Assessment im Hintergrund für einen frisch angelegten Lead.
+ *
+ * Läuft asynchron nachdem der POST /api/leads Response schon rausging.
+ * Nutzt den Service-Role Client damit die Owner-Prüfung übersprungen wird.
+ * Bei Fehler: einfach loggen, kein Retry — der User kann den Assessment
+ * später manuell nachziehen wenn Score fehlt.
+ */
+async function runSolarAssessmentInBackground(
+  leadId: string,
+  latitude: number,
+  longitude: number
+): Promise<void> {
+  try {
+    const provider = getSolarProvider("live", process.env.GOOGLE_SOLAR_API_KEY);
+    const result = await provider.assess({ latitude, longitude });
+    if (!result) {
+      console.warn(`[bg-solar] Lead ${leadId}: kein Assessment-Ergebnis`);
+      return;
+    }
+
+    const admin = createAdminClient();
+
+    // Assessment speichern
+    const { error: aErr } = await admin.from("solar_assessments").insert({
+      lead_id: leadId,
+      provider: "google_solar",
+      latitude,
+      longitude,
+      solar_quality: result.solar_quality ?? null,
+      max_array_area_m2: result.max_array_area_m2 ?? null,
+      max_array_panels_count: result.max_array_panels_count ?? null,
+      annual_energy_kwh: result.annual_energy_kwh ?? null,
+      sunshine_hours: result.sunshine_hours ?? null,
+      carbon_offset: result.carbon_offset ?? null,
+      segment_count: result.segment_count ?? null,
+      panel_capacity_watts: result.panel_capacity_watts ?? null,
+      raw_response_json: result.raw_response_json ?? null,
+    });
+    if (aErr) {
+      console.error(`[bg-solar] Lead ${leadId}: assessment insert failed: ${aErr.message}`);
+      return;
+    }
+
+    // Score neu berechnen mit Solar-Daten
+    const { data: lead } = await admin
+      .from("solar_lead_mass")
+      .select("category, website, phone, email")
+      .eq("id", leadId)
+      .single();
+    if (!lead) return;
+
+    const scoring = calculateScore({
+      category: lead.category,
+      hasWebsite: !!lead.website,
+      hasPhone: !!lead.phone,
+      hasEmail: !!lead.email,
+      solarData: {
+        solar_quality: result.solar_quality,
+        max_array_panels_count: result.max_array_panels_count,
+        max_array_area_m2: result.max_array_area_m2,
+        annual_energy_kwh: result.annual_energy_kwh,
+      },
+    });
+
+    await admin
+      .from("solar_lead_mass")
+      .update({
+        solar_score: scoring.solar_score,
+        business_score: scoring.business_score,
+        electricity_score: scoring.electricity_score,
+        outreach_score: scoring.outreach_score,
+        total_score: scoring.total_score,
+      })
+      .eq("id", leadId);
+
+    console.log(
+      `[bg-solar] Lead ${leadId}: Score ${scoring.total_score} (${result.max_array_area_m2 ?? "?"} m²)`
+    );
+  } catch (err) {
+    console.error(`[bg-solar] Lead ${leadId}: unexpected error`, err);
+  }
+}
 
 const CreateLeadSchema = z.object({
   company_name: z.string().min(1),
@@ -122,7 +209,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(data as Lead, { status: 201 });
+    // Auto-Geocoding + Solar-Assessment für manuell angelegte Leads
+    // (nur wenn User keine Koordinaten mitgeliefert hat).
+    // Geocoding ist sync (~1s), Solar-Assessment fire-and-forget im Hintergrund.
+    let leadWithCoords = data as Lead;
+    let geocodingResult: {
+      ok: boolean;
+      confidence?: string;
+      error?: string;
+    } = { ok: false };
+
+    if (input.source === "manual" && !input.latitude && !input.longitude) {
+      const geo = await geocodeAddress({
+        street: input.address,
+        postal_code: input.postal_code ?? null,
+        city: input.city,
+        country: input.country ?? "de",
+      });
+
+      if (geo.ok) {
+        geocodingResult = { ok: true, confidence: geo.confidence };
+        // Koordinaten am Lead speichern (Service-Role Client umgeht Owner-Filter)
+        const admin = createAdminClient();
+        const { data: updated } = await admin
+          .from("solar_lead_mass")
+          .update({
+            latitude: geo.latitude,
+            longitude: geo.longitude,
+          })
+          .eq("id", data.id)
+          .select()
+          .single();
+        if (updated) leadWithCoords = updated as Lead;
+
+        // Fire-and-forget: Solar-Assessment im Hintergrund
+        // (kein await — Response geht sofort an Frontend)
+        void runSolarAssessmentInBackground(
+          data.id,
+          geo.latitude,
+          geo.longitude
+        ).catch((e) => {
+          console.error("[POST /api/leads] Solar-Assessment failed:", e);
+        });
+      } else {
+        geocodingResult = { ok: false, error: geo.error };
+      }
+    }
+
+    return NextResponse.json(
+      {
+        ...leadWithCoords,
+        geocoding: geocodingResult,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("[POST /api/leads] error:", error);
     return NextResponse.json(

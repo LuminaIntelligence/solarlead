@@ -6,6 +6,7 @@ import { saveSolarAssessment } from "@/lib/actions/leads";
 import { getUserSettings } from "@/lib/actions/settings";
 import { getSystemApiKeys } from "@/lib/actions/systemSettings";
 import { calculateScore } from "@/lib/scoring";
+import { hasLeadAccess } from "@/lib/auth/lead-access";
 
 const SolarRequestSchema = z.object({
   lead_id: z.string().uuid(),
@@ -39,12 +40,16 @@ export async function POST(request: NextRequest) {
 
     const { lead_id, latitude, longitude } = parsed.data;
 
-    // Verify lead belongs to user
+    // Zugriff prüfen (Owner, Assignee ODER privilegierte Rolle)
+    if (!(await hasLeadAccess(supabase, lead_id, user.id))) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Lead-Daten holen (Access ist geprüft, kein weiterer Owner-Filter)
     const { data: lead, error: leadError } = await supabase
       .from("solar_lead_mass")
       .select("*")
       .eq("id", lead_id)
-      .eq("user_id", user.id)
       .single();
 
     if (leadError || !lead) {

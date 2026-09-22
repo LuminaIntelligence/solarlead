@@ -97,7 +97,15 @@ export function NewLeadButton() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
 
-      toast({ title: "Lead angelegt", description: form.company_name });
+      // Geocoding-Result auslesen und im Toast anzeigen
+      const geo = data?.geocoding;
+      let desc = form.company_name;
+      if (geo?.ok) {
+        desc += ` · Adresse geocoded (${geo.confidence}) · Solar-Assessment läuft im Hintergrund`;
+      } else if (geo?.error) {
+        desc += ` · Adresse konnte nicht geolocated werden — Score wird ohne Dachfläche berechnet`;
+      }
+      toast({ title: "Lead angelegt", description: desc });
       // Navigate to the new lead so the user can continue editing
       const newId = data?.id ?? data?.lead?.id;
       if (newId) {
