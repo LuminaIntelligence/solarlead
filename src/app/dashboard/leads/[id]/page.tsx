@@ -43,6 +43,7 @@ import { LeadContacts } from "@/components/leads/lead-contacts";
 import { LeadActivities } from "@/components/leads/lead-activities";
 import { LeadCrmSidebar } from "@/components/leads/lead-crm-sidebar";
 import { LeadImagesGallery } from "@/components/leads/lead-images-gallery";
+import { EnrichLeadButton } from "@/components/leads/enrich-lead-button";
 import { GreenScoutEmailTemplates } from "@/components/leads/greenscout-email-templates";
 import { ExistingSolarButton } from "@/components/leads/existing-solar-button";
 
@@ -621,10 +622,17 @@ export default async function LeadDetailPage({
             {enrichmentData ? (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Search className="h-5 w-5" />
-                    Website-Anreicherung
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Search className="h-5 w-5" />
+                      Website-Anreicherung
+                    </CardTitle>
+                    <EnrichLeadButton
+                      leadId={lead.id}
+                      website={lead.website ?? null}
+                      alreadyEnriched
+                    />
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {enrichmentData.website_title && (
@@ -672,14 +680,25 @@ export default async function LeadDetailPage({
               </Card>
             ) : (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Search className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground text-lg font-medium">
-                    Noch keine Anreicherungsdaten vorhanden
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Reichern Sie diesen Lead an, um Website- und Keyword-Daten zu sammeln.
-                  </p>
+                <CardContent className="py-12 text-center space-y-4">
+                  <Search className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  <div>
+                    <p className="text-muted-foreground text-lg font-medium">
+                      Noch keine Anreicherungsdaten vorhanden
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Klick auf „Jetzt anreichern" — wir scrapen die Website
+                      und extrahieren Titel, Beschreibung und relevante Schlüsselwörter
+                      (~15–30 s).
+                    </p>
+                  </div>
+                  <div className="flex justify-center">
+                    <EnrichLeadButton
+                      leadId={lead.id}
+                      website={lead.website ?? null}
+                      alreadyEnriched={false}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             )}
