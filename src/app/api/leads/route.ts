@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getUserSettings } from "@/lib/actions/settings";
 import { calculateScore } from "@/lib/scoring";
+import { checkLeadDuplicate } from "@/lib/actions/leads";
 import type { Lead } from "@/types/database";
 
 const CreateLeadSchema = z.object({
@@ -45,6 +46,27 @@ export async function POST(request: NextRequest) {
 
     const input = parsed.data;
 
+    // Duplikat-Check: falls die Firma in dieser Stadt/PLZ (oder mit dieser
+    // place_id) schon existiert, KEIN neuer Lead — sondern Hinweis mit
+    // Info wem der Lead aktuell gehört.
+    const dup = await checkLeadDuplicate({
+      place_id: input.place_id ?? null,
+      company_name: input.company_name,
+      postal_code: input.postal_code ?? null,
+      city: input.city,
+    });
+    if (dup) {
+      return NextResponse.json(
+        {
+          error: dup.is_own
+            ? `Diese Firma hast du bereits erfasst: "${dup.company_name}".`
+            : `Diese Firma ist bereits im System${dup.assigned_to_email ? ` und ${dup.assigned_to_email} zugewiesen` : ""}: "${dup.company_name}".`,
+          duplicate: dup,
+        },
+        { status: 409 }
+      );
+    }
+
     const settings = await getUserSettings();
     const weights = settings?.scoring_weights ?? undefined;
 
@@ -58,8 +80,11 @@ export async function POST(request: NextRequest) {
       weights
     );
 
-    const lead: Omit<Lead, "id" | "created_at" | "updated_at"> = {
+    const lead: Omit<Lead, "id" | "created_at" | "updated_at"> & {
+      assigned_to: string;
+    } = {
       user_id: user.id,
+      assigned_to: user.id, // Field-Member ist gleichzeitig Owner UND Assignee
       company_name: input.company_name,
       category: input.category,
       address: input.address,
