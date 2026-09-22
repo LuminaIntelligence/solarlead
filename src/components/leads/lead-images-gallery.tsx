@@ -80,6 +80,41 @@ export function LeadImagesGallery({ leadId }: Props) {
     load();
   }, [load]);
 
+  // Clipboard-Paste: Screenshots aus Snipping-Tool/macOS-Screenshot etc.
+  // landen als image/* im Clipboard und werden hier direkt hochgeladen.
+  useEffect(() => {
+    const handler = async (e: ClipboardEvent) => {
+      if (uploading) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const pasted: File[] = [];
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const blob = item.getAsFile();
+          if (blob) {
+            const named = blob.name
+              ? blob
+              : new File([blob], `screenshot-${Date.now()}.png`, {
+                  type: blob.type,
+                });
+            pasted.push(named);
+          }
+        }
+      }
+      if (pasted.length > 0) {
+        e.preventDefault();
+        toast({
+          title: `${pasted.length} Bild${pasted.length > 1 ? "er" : ""} aus Zwischenablage`,
+          description: "Wird jetzt hochgeladen…",
+        });
+        for (const f of pasted) await uploadFile(f);
+      }
+    };
+    window.addEventListener("paste", handler);
+    return () => window.removeEventListener("paste", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploading]);
+
   async function uploadFile(file: File) {
     // Client-side Validation
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
@@ -271,6 +306,9 @@ export function LeadImagesGallery({ leadId }: Props) {
             <ImageIcon className="h-8 w-8 text-slate-400 mx-auto mb-2" />
             <p className="text-sm text-slate-600">
               Noch keine Bilder. Zieh eins hier rein oder klick oben auf „Foto hochladen".
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              oder <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-mono">Strg</kbd>+<kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-mono">V</kbd> für Screenshots
             </p>
             <p className="text-xs text-slate-400 mt-1">
               Max {MAX_FILE_MB} MB pro Bild, JPG/PNG/HEIC/WebP.

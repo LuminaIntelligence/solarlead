@@ -20,7 +20,7 @@
  *     welche Bilder fehlten und kann sie auf der Detail-Seite nachladen.
  */
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Plus,
@@ -178,6 +178,44 @@ export function NewLeadButton() {
     if (e.target.files) addFiles(e.target.files);
     e.target.value = "";
   }
+
+  // Clipboard-Paste: wenn Modal offen ist und User Strg+V (bzw. Cmd+V auf
+  // Mac) drückt und die Zwischenablage ein Bild enthält (z.B. von einem
+  // Screenshot), wird es direkt als Upload eingefügt. Screenshots aus
+  // Windows-Snipping-Tool / macOS-Screenshot / KDE-Spectacle landen als
+  // image/png im Clipboard und werden hier abgefangen.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: ClipboardEvent) => {
+      if (saving) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const pasted: File[] = [];
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const blob = item.getAsFile();
+          if (blob) {
+            // Screenshots haben oft keinen Namen — generisch benennen
+            const named = blob.name
+              ? blob
+              : new File([blob], `screenshot-${Date.now()}.png`, { type: blob.type });
+            pasted.push(named);
+          }
+        }
+      }
+      if (pasted.length > 0) {
+        e.preventDefault();
+        addFiles(pasted);
+        toast({
+          title: `${pasted.length} Bild${pasted.length > 1 ? "er" : ""} aus Zwischenablage`,
+          description: "Wird beim Speichern hochgeladen",
+        });
+      }
+    };
+    window.addEventListener("paste", handler);
+    return () => window.removeEventListener("paste", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, saving, images.length]);
 
   async function handleSave() {
     // Quick validation
@@ -523,7 +561,10 @@ export function NewLeadButton() {
               >
                 <ImageIcon className="h-6 w-6 text-slate-400 mx-auto mb-1" />
                 <p className="text-slate-600">
-                  Zieh Bilder hier rein oder klick oben auf „Datei" / „Kamera"
+                  Zieh Bilder hier rein, klick oben auf „Datei" / „Kamera"
+                </p>
+                <p className="text-slate-500 mt-0.5">
+                  oder <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-mono">Strg</kbd>+<kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded text-[10px] font-mono">V</kbd> für Screenshots
                 </p>
                 <p className="text-slate-400 mt-0.5">
                   Max {MAX_FILE_MB} MB pro Bild
