@@ -79,6 +79,7 @@ export function LeadsFilters() {
     searchParams.has("status") ||
     searchParams.has("category") ||
     searchParams.has("city") ||
+    searchParams.has("postalCode") ||
     searchParams.has("minScore") ||
     searchParams.has("search");
 
@@ -137,6 +138,16 @@ export function LeadsFilters() {
         className="w-[140px]"
         defaultValue={searchParams.get("city") ?? ""}
         onChange={(e) => updateParams("city", e.target.value)}
+      />
+
+      <Input
+        placeholder="PLZ (z.B. 83)"
+        className="w-[140px]"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={5}
+        defaultValue={searchParams.get("postalCode") ?? ""}
+        onChange={(e) => updateParams("postalCode", e.target.value)}
       />
 
       <Input

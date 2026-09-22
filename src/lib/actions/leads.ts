@@ -41,6 +41,7 @@ export async function getLeads(filters?: {
   status?: string;
   category?: string;
   city?: string;
+  postalCode?: string; // Präfix-Match, z.B. "83" = alle 83xxx
   minScore?: number;
   maxScore?: number;
   sortBy?: string;
@@ -71,6 +72,10 @@ export async function getLeads(filters?: {
     if (filters?.city) {
       query = query.eq("city", filters.city);
     }
+    if (filters?.postalCode) {
+      // Präfix-Match: "83" matcht 83xxx, "8330" matcht 83301, 83308 etc.
+      query = query.like("postal_code", `${filters.postalCode.trim()}%`);
+    }
     if (filters?.minScore !== undefined) {
       query = query.gte("total_score", filters.minScore);
     }
@@ -78,9 +83,16 @@ export async function getLeads(filters?: {
       query = query.lte("total_score", filters.maxScore);
     }
     if (filters?.search) {
-      query = query.or(
-        `company_name.ilike.%${filters.search}%,address.ilike.%${filters.search}%,city.ilike.%${filters.search}%`
-      );
+      const s = filters.search.trim();
+      // Wenn der Search-Term nur aus 1-5 Ziffern besteht, als PLZ-Prefix
+      // interpretieren (sonst passt "83" auf "Nr. 83" in Adresse etc.).
+      if (/^\d{1,5}$/.test(s)) {
+        query = query.like("postal_code", `${s}%`);
+      } else {
+        query = query.or(
+          `company_name.ilike.%${s}%,address.ilike.%${s}%,city.ilike.%${s}%,postal_code.ilike.${s}%`
+        );
+      }
     }
 
     const sortBy = filters?.sortBy || "total_score";

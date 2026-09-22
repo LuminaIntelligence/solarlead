@@ -240,6 +240,11 @@ export function LeadsTable({ leads }: LeadsTableProps) {
                 </button>
               </th>
               <th className="px-4 py-3">
+                <button onClick={() => toggleSort("postal_code")} className="inline-flex items-center font-medium hover:text-primary">
+                  PLZ {getSortIcon("postal_code")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
                 <button onClick={() => toggleSort("city")} className="inline-flex items-center font-medium hover:text-primary">
                   Stadt {getSortIcon("city")}
                 </button>
@@ -285,6 +290,7 @@ export function LeadsTable({ leads }: LeadsTableProps) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatCategory(lead.category)}</td>
+                <td className="px-4 py-3 text-muted-foreground tabular-nums">{lead.postal_code ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{lead.city}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">

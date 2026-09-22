@@ -13,6 +13,7 @@ export default async function LeadsPage({
     status?: string;
     category?: string;
     city?: string;
+    postalCode?: string;
     minScore?: string;
     search?: string;
     sortBy?: string;
@@ -25,6 +26,7 @@ export default async function LeadsPage({
     status: params.status || undefined,
     category: params.category || undefined,
     city: params.city || undefined,
+    postalCode: params.postalCode || undefined,
     minScore: params.minScore ? Number(params.minScore) : undefined,
     search: params.search || undefined,
     sortBy: params.sortBy || undefined,
