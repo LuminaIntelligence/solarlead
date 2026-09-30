@@ -46,6 +46,8 @@ const CATEGORY_SEARCH_TERMS: Record<string, string[]> = {
   data_center:      ["Rechenzentrum", "Datacenter", "Serverstandort", "IT-Infrastruktur Zentrum"],
   gas_station:      ["Tankstelle", "Autogas Tankstelle", "LKW Tankstelle"],
   car_park:         ["Parkhaus", "Parkdeck", "Großparkplatz", "Park and Ride"],
+  workshop:         ["Kfz-Werkstatt", "Autowerkstatt", "Schreinerei", "Karosseriebau"],
+  senior_home:      ["Seniorenheim", "Altenheim", "Pflegeheim", "Seniorenresidenz"],
 };
 
 interface PlacesTextSearchResponse {

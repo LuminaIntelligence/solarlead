@@ -68,6 +68,8 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
       { value: "data_center",     label: "Rechenzentrum",         emoji: "🖥️" },
       { value: "gas_station",     label: "Tankstelle",            emoji: "⛽" },
       { value: "car_park",        label: "Parkhaus",              emoji: "🅿️" },
+      { value: "workshop",        label: "Werkstatt",             emoji: "🔧" },
+      { value: "senior_home",     label: "Seniorenheim",          emoji: "👵" },
     ],
   },
 ];

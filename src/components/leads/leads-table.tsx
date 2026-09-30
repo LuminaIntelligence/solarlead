@@ -53,6 +53,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   furniture_store: "Möbelhaus",
   hardware_store: "Baumarkt",
   shopping_center: "Einkaufszentrum",
+  workshop: "Werkstatt",
+  senior_home: "Seniorenheim",
 };
 
 function formatCategory(category: string): string {

@@ -3,8 +3,10 @@ import { Download } from "lucide-react";
 import { getLeads } from "@/lib/actions/leads";
 import { LeadsTable } from "@/components/leads/leads-table";
 import { LeadsFilters } from "@/components/leads/leads-filters";
+import { LeadsViewTabs } from "@/components/leads/leads-view-tabs";
 import { BulkContactsButton } from "@/components/leads/bulk-contacts-button";
 import { NewLeadButton } from "@/components/leads/new-lead-button";
+import { RememberLeadsListUrl } from "@/components/leads/leads-list-return";
 
 export default async function LeadsPage({
   searchParams,
@@ -18,9 +20,11 @@ export default async function LeadsPage({
     search?: string;
     sortBy?: string;
     sortOrder?: string;
+    view?: string;
   }>;
 }) {
   const params = await searchParams;
+  const isRecent = params.view === "recent";
 
   const leads = await getLeads({
     status: params.status || undefined,
@@ -31,15 +35,20 @@ export default async function LeadsPage({
     search: params.search || undefined,
     sortBy: params.sortBy || undefined,
     sortOrder: (params.sortOrder as "asc" | "desc") || undefined,
+    view: isRecent ? "recent" : "all",
   });
 
   return (
     <div className="space-y-6">
+      <RememberLeadsListUrl />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Alle Leads</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {isRecent ? "Zuletzt bearbeitete Leads" : "Alle Leads"}
+          </h1>
           <p className="text-muted-foreground">
-            {leads.length} {leads.length === 1 ? "Lead" : "Leads"} gefunden
+            {leads.length} {leads.length === 1 ? "Lead" : "Leads"}
+            {isRecent ? " (nach letzter Änderung)" : " gefunden"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -55,6 +64,7 @@ export default async function LeadsPage({
         </div>
       </div>
 
+      <LeadsViewTabs />
       <LeadsFilters />
       <LeadsTable leads={leads} />
     </div>

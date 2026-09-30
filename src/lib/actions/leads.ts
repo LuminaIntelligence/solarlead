@@ -47,6 +47,10 @@ export async function getLeads(filters?: {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   search?: string;
+  // view='recent' überschreibt sortBy/sortOrder mit updated_at DESC und
+  // limitiert auf die letzten N — für den "Zuletzt bearbeitet"-Reiter.
+  view?: "all" | "recent";
+  recentLimit?: number;
 }): Promise<Lead[]> {
   try {
     const supabase = await createClient();
@@ -95,9 +99,17 @@ export async function getLeads(filters?: {
       }
     }
 
-    const sortBy = filters?.sortBy || "total_score";
-    const sortOrder = filters?.sortOrder || "desc";
-    query = query.order(sortBy, { ascending: sortOrder === "asc" });
+    if (filters?.view === "recent") {
+      // "Zuletzt bearbeitet"-Reiter: nach updated_at DESC, oben limitiert.
+      // Ignoriert sortBy/sortOrder bewusst.
+      query = query.order("updated_at", { ascending: false }).limit(
+        filters.recentLimit ?? 50
+      );
+    } else {
+      const sortBy = filters?.sortBy || "total_score";
+      const sortOrder = filters?.sortOrder || "desc";
+      query = query.order(sortBy, { ascending: sortOrder === "asc" });
+    }
 
     const { data, error } = await query;
 

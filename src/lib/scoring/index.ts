@@ -43,6 +43,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   data_center:     'Rechenzentrum',
   gas_station:     'Tankstelle',
   car_park:        'Parkhaus',
+  workshop:        'Werkstatt',
+  senior_home:     'Seniorenheim',
 };
 
 function formatCategory(category: string): string {
@@ -90,6 +92,8 @@ const BUSINESS_SCORES: Record<string, { score: number; label: string }> = {
   hotel:           { score: 55, label: 'Mittlere Dachfläche, ganzjähriger Energiebedarf' },
   car_park:        { score: 72, label: 'Große Dachflächen (Carport-Solar), wachsende E-Ladeinfrastruktur' },
   gas_station:     { score: 55, label: 'Überdachung als Solardach nutzbar, moderater Eigenverbrauch' },
+  workshop:        { score: 72, label: 'Maschinen und Druckluft, gute Hallendachfläche' },
+  senior_home:     { score: 78, label: 'Konstanter Strom- und Warmwasserbedarf über den ganzen Tag' },
 };
 
 function calculateBusinessScore(category: string): { score: number; explanation: string } {
@@ -121,6 +125,8 @@ const ELECTRICITY_SCORES: Record<string, { score: number; label: string }> = {
   hardware_store:   { score: 55, label: 'Einzelhandelsbeleuchtung und moderate Klimatisierung' },
   furniture_store:  { score: 55, label: 'Ausstellungsbeleuchtung und Klimatisierung' },
   car_dealership:   { score: 50, label: 'Ausstellungs- und Außenbeleuchtung, moderat insgesamt' },
+  workshop:         { score: 70, label: 'Druckluft, Schweißen, Lackieren — deutlicher Tagesverbrauch' },
+  senior_home:      { score: 72, label: 'Küche, Wäscherei, medizinische Geräte rund um die Uhr' },
 };
 
 function calculateElectricityScore(category: string): { score: number; explanation: string } {

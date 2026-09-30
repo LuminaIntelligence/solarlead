@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import {
   Building2,
   MapPin,
@@ -10,7 +9,6 @@ import {
   Zap,
   Leaf,
   PanelTop,
-  ArrowLeft,
   Tag,
   Hash,
   Clock,
@@ -43,6 +41,7 @@ import { LeadContacts } from "@/components/leads/lead-contacts";
 import { LeadActivities } from "@/components/leads/lead-activities";
 import { LeadCrmSidebar } from "@/components/leads/lead-crm-sidebar";
 import { LeadImagesGallery } from "@/components/leads/lead-images-gallery";
+import { LeadsBackLink } from "@/components/leads/leads-list-return";
 import { EnrichLeadButton } from "@/components/leads/enrich-lead-button";
 import { GreenScoutEmailTemplates } from "@/components/leads/greenscout-email-templates";
 import { ExistingSolarButton } from "@/components/leads/existing-solar-button";
@@ -65,6 +64,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   data_center: "Rechenzentrum",
   industrial: "Industrie",
   commercial: "Gewerbe",
+  workshop: "Werkstatt",
+  senior_home: "Seniorenheim",
 };
 
 function formatCategory(category: string): string {
@@ -301,13 +302,7 @@ export default async function LeadDetailPage({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link
-          href="/dashboard/leads"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Zurück zu Leads
-        </Link>
+        <LeadsBackLink className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors" />
       </div>
 
       <div className="flex items-start justify-between">
@@ -774,13 +769,7 @@ export default async function LeadDetailPage({
             </CardContent>
           </Card>
 
-          <Link
-            href="/dashboard/leads"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Zurück zu Leads
-          </Link>
+          <LeadsBackLink className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors" />
         </div>
       </div>
     </div>

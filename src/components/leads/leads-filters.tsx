@@ -28,6 +28,8 @@ const CATEGORIES = [
   "furniture_store",
   "hardware_store",
   "shopping_center",
+  "workshop",
+  "senior_home",
 ];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -52,6 +54,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   furniture_store: "Möbelhaus",
   hardware_store: "Baumarkt",
   shopping_center: "Einkaufszentrum",
+  workshop: "Werkstatt",
+  senior_home: "Seniorenheim",
 };
 
 export function LeadsFilters() {

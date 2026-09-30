@@ -47,6 +47,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   manufacturing: "Fertigung", metalworking: "Metallverarbeitung",
   car_dealership: "Autohaus", hotel: "Hotel", furniture_store: "Möbelhaus",
   hardware_store: "Baumarkt", shopping_center: "Einkaufszentrum",
+  workshop: "Werkstatt", senior_home: "Seniorenheim",
 };
 
 function scoreColor(score: number) {
