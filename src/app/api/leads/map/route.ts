@@ -7,13 +7,27 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data, error } = await supabase
+    // Role-Scope: Field-Member (role='user') sieht eigene + zugewiesene Leads.
+    // Admin/team_lead/reply_specialist sehen alles.
+    const { data: settings } = await supabase
+      .from("user_settings")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const role = (settings?.role as string) ?? "user";
+    const mustScope = role === "user" || !role;
+
+    let query = supabase
       .from("solar_lead_mass")
       .select("id, company_name, category, city, address, latitude, longitude, total_score, status, solar_score")
-      .eq("user_id", user.id)
       .not("latitude", "is", null)
-      .not("longitude", "is", null)
-      .order("total_score", { ascending: false });
+      .not("longitude", "is", null);
+
+    if (mustScope) {
+      query = query.or(`user_id.eq.${user.id},assigned_to.eq.${user.id}`);
+    }
+
+    const { data, error } = await query.order("total_score", { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
