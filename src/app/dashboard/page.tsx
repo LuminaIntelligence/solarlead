@@ -6,30 +6,33 @@ import { getLeadStats, getLeads } from "@/lib/actions/leads";
 import type { Lead, LeadStatus } from "@/types/database";
 import { getCategoryLabel } from "@/lib/constants/categories";
 
-const STATUS_ORDER: LeadStatus[] = ["new", "reviewed", "contacted", "qualified", "rejected"];
+const STATUS_ORDER: LeadStatus[] = ["new", "reviewed", "contacted", "follow_up", "qualified", "rejected"];
 
 const statusColors: Record<LeadStatus, string> = {
   new: "bg-blue-100 text-blue-800",
   reviewed: "bg-yellow-100 text-yellow-800",
   contacted: "bg-purple-100 text-purple-800",
+  follow_up: "bg-orange-100 text-orange-800",
   qualified: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
-  existing_solar: "bg-orange-100 text-orange-800",
+  existing_solar: "bg-amber-100 text-amber-800",
 };
 
 const statusBarColors: Record<LeadStatus, string> = {
   new: "bg-blue-500",
   reviewed: "bg-yellow-500",
   contacted: "bg-purple-500",
+  follow_up: "bg-orange-500",
   qualified: "bg-green-500",
   rejected: "bg-red-400",
-  existing_solar: "bg-orange-400",
+  existing_solar: "bg-amber-400",
 };
 
 const statusLabels: Record<LeadStatus, string> = {
   new: "Neu",
   reviewed: "Geprüft",
   contacted: "Kontaktiert",
+  follow_up: "Wiedervorlage",
   qualified: "Qualifiziert",
   rejected: "Abgelehnt",
   existing_solar: "☀️ Bereits Solar",

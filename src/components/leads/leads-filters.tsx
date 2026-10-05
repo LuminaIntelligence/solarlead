@@ -16,12 +16,13 @@ import {
 } from "@/components/ui/select";
 import { CATEGORY_GROUPS } from "@/lib/constants/categories";
 
-const STATUSES = ["new", "reviewed", "contacted", "qualified", "rejected", "existing_solar"];
+const STATUSES = ["new", "reviewed", "contacted", "follow_up", "qualified", "rejected", "existing_solar"];
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Neu",
   reviewed: "Geprüft",
   contacted: "Kontaktiert",
+  follow_up: "Wiedervorlage",
   qualified: "Qualifiziert",
   rejected: "Abgelehnt",
   existing_solar: "☀️ Bereits Solar",

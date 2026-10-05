@@ -21,6 +21,7 @@ const COLUMNS: { key: string; label: string; color: string; headerColor: string;
   { key: "new",       label: "Neu",          color: "border-blue-200 bg-blue-50/40",    headerColor: "bg-blue-100 text-blue-800",    countColor: "bg-blue-200 text-blue-700" },
   { key: "reviewed",  label: "Geprüft",      color: "border-yellow-200 bg-yellow-50/40", headerColor: "bg-yellow-100 text-yellow-800", countColor: "bg-yellow-200 text-yellow-700" },
   { key: "contacted", label: "Kontaktiert",  color: "border-purple-200 bg-purple-50/40", headerColor: "bg-purple-100 text-purple-800", countColor: "bg-purple-200 text-purple-700" },
+  { key: "follow_up", label: "Wiedervorlage", color: "border-orange-200 bg-orange-50/40", headerColor: "bg-orange-100 text-orange-800", countColor: "bg-orange-200 text-orange-700" },
   { key: "qualified", label: "Qualifiziert", color: "border-green-200 bg-green-50/40",   headerColor: "bg-green-100 text-green-800",  countColor: "bg-green-200 text-green-700" },
   { key: "rejected",  label: "Abgelehnt",   color: "border-red-200 bg-red-50/40",      headerColor: "bg-red-100 text-red-800",      countColor: "bg-red-200 text-red-700" },
 ];
@@ -28,7 +29,8 @@ const COLUMNS: { key: string; label: string; color: string; headerColor: string;
 const NEXT_STATUS: Record<string, string | null> = {
   new:       "reviewed",
   reviewed:  "contacted",
-  contacted: "qualified",
+  contacted: "follow_up",
+  follow_up: "qualified",
   qualified: null,
   rejected:  null,
 };
@@ -37,7 +39,8 @@ const PREV_STATUS: Record<string, string | null> = {
   new:       null,
   reviewed:  "new",
   contacted: "reviewed",
-  qualified: "contacted",
+  follow_up: "contacted",
+  qualified: "follow_up",
   rejected:  "new", // Abgelehnt zurück in "Neu" damit Bearbeitung neu starten kann
 };
 
