@@ -12,7 +12,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   logistics:       'Logistik',
   warehouse:       'Lager / Halle',
   cold_storage:    'Kühlhaus',
-  wholesale:       'Großhandel',
+  wholesale:       'Handel',
   supermarket:     'Supermarkt',
   shopping_center: 'Einkaufszentrum',
   hardware_store:  'Baumarkt',

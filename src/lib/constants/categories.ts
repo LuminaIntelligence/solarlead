@@ -21,7 +21,7 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
       { value: "logistics",       label: "Logistik",              emoji: "🚛" },
       { value: "warehouse",       label: "Lager / Halle",         emoji: "🏭" },
       { value: "cold_storage",    label: "Kühlhaus",              emoji: "❄️" },
-      { value: "wholesale",       label: "Großhandel",            emoji: "📦" },
+      { value: "wholesale",       label: "Handel",                emoji: "📦" },
       { value: "supermarket",     label: "Supermarkt",            emoji: "🛒" },
       { value: "shopping_center", label: "Einkaufszentrum",       emoji: "🏬" },
       { value: "hardware_store",  label: "Baumarkt",              emoji: "🔨" },
