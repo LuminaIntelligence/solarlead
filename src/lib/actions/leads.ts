@@ -108,7 +108,12 @@ export async function getLeads(filters?: {
     } else {
       const sortBy = filters?.sortBy || "total_score";
       const sortOrder = filters?.sortOrder || "desc";
-      query = query.order(sortBy, { ascending: sortOrder === "asc" });
+      // EGRESS-GUARD: Admin-Leads-Liste nie unbegrenzt. 2000 Top-Rows
+      // reichen für die UI (Tabelle mit Scroll/Filter), und Export
+      // nutzt sowieso den gefilterten Datensatz.
+      query = query
+        .order(sortBy, { ascending: sortOrder === "asc" })
+        .limit(2000);
     }
 
     const { data, error } = await query;

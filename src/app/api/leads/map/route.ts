@@ -17,17 +17,27 @@ export async function GET() {
     const role = (settings?.role as string) ?? "user";
     const mustScope = role === "user" || !role;
 
+    // EGRESS-GUARD: Nie mehr als 2000 Pins ausliefern.
+    // Admin sieht Top-Score-Leads (sortiert nach total_score DESC),
+    // Field-Member bekommt sowieso nur eigene+zugewiesene (<~2000).
+    // 2000 Pins × ~270 Byte = ~550 KB statt 32 MB.
+    const MAX_PINS = 2000;
+
     let query = supabase
       .from("solar_lead_mass")
       .select("id, company_name, category, city, address, latitude, longitude, total_score, status, solar_score")
       .not("latitude", "is", null)
-      .not("longitude", "is", null);
+      .not("longitude", "is", null)
+      // Archivierte Leads nicht auf die Karte (sparen Egress + irrelevant)
+      .neq("status", "existing_solar");
 
     if (mustScope) {
       query = query.or(`user_id.eq.${user.id},assigned_to.eq.${user.id}`);
     }
 
-    const { data, error } = await query.order("total_score", { ascending: false });
+    const { data, error } = await query
+      .order("total_score", { ascending: false })
+      .limit(MAX_PINS);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
