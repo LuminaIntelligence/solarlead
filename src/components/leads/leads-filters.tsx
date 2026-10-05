@@ -8,29 +8,15 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CATEGORY_GROUPS } from "@/lib/constants/categories";
 
 const STATUSES = ["new", "reviewed", "contacted", "qualified", "rejected", "existing_solar"];
-
-const CATEGORIES = [
-  "logistics",
-  "warehouse",
-  "cold_storage",
-  "supermarket",
-  "food_production",
-  "manufacturing",
-  "metalworking",
-  "car_dealership",
-  "hotel",
-  "furniture_store",
-  "hardware_store",
-  "shopping_center",
-  "workshop",
-  "senior_home",
-];
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Neu",
@@ -39,23 +25,6 @@ const STATUS_LABELS: Record<string, string> = {
   qualified: "Qualifiziert",
   rejected: "Abgelehnt",
   existing_solar: "☀️ Bereits Solar",
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  logistics: "Logistik",
-  warehouse: "Lager",
-  cold_storage: "Kühlhaus",
-  supermarket: "Supermarkt",
-  food_production: "Lebensmittelproduktion",
-  manufacturing: "Fertigung",
-  metalworking: "Metallverarbeitung",
-  car_dealership: "Autohaus",
-  hotel: "Hotel",
-  furniture_store: "Möbelhaus",
-  hardware_store: "Baumarkt",
-  shopping_center: "Einkaufszentrum",
-  workshop: "Werkstatt",
-  senior_home: "Seniorenheim",
 };
 
 export function LeadsFilters() {
@@ -124,15 +93,23 @@ export function LeadsFilters() {
         value={searchParams.get("category") ?? "all"}
         onValueChange={(value) => updateParams("category", value)}
       >
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger className="w-[200px]">
           <SelectValue placeholder="Kategorie" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="max-h-[400px]">
           <SelectItem value="all">Alle Kategorien</SelectItem>
-          {CATEGORIES.map((category) => (
-            <SelectItem key={category} value={category}>
-              {CATEGORY_LABELS[category] ?? category}
-            </SelectItem>
+          {CATEGORY_GROUPS.map((group) => (
+            <SelectGroup key={group.label}>
+              <SelectLabel className="text-xs text-muted-foreground">
+                {group.label}
+              </SelectLabel>
+              {group.items.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  <span className="mr-2">{item.emoji}</span>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           ))}
         </SelectContent>
       </Select>
