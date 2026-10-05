@@ -83,24 +83,24 @@ export async function GET(
     }
   }
 
-  // Signierte URLs für jedes Bild erzeugen (Admin-Client umgeht bucket-policies)
+  // Signierte URLs — KEINE Supabase Image Transformations mehr.
+  // Pro-Plan hat nur 100 "origin images" pro Monat gratis für Transforms,
+  // danach $5 pro 1000 extra — pro Image. Bei 356 Bildern × paar Views = Overage.
+  // Stattdessen: Gallery nutzt CSS `object-cover` + `aspect-square`, das reicht.
+  // Browser lädt Full-Image und skaliert runter (mehr Egress, aber Pro hat 250 GB
+  // und Images werden selten geöffnet).
   const enriched = await Promise.all(
     (images ?? []).map(async (img: ImageMeta) => {
       const { data: signed } = await admin.storage
         .from(BUCKET)
         .createSignedUrl(img.storage_path, SIGNED_URL_EXPIRY_SECONDS);
-      const { data: signedThumb } = await admin.storage
-        .from(BUCKET)
-        .createSignedUrl(img.storage_path, SIGNED_URL_EXPIRY_SECONDS, {
-          transform: { width: 300, height: 300, resize: "cover" },
-        });
       return {
         ...img,
         uploaded_by_email: img.uploaded_by ? emails[img.uploaded_by] ?? null : null,
         can_manage:
           img.uploaded_by === user.id, // Delete/Edit nur eigenes
         signed_url: signed?.signedUrl ?? null,
-        signed_thumb_url: signedThumb?.signedUrl ?? signed?.signedUrl ?? null,
+        signed_thumb_url: signed?.signedUrl ?? null,
       };
     })
   );
@@ -240,15 +240,10 @@ export async function POST(
     return NextResponse.json({ error: dbErr.message }, { status: 500 });
   }
 
-  // Signierte URL für sofortige Anzeige mitliefern
+  // Signierte URL für sofortige Anzeige mitliefern — ohne Transforms (s.o.)
   const { data: signed } = await admin.storage
     .from(BUCKET)
     .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SECONDS);
-  const { data: signedThumb } = await admin.storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SECONDS, {
-      transform: { width: 300, height: 300, resize: "cover" },
-    });
 
   return NextResponse.json(
     {
@@ -257,7 +252,7 @@ export async function POST(
         uploaded_by_email: user.email ?? null,
         can_manage: true,
         signed_url: signed?.signedUrl ?? null,
-        signed_thumb_url: signedThumb?.signedUrl ?? signed?.signedUrl ?? null,
+        signed_thumb_url: signed?.signedUrl ?? null,
       },
     },
     { status: 201 }
