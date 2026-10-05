@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { getLeadStats, getLeads } from "@/lib/actions/leads";
 import type { Lead, LeadStatus } from "@/types/database";
 import { getCategoryLabel } from "@/lib/constants/categories";
+import { FollowUpReminder } from "@/components/dashboard/follow-up-reminder";
 
 const STATUS_ORDER: LeadStatus[] = ["new", "reviewed", "contacted", "follow_up", "qualified", "rejected"];
 
@@ -88,6 +89,8 @@ export default async function DashboardPage() {
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">Übersicht Ihrer Solar-Lead-Pipeline</p>
       </div>
+
+      <FollowUpReminder />
 
       {/* KPI Row 1 */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

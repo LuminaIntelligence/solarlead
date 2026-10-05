@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, ChevronRight, ChevronLeft, RotateCcw } from "lucide-react";
+import { Loader2, ChevronRight, ChevronLeft, RotateCcw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { FollowUpDateDialog } from "@/components/leads/follow-up-date-dialog";
 
 interface PipelineLead {
   id: string;
@@ -72,6 +73,7 @@ export function KanbanBoard() {
   const [leads, setLeads] = useState<PipelineLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [moving, setMoving] = useState<string | null>(null);
+  const [followUpTarget, setFollowUpTarget] = useState<PipelineLead | null>(null);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -85,19 +87,47 @@ export function KanbanBoard() {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-  async function moveStatus(leadId: string, newStatus: string) {
+  async function moveStatus(leadId: string, newStatus: string, nextContactDate?: string) {
+    // Wiedervorlage ohne Datum → Dialog zuerst öffnen
+    if (newStatus === "follow_up" && !nextContactDate) {
+      const lead = leads.find((l) => l.id === leadId);
+      if (lead) {
+        setFollowUpTarget(lead);
+        return;
+      }
+    }
     setMoving(leadId);
     try {
+      const payload: Record<string, string | null> = { status: newStatus };
+      if (nextContactDate) payload.next_contact_date = nextContactDate;
+      // Wenn Status NICHT mehr follow_up ist, Datum zurücksetzen
+      if (newStatus !== "follow_up") payload.next_contact_date = null;
+
       await fetch(`/api/leads/${leadId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(payload),
       });
       setLeads((prev) =>
-        prev.map((l) => l.id === leadId ? { ...l, status: newStatus } : l)
+        prev.map((l) =>
+          l.id === leadId
+            ? {
+                ...l,
+                status: newStatus,
+                next_contact_date: nextContactDate ?? (newStatus === "follow_up" ? l.next_contact_date : null),
+              }
+            : l
+        )
       );
     } finally {
       setMoving(null);
+    }
+  }
+
+  function handleFollowUpConfirm(date: string) {
+    if (followUpTarget) {
+      moveStatus(followUpTarget.id, "follow_up", date);
+      setFollowUpTarget(null);
     }
   }
 
@@ -173,13 +203,21 @@ export function KanbanBoard() {
                         </span>
                       </div>
 
-                      {/* Next Contact Date */}
+                      {/* Next Contact Date — bei Wiedervorlage prominenter */}
                       {lead.next_contact_date && (
                         <div className={cn(
-                          "text-xs rounded px-1.5 py-0.5 inline-flex items-center gap-1",
-                          overdue ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"
+                          "text-xs rounded px-2 py-1 inline-flex items-center gap-1 font-medium",
+                          overdue
+                            ? "bg-red-100 text-red-700"
+                            : lead.status === "follow_up"
+                              ? "bg-orange-100 text-orange-800"
+                              : "bg-slate-100 text-slate-600"
                         )}>
-                          {overdue ? "⚠ " : "📅 "}{formatDate(lead.next_contact_date)}
+                          {overdue && <AlertTriangle className="h-3 w-3" />}
+                          {!overdue && lead.status === "follow_up" && "⏰ "}
+                          {!overdue && lead.status !== "follow_up" && "📅 "}
+                          {lead.status === "follow_up" ? "Wiedervorlage: " : ""}
+                          {formatDate(lead.next_contact_date)}
                         </div>
                       )}
 
@@ -230,6 +268,13 @@ export function KanbanBoard() {
           </div>
         );
       })}
+      <FollowUpDateDialog
+        open={followUpTarget !== null}
+        companyName={followUpTarget?.company_name}
+        defaultDate={followUpTarget?.next_contact_date ?? null}
+        onConfirm={handleFollowUpConfirm}
+        onCancel={() => setFollowUpTarget(null)}
+      />
     </div>
   );
 }

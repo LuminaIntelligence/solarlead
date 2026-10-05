@@ -738,6 +738,8 @@ export default async function LeadDetailPage({
               <LeadStatusEditor
                 leadId={lead.id}
                 currentStatus={lead.status}
+                companyName={lead.company_name}
+                currentNextContactDate={lead.next_contact_date ?? null}
               />
               {lead.status !== "existing_solar" && (
                 <ExistingSolarButton leadId={lead.id} />
